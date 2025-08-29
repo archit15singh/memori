@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# OS
+.DS_Store
+
+# Editors
+*.swp
+.idea/
+.vscode/
+
+# Build
+dist/
+build/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Docker
+data/
