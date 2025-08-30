@@ -1,8 +1,6 @@
----
-
 # memori (working title)
 
-**Reflective, policy-safe memory layer for AI agents**
+**Reflective and policy-safe memory layer for AI agents**
 
 > Episodic log (Postgres) + Semantic index (pgvector) + Short-term cache (Redis) + Lightweight KG.
 > With PII redaction, provenance links, right-to-delete, and reflective summarization built in.
