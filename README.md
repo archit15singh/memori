@@ -315,8 +315,7 @@ Apache-2.0 (intended). See `LICENSE`.
 
 ## 🙌 Maintainers
 
-* [@your-handle](https://github.com/you) – Core architecture & API
-* \[@co-maintainer] – Reflection jobs & KG modeling
+* [@archit15singh](https://www.linkedin.com/in/archit15singh) – Core
 
 ---
 
