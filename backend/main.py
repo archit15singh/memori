@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 import json
 import os
+import sqlite3
 from dotenv import load_dotenv
 from openai import OpenAI
 from models import ChatRequest, ChatResponse, ErrorResponse, MemoryItem, MemoryResponse
@@ -33,25 +34,162 @@ client = OpenAI(
     api_key=os.getenv("OPENAI_API_KEY")
 )
 
-# In-memory storage for memories with mock data
-MEMORY_STORE = {
-    "identity": [
-        MemoryItem(id="id1", key="Role", value="Software Developer"),
-        MemoryItem(id="id2", key="Experience", value="5 years in web development")
-    ],
-    "principles": [
-        MemoryItem(id="p1", key="Quality", value="Write clean, maintainable code"),
-        MemoryItem(id="p2", key="Learning", value="Continuously improve skills")
-    ],
-    "focus": [
-        MemoryItem(id="f1", key="Current Project", value="Building chat application"),
-        MemoryItem(id="f2", key="Goal", value="Complete memory integration")
-    ],
-    "signals": [
-        MemoryItem(id="s1", key="Deadline", value="End of sprint"),
-        MemoryItem(id="s2", key="Priority", value="High importance feature")
-    ]
-}
+
+
+# Database file path
+DB_PATH = "chat_app.db"
+
+
+def seed_database_with_memory_store():
+    """
+    Seed database with existing MEMORY_STORE data if database is empty.
+    """
+    # Initial memory data to seed the database
+    initial_memory_data = {
+        "identity": [
+            MemoryItem(id="id1", key="Role", value="Software Developer"),
+            MemoryItem(id="id2", key="Experience", value="5 years in web development")
+        ],
+        "principles": [
+            MemoryItem(id="p1", key="Quality", value="Write clean, maintainable code"),
+            MemoryItem(id="p2", key="Learning", value="Continuously improve skills")
+        ],
+        "focus": [
+            MemoryItem(id="f1", key="Current Project", value="Building chat application"),
+            MemoryItem(id="f2", key="Goal", value="Complete memory integration")
+        ],
+        "signals": [
+            MemoryItem(id="s1", key="Deadline", value="End of sprint"),
+            MemoryItem(id="s2", key="Priority", value="High importance feature")
+        ]
+    }
+    
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Check if database already has data
+    cursor.execute("SELECT COUNT(*) FROM memories")
+    count = cursor.fetchone()[0]
+    
+    if count == 0:
+        # Database is empty, seed with initial memory data
+        for memory_type, memory_items in initial_memory_data.items():
+            for item in memory_items:
+                cursor.execute(
+                    "INSERT INTO memories (id, type, key, value) VALUES (?, ?, ?, ?)",
+                    (item.id, memory_type, item.key, item.value)
+                )
+        
+        conn.commit()
+        print(f"Database seeded with {sum(len(items) for items in initial_memory_data.values())} memory items")
+    
+    conn.close()
+
+
+def init_database():
+    """
+    Initialize SQLite database and create memories table if it doesn't exist.
+    """
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Create memories table with id, type, key, value columns
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS memories (
+            id TEXT PRIMARY KEY,
+            type TEXT NOT NULL,
+            key TEXT NOT NULL,
+            value TEXT NOT NULL
+        )
+    """)
+    
+    conn.commit()
+    conn.close()
+
+
+def get_all_memories():
+    """
+    Get all memories from the database organized by type.
+    
+    Returns:
+        dict: Dictionary with memory types as keys and lists of MemoryItem objects as values
+    """
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT id, type, key, value FROM memories")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    # Organize memories by type
+    memories = {
+        "identity": [],
+        "principles": [],
+        "focus": [],
+        "signals": []
+    }
+    
+    for row in rows:
+        memory_id, memory_type, key, value = row
+        memory_item = MemoryItem(id=memory_id, key=key, value=value)
+        if memory_type in memories:
+            memories[memory_type].append(memory_item)
+    
+    return memories
+
+
+def update_memory_db(memory_type: str, memory_id: str, key: str, value: str):
+    """
+    Update a memory item in the database.
+    
+    Args:
+        memory_type: Type of memory (identity, principles, focus, signals)
+        memory_id: ID of the memory item
+        key: Memory key
+        value: Memory value
+        
+    Returns:
+        bool: True if update was successful, False if memory not found
+    """
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    cursor.execute(
+        "UPDATE memories SET key = ?, value = ? WHERE id = ? AND type = ?",
+        (key, value, memory_id, memory_type)
+    )
+    
+    rows_affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    
+    return rows_affected > 0
+
+
+def delete_memory_db(memory_type: str, memory_id: str):
+    """
+    Delete a memory item from the database.
+    
+    Args:
+        memory_type: Type of memory (identity, principles, focus, signals)
+        memory_id: ID of the memory item to delete
+        
+    Returns:
+        bool: True if deletion was successful, False if memory not found
+    """
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    cursor.execute(
+        "DELETE FROM memories WHERE id = ? AND type = ?",
+        (memory_id, memory_type)
+    )
+    
+    rows_affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    
+    return rows_affected > 0
 
 # Configure CORS for frontend integration
 app.add_middleware(
@@ -65,6 +203,15 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def startup_event():
+    """
+    Initialize database and seed with existing data on startup.
+    """
+    init_database()
+    seed_database_with_memory_store()
 
 
 # Custom exception handlers for proper error responses
@@ -147,11 +294,12 @@ async def get_memories():
         HTTPException: For any processing errors (500 Internal Server Error)
     """
     try:
+        memories = get_all_memories()
         return MemoryResponse(
-            identity=MEMORY_STORE["identity"],
-            principles=MEMORY_STORE["principles"],
-            focus=MEMORY_STORE["focus"],
-            signals=MEMORY_STORE["signals"]
+            identity=memories["identity"],
+            principles=memories["principles"],
+            focus=memories["focus"],
+            signals=memories["signals"]
         )
     except Exception as e:
         raise HTTPException(
@@ -178,30 +326,30 @@ async def update_memory(memory_type: str, memory_id: str, memory_item: MemoryIte
     """
     try:
         # Validate memory type
-        if memory_type not in MEMORY_STORE:
+        valid_types = ["identity", "principles", "focus", "signals"]
+        if memory_type not in valid_types:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid memory type: {memory_type}. Must be one of: identity, principles, focus, signals"
             )
         
-        # Find the memory item to update
-        memory_list = MEMORY_STORE[memory_type]
-        for i, item in enumerate(memory_list):
-            if item.id == memory_id:
-                # Update the memory item
-                updated_item = MemoryItem(
-                    id=memory_id,  # Keep the original ID
-                    key=memory_item.key,
-                    value=memory_item.value
-                )
-                memory_list[i] = updated_item
-                return updated_item
+        # Update the memory item in database
+        success = update_memory_db(memory_type, memory_id, memory_item.key, memory_item.value)
         
-        # Memory item not found
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Memory item with id '{memory_id}' not found in type '{memory_type}'"
+        if not success:
+            # Memory item not found
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Memory item with id '{memory_id}' not found in type '{memory_type}'"
+            )
+        
+        # Return the updated memory item
+        updated_item = MemoryItem(
+            id=memory_id,  # Keep the original ID
+            key=memory_item.key,
+            value=memory_item.value
         )
+        return updated_item
         
     except HTTPException:
         # Re-raise HTTP exceptions
@@ -230,24 +378,24 @@ async def delete_memory(memory_type: str, memory_id: str):
     """
     try:
         # Validate memory type
-        if memory_type not in MEMORY_STORE:
+        valid_types = ["identity", "principles", "focus", "signals"]
+        if memory_type not in valid_types:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid memory type: {memory_type}. Must be one of: identity, principles, focus, signals"
             )
         
-        # Find and remove the memory item
-        memory_list = MEMORY_STORE[memory_type]
-        for i, item in enumerate(memory_list):
-            if item.id == memory_id:
-                memory_list.pop(i)
-                return
+        # Delete the memory item from database
+        success = delete_memory_db(memory_type, memory_id)
         
-        # Memory item not found
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Memory item with id '{memory_id}' not found in type '{memory_type}'"
-        )
+        if not success:
+            # Memory item not found
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Memory item with id '{memory_id}' not found in type '{memory_type}'"
+            )
+        
+        # Return 204 No Content (implicit return)
         
     except HTTPException:
         # Re-raise HTTP exceptions
