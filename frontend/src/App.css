@@ -1,0 +1,476 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.app {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+}
+
+.chat-area {
+  flex: 1;
+  width: 50%;
+  padding: 24px 24px 0;
+  border-right: 1px solid #e0e0e0;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.memory-area {
+  flex: 1;
+  width: 50%;
+  padding: 24px;
+  background: linear-gradient(135deg, #fefefe 0%, #f8f9fa 100%);
+  overflow-y: auto;
+  height: 100vh;
+}
+
+.chat-area h2,
+.memory-area h2 {
+  margin-bottom: 16px;
+  color: #333;
+}
+
+.chat-area p,
+.memory-area p {
+  color: #666;
+}
+
+/* Chat Interface Styles */
+.messages-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 0;
+  margin-bottom: 16px;
+  scroll-behavior: smooth;
+}
+
+.message {
+  margin-bottom: 12px;
+  display: flex;
+}
+
+.message.user {
+  justify-content: flex-start;
+}
+
+.message.bot {
+  justify-content: flex-end;
+}
+
+.message-text {
+  max-width: 70%;
+  padding: 12px 16px;
+  border-radius: 18px;
+  word-wrap: break-word;
+}
+
+.message.user .message-text {
+  background-color: #007bff;
+  color: white;
+}
+
+.message.bot .message-text {
+  background-color: #e9ecef;
+  color: #333;
+}
+
+.message.loading .message-text {
+  background-color: #f8f9fa;
+  color: #6c757d;
+  font-style: italic;
+}
+
+.chat-input-form {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  padding: 16px 0 24px;
+  margin: 0 -24px;
+  padding-left: 24px;
+  padding-right: 24px;
+  border-top: 1px solid rgba(226, 232, 240, 0.5);
+}
+
+.chat-input {
+  flex: 1;
+  padding: 12px 16px;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  outline: none;
+  font-size: 14px;
+}
+
+.chat-input:focus {
+  border-color: #007bff;
+}
+
+.chat-input:disabled {
+  background-color: #f8f9fa;
+  cursor: not-allowed;
+}
+
+.send-button {
+  padding: 12px 20px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.send-button:hover:not(:disabled) {
+  background-color: #0056b3;
+}
+
+.send-button:disabled {
+  background-color: #6c757d;
+  cursor: not-allowed;
+}
+
+/* Memory Panel Styles */
+.memory-section {
+  margin-bottom: 32px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.memory-section:last-child {
+  margin-bottom: 0;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  padding: 16px 20px;
+  border-radius: 12px 12px 0 0;
+}
+
+.section-icon {
+  font-size: 18px;
+}
+
+.section-title {
+  flex: 1;
+  color: #1f2937;
+}
+
+.section-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+  background: rgba(255, 255, 255, 0.7);
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+/* Section-specific colors */
+.memory-section.identity .section-header {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  color: #1e40af;
+}
+
+.memory-section.principles .section-header {
+  background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+  color: #166534;
+}
+
+.memory-section.focus .section-header {
+  background: linear-gradient(135deg, #fed7aa 0%, #fdba74 100%);
+  color: #c2410c;
+}
+
+.memory-section.signals .section-header {
+  background: linear-gradient(135deg, #e9d5ff 0%, #d8b4fe 100%);
+  color: #7c3aed;
+}
+
+
+
+.memory-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 20px 20px;
+  background: white;
+}
+
+.memory-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  background: white;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  border: 1px solid #f1f5f9;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.memory-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+  border-color: #cbd5e1;
+}
+
+.memory-item:hover .memory-actions {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.memory-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-right: 12px;
+}
+
+.memory-key {
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 13px;
+  text-transform: capitalize;
+  letter-spacing: 0.025em;
+}
+
+.memory-text {
+  color: #64748b;
+  word-wrap: break-word;
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+.memory-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: all 0.25s ease;
+  transform: translateX(8px);
+}
+
+.edit-button {
+  background: transparent;
+  color: #94a3b8;
+  border: none;
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.edit-button:hover {
+  background: #f1f5f9;
+  color: #64748b;
+  transform: scale(1.1);
+}
+
+.delete-button {
+  background: transparent;
+  color: #94a3b8;
+  border: none;
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.delete-button:hover {
+  background: #fef2f2;
+  color: #dc2626;
+  transform: scale(1.1);
+}
+
+
+
+/* Feedback styles */
+.feedback {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  color: white;
+  font-weight: 500;
+  z-index: 1000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  animation: slideIn 0.3s ease-out;
+}
+
+.feedback.success {
+  background-color: #28a745;
+}
+
+.feedback.error {
+  background-color: #dc3545;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Loading states */
+.memory-loading {
+  text-align: center;
+  color: #6b7280;
+  font-style: italic;
+  padding: 24px;
+  background: white;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  border: 1px solid #f1f5f9;
+}
+
+.memory-item.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.memory-item.loading .memory-actions {
+  opacity: 0.3;
+}
+
+/* Memory highlight animation */
+.memory-item.highlighted {
+  animation: memoryGlow 2s ease-out;
+  border-color: #3b82f6 !important;
+}
+
+@keyframes memoryGlow {
+  0% {
+    background: #dbeafe;
+    transform: scale(1.02);
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+  }
+  50% {
+    background: #eff6ff;
+    transform: scale(1.01);
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
+  }
+  100% {
+    background: white;
+    transform: scale(1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+}
+
+.memory-item button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.edit-input:disabled {
+  background-color: #f8f9fa;
+  cursor: not-allowed;
+}
+
+/* Edit form - consistent with action buttons */
+.edit-form {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+  align-items: center;
+}
+
+.edit-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  outline: none;
+  font-size: 13px;
+  background: white;
+  transition: border-color 0.2s ease;
+}
+
+.edit-input:focus {
+  border-color: #3b82f6;
+}
+
+/* Consistent icon button styling for save/cancel */
+.save-button {
+  background: transparent;
+  color: #94a3b8;
+  border: none;
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.save-button:hover {
+  background: #f0fdf4;
+  color: #10b981;
+  transform: scale(1.1);
+}
+
+.cancel-button {
+  background: transparent;
+  color: #94a3b8;
+  border: none;
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.cancel-button:hover {
+  background: #f1f5f9;
+  color: #6b7280;
+  transform: scale(1.1);
+}
