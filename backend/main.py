@@ -10,7 +10,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 import json
+import os
+from dotenv import load_dotenv
+from openai import OpenAI
 from models import ChatRequest, ChatResponse, ErrorResponse, MemoryItem, MemoryResponse
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Create FastAPI app instance with comprehensive metadata
 app = FastAPI(
@@ -20,6 +26,11 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json"
+)
+
+# Initialize OpenAI client with API key from environment
+client = OpenAI(
+    api_key=os.getenv("OPENAI_API_KEY")
 )
 
 # In-memory storage for memories with mock data
@@ -248,16 +259,39 @@ async def delete_memory(memory_type: str, memory_id: str):
         )
 
 
+async def get_ai_response(message: str) -> str:
+    """
+    Get AI response using OpenAI API.
+    
+    Args:
+        message: User's input message
+        
+    Returns:
+        str: AI-generated response
+        
+    Raises:
+        Exception: For OpenAI API errors
+    """
+    try:
+        resp = client.chat.completions.create(
+            model="gpt-5-nano",
+            messages=[{"role": "user", "content": message}]
+        )
+        return resp.choices[0].message.content
+    except Exception as e:
+        raise Exception(f"OpenAI API error: {str(e)}")
+
+
 @app.post("/chat", response_model=ChatResponse, status_code=status.HTTP_200_OK)
 async def chat_endpoint(request: ChatRequest):
     """
-    Chat endpoint that processes user messages and returns responses.
+    Chat endpoint that processes user messages and returns AI-generated responses.
     
     Args:
         request: ChatRequest containing the user's message
         
     Returns:
-        ChatResponse: Response containing the system's reply (200 OK)
+        ChatResponse: Response containing the AI's reply (200 OK)
         
     Raises:
         HTTPException: For any processing errors (500 Internal Server Error)
@@ -269,25 +303,8 @@ async def chat_endpoint(request: ChatRequest):
         if not request.message or not request.message.strip():
             raise ValueError("Message cannot be empty or contain only whitespace")
         
-        # Basic chat logic - simple pattern matching and responses
-        user_message = request.message.lower().strip()
-        
-        # Generate response based on input patterns
-        if "hello" in user_message or "hi" in user_message:
-            response_text = "Hello! How can I help you today?"
-        elif "how are you" in user_message:
-            response_text = "I'm doing well, thank you for asking! How are you?"
-        elif "bye" in user_message or "goodbye" in user_message:
-            response_text = "Goodbye! Have a great day!"
-        elif "help" in user_message:
-            response_text = "I'm here to help! You can ask me questions or just chat with me."
-        elif "thank" in user_message:
-            response_text = "You're welcome! Is there anything else I can help you with?"
-        elif "?" in user_message:
-            response_text = f"That's an interesting question about '{request.message}'. Let me think about that..."
-        else:
-            # Default response for unmatched patterns
-            response_text = f"I received your message: '{request.message}'. Thanks for chatting with me!"
+        # Get AI response
+        response_text = await get_ai_response(request.message)
         
         return ChatResponse(response=response_text)
         
