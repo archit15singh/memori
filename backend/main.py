@@ -28,7 +28,6 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     init_database()
-    seed_database_with_memory_store()
     yield
     # Shutdown (if needed)
 
@@ -55,50 +54,7 @@ client = OpenAI(
 DB_PATH = "chat_app.db"
 
 
-def seed_database_with_memory_store():
-    """
-    Seed database with existing MEMORY_STORE data if database is empty.
-    """
-    # Initial memory data to seed the database
-    initial_memory_data = {
-        "identity": [
-            MemoryItem(id="id1", key="Role", value="Software Developer"),
-            MemoryItem(id="id2", key="Experience", value="5 years in web development")
-        ],
-        "principles": [
-            MemoryItem(id="p1", key="Quality", value="Write clean, maintainable code"),
-            MemoryItem(id="p2", key="Learning", value="Continuously improve skills")
-        ],
-        "focus": [
-            MemoryItem(id="f1", key="Current Project", value="Building chat application"),
-            MemoryItem(id="f2", key="Goal", value="Complete memory integration")
-        ],
-        "signals": [
-            MemoryItem(id="s1", key="Deadline", value="End of sprint"),
-            MemoryItem(id="s2", key="Priority", value="High importance feature")
-        ]
-    }
-    
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    # Check if database already has data
-    cursor.execute("SELECT COUNT(*) FROM memories")
-    count = cursor.fetchone()[0]
-    
-    if count == 0:
-        # Database is empty, seed with initial memory data
-        for memory_type, memory_items in initial_memory_data.items():
-            for item in memory_items:
-                cursor.execute(
-                    "INSERT INTO memories (id, type, key, value) VALUES (?, ?, ?, ?)",
-                    (item.id, memory_type, item.key, item.value)
-                )
-        
-        conn.commit()
-        print(f"Database seeded with {sum(len(items) for items in initial_memory_data.values())} memory items")
-    
-    conn.close()
+
 
 
 def init_database():
