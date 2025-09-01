@@ -1,29 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 import chatApiService from './services/chatApi';
+import memoryApiService from './services/memoryApi';
 
-// Mock data for memories
-const MOCK_MEMORIES = {
-  insights: [
-    { key: 'Allergy', value: 'Daughter is allergic to dairy' },
-    { key: 'Dislike', value: 'Wife doesn\'t eat meat' },
-    { key: 'Preference', value: 'I don\'t eat meat' }
-  ],
-  anchors: [
-    { key: 'Health', value: 'Exercise 30 minutes daily' },
-    { key: 'Family', value: 'Spend quality time with kids every evening' },
-    { key: 'Work', value: 'No meetings after 6 PM' }
-  ],
-  routines: [
-    { key: 'Morning', value: 'Coffee and journal writing at 6 AM' },
-    { key: 'Lunch', value: 'Walk outside for 15 minutes' },
-    { key: 'Evening', value: 'Read for 30 minutes before bed' }
-  ],
-  notes: [
-    { key: 'Stress', value: 'Feel overwhelmed when inbox has 50+ emails' },
-    { key: 'Energy', value: 'Most productive between 9-11 AM' },
-    { key: 'Mood', value: 'Need sunlight to feel positive' }
-  ]
+// Memory type mapping between frontend and backend
+const MEMORY_TYPE_MAP = {
+  insights: 'identity',
+  anchors: 'principles', 
+  routines: 'focus',
+  notes: 'signals'
+};
+
+const REVERSE_MEMORY_TYPE_MAP = {
+  identity: 'insights',
+  principles: 'anchors',
+  focus: 'routines', 
+  signals: 'notes'
 };
 
 function App() {
@@ -31,11 +23,12 @@ function App() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
-  // Memory state - using mock data
-  const [insights, setInsights] = useState(MOCK_MEMORIES.insights);
-  const [anchors, setAnchors] = useState(MOCK_MEMORIES.anchors);
-  const [routines, setRoutines] = useState(MOCK_MEMORIES.routines);
-  const [notes, setNotes] = useState(MOCK_MEMORIES.notes);
+  // Memory state - loaded from API
+  const [insights, setInsights] = useState([]);
+  const [anchors, setAnchors] = useState([]);
+  const [routines, setRoutines] = useState([]);
+  const [notes, setNotes] = useState([]);
+  const [memoriesLoaded, setMemoriesLoaded] = useState(false);
   
   // Edit state
   const [editingMemory, setEditingMemory] = useState(null);
@@ -84,6 +77,28 @@ function App() {
     }
   }, [highlightedMemory]);
 
+  // Load memories from backend on app startup
+  useEffect(() => {
+    const loadMemories = async () => {
+      try {
+        const memories = await memoryApiService.fetchMemories();
+        
+        // Map backend response to frontend state
+        setInsights(memories.identity || []);
+        setAnchors(memories.principles || []);
+        setRoutines(memories.focus || []);
+        setNotes(memories.signals || []);
+        setMemoriesLoaded(true);
+      } catch (error) {
+        console.error('Failed to load memories:', error);
+        showFeedback(`Failed to load memories: ${error.message}`, 'error');
+        setMemoriesLoaded(true); // Still mark as loaded to avoid infinite loading
+      }
+    };
+
+    loadMemories();
+  }, []);
+
   // Helper function to create consistent message objects
   const createMessage = (text, sender, id = null) => {
     // Ensure text is a string and properly formatted
@@ -111,7 +126,7 @@ function App() {
     setEditValue('');
   };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editValue.trim() || !editingMemory) return;
     
     // Validate 240 char limit
@@ -123,10 +138,52 @@ function App() {
     const loadingKey = `${editingMemory.type}-${editingMemory.key}`;
     setMemoryLoading(prev => ({ ...prev, [loadingKey]: true }));
     
-    // Simulate API delay
-    setTimeout(() => {
-      // Update local state
-      const newItem = { key: editingMemory.key, value: editValue.trim() };
+    try {
+      // Find the memory item to get its ID
+      let memoryItem = null;
+      switch (editingMemory.type) {
+        case 'insights':
+          memoryItem = insights.find(item => item.key === editingMemory.key);
+          break;
+        case 'anchors':
+          memoryItem = anchors.find(item => item.key === editingMemory.key);
+          break;
+        case 'routines':
+          memoryItem = routines.find(item => item.key === editingMemory.key);
+          break;
+        case 'notes':
+          memoryItem = notes.find(item => item.key === editingMemory.key);
+          break;
+        default:
+          console.warn('Unknown memory type:', editingMemory.type);
+          return;
+      }
+
+      if (!memoryItem || !memoryItem.id) {
+        showFeedback('Memory item not found', 'error');
+        return;
+      }
+
+      // Map frontend type to backend type
+      const backendType = MEMORY_TYPE_MAP[editingMemory.type];
+      
+      // Call API to update memory
+      const updatedMemory = await memoryApiService.updateMemory(
+        backendType,
+        memoryItem.id,
+        {
+          key: editingMemory.key,
+          value: editValue.trim()
+        }
+      );
+      
+      // Update local state with the response
+      const newItem = { 
+        id: updatedMemory.id,
+        key: updatedMemory.key, 
+        value: updatedMemory.value 
+      };
+      
       switch (editingMemory.type) {
         case 'insights':
           setInsights(prev => prev.map(item => 
@@ -148,16 +205,7 @@ function App() {
             item.key === editingMemory.key ? newItem : item
           ));
           break;
-        default:
-          console.warn('Unknown memory type:', editingMemory.type);
-          break;
       }
-      
-      setMemoryLoading(prev => {
-        const newState = { ...prev };
-        delete newState[loadingKey];
-        return newState;
-      });
       
       // Highlight the updated memory
       const memoryId = `${editingMemory.type}-${editingMemory.key}`;
@@ -173,15 +221,56 @@ function App() {
           element.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
       }, 100);
-    }, 500); // 500ms delay to simulate API call
+      
+    } catch (error) {
+      console.error('Failed to update memory:', error);
+      showFeedback(`Failed to update memory: ${error.message}`, 'error');
+    } finally {
+      setMemoryLoading(prev => {
+        const newState = { ...prev };
+        delete newState[loadingKey];
+        return newState;
+      });
+    }
   };
 
-  const deleteMemory = (type, key) => {
+  const deleteMemory = async (type, key) => {
     const loadingKey = `${type}-${key}`;
     setMemoryLoading(prev => ({ ...prev, [loadingKey]: true }));
     
-    // Simulate API delay
-    setTimeout(() => {
+    try {
+      // Find the memory item to get its ID
+      let memoryItem = null;
+      switch (type) {
+        case 'insights':
+          memoryItem = insights.find(item => item.key === key);
+          break;
+        case 'anchors':
+          memoryItem = anchors.find(item => item.key === key);
+          break;
+        case 'routines':
+          memoryItem = routines.find(item => item.key === key);
+          break;
+        case 'notes':
+          memoryItem = notes.find(item => item.key === key);
+          break;
+        default:
+          console.warn('Unknown memory type:', type);
+          return;
+      }
+
+      if (!memoryItem || !memoryItem.id) {
+        showFeedback('Memory item not found', 'error');
+        return;
+      }
+
+      // Map frontend type to backend type
+      const backendType = MEMORY_TYPE_MAP[type];
+      
+      // Call API to delete memory
+      await memoryApiService.deleteMemory(backendType, memoryItem.id);
+      
+      // Update local state
       switch (type) {
         case 'insights':
           setInsights(prev => prev.filter(item => item.key !== key));
@@ -195,19 +284,20 @@ function App() {
         case 'notes':
           setNotes(prev => prev.filter(item => item.key !== key));
           break;
-        default:
-          console.warn('Unknown memory type:', type);
-          break;
       }
       
+      showFeedback('Memory deleted successfully');
+      
+    } catch (error) {
+      console.error('Failed to delete memory:', error);
+      showFeedback(`Failed to delete memory: ${error.message}`, 'error');
+    } finally {
       setMemoryLoading(prev => {
         const newState = { ...prev };
         delete newState[loadingKey];
         return newState;
       });
-      
-      showFeedback('Memory deleted successfully');
-    }, 300); // 300ms delay to simulate API call
+    }
   };
 
   const sendMessage = async (userMessage) => {
@@ -372,6 +462,12 @@ function App() {
       </div>
       <div className="memory-area">
         <h2>Memory</h2>
+        
+        {!memoriesLoaded && (
+          <div className="memory-loading">
+            <p>Loading memories...</p>
+          </div>
+        )}
         
         {/* Identity Section */}
         <div className="memory-section identity">

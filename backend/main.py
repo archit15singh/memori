@@ -10,7 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 import json
-from models import ChatRequest, ChatResponse, ErrorResponse
+from models import ChatRequest, ChatResponse, ErrorResponse, MemoryItem, MemoryResponse
 
 # Create FastAPI app instance with comprehensive metadata
 app = FastAPI(
@@ -21,6 +21,26 @@ app = FastAPI(
     redoc_url="/redoc",
     openapi_url="/openapi.json"
 )
+
+# In-memory storage for memories with mock data
+MEMORY_STORE = {
+    "identity": [
+        MemoryItem(id="id1", key="Role", value="Software Developer"),
+        MemoryItem(id="id2", key="Experience", value="5 years in web development")
+    ],
+    "principles": [
+        MemoryItem(id="p1", key="Quality", value="Write clean, maintainable code"),
+        MemoryItem(id="p2", key="Learning", value="Continuously improve skills")
+    ],
+    "focus": [
+        MemoryItem(id="f1", key="Current Project", value="Building chat application"),
+        MemoryItem(id="f2", key="Goal", value="Complete memory integration")
+    ],
+    "signals": [
+        MemoryItem(id="s1", key="Deadline", value="End of sprint"),
+        MemoryItem(id="s2", key="Priority", value="High importance feature")
+    ]
+}
 
 # Configure CORS for frontend integration
 app.add_middleware(
@@ -102,6 +122,130 @@ async def general_exception_handler(request: Request, exc: Exception):
 async def root():
     """Root endpoint for health check"""
     return {"message": "Chat Backend API is running"}
+
+
+@app.get("/memories", response_model=MemoryResponse, status_code=status.HTTP_200_OK)
+async def get_memories():
+    """
+    Get all memories organized by type.
+    
+    Returns:
+        MemoryResponse: All memories organized by type (identity, principles, focus, signals)
+        
+    Raises:
+        HTTPException: For any processing errors (500 Internal Server Error)
+    """
+    try:
+        return MemoryResponse(
+            identity=MEMORY_STORE["identity"],
+            principles=MEMORY_STORE["principles"],
+            focus=MEMORY_STORE["focus"],
+            signals=MEMORY_STORE["signals"]
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving memories: {str(e)}"
+        )
+
+
+@app.put("/memories/{memory_type}/{memory_id}", response_model=MemoryItem, status_code=status.HTTP_200_OK)
+async def update_memory(memory_type: str, memory_id: str, memory_item: MemoryItem):
+    """
+    Update an existing memory item.
+    
+    Args:
+        memory_type: Type of memory (identity, principles, focus, signals)
+        memory_id: ID of the memory item to update
+        memory_item: Updated memory item data
+        
+    Returns:
+        MemoryItem: The updated memory item (200 OK)
+        
+    Raises:
+        HTTPException: For validation errors (400 Bad Request) or not found (404 Not Found)
+    """
+    try:
+        # Validate memory type
+        if memory_type not in MEMORY_STORE:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid memory type: {memory_type}. Must be one of: identity, principles, focus, signals"
+            )
+        
+        # Find the memory item to update
+        memory_list = MEMORY_STORE[memory_type]
+        for i, item in enumerate(memory_list):
+            if item.id == memory_id:
+                # Update the memory item
+                updated_item = MemoryItem(
+                    id=memory_id,  # Keep the original ID
+                    key=memory_item.key,
+                    value=memory_item.value
+                )
+                memory_list[i] = updated_item
+                return updated_item
+        
+        # Memory item not found
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Memory item with id '{memory_id}' not found in type '{memory_type}'"
+        )
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating memory: {str(e)}"
+        )
+
+
+@app.delete("/memories/{memory_type}/{memory_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_memory(memory_type: str, memory_id: str):
+    """
+    Delete a memory item.
+    
+    Args:
+        memory_type: Type of memory (identity, principles, focus, signals)
+        memory_id: ID of the memory item to delete
+        
+    Returns:
+        None (204 No Content)
+        
+    Raises:
+        HTTPException: For validation errors (400 Bad Request) or not found (404 Not Found)
+    """
+    try:
+        # Validate memory type
+        if memory_type not in MEMORY_STORE:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid memory type: {memory_type}. Must be one of: identity, principles, focus, signals"
+            )
+        
+        # Find and remove the memory item
+        memory_list = MEMORY_STORE[memory_type]
+        for i, item in enumerate(memory_list):
+            if item.id == memory_id:
+                memory_list.pop(i)
+                return
+        
+        # Memory item not found
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Memory item with id '{memory_id}' not found in type '{memory_type}'"
+        )
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting memory: {str(e)}"
+        )
 
 
 @app.post("/chat", response_model=ChatResponse, status_code=status.HTTP_200_OK)

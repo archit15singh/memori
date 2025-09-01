@@ -5,6 +5,7 @@ This module contains the request and response models used by the FastAPI endpoin
 """
 
 from pydantic import BaseModel, Field
+from typing import List
 
 
 class ChatRequest(BaseModel):
@@ -47,6 +48,78 @@ class ChatResponse(BaseModel):
         json_schema_extra = {
             "example": {
                 "response": "Hello! I'm doing well, thank you for asking."
+            }
+        }
+
+
+class MemoryItem(BaseModel):
+    """
+    Model for individual memory items.
+    
+    Represents a single memory entry with id, key, and value.
+    """
+    id: str = Field(
+        ...,
+        description="Unique identifier for the memory item",
+        example="unique-id-123"
+    )
+    key: str = Field(
+        ...,
+        description="Label or title for the memory item",
+        example="Core Value"
+    )
+    value: str = Field(
+        ...,
+        description="Description or content of the memory item",
+        example="Always prioritize user experience"
+    )
+
+    class Config:
+        """Pydantic model configuration"""
+        json_schema_extra = {
+            "example": {
+                "id": "unique-id-123",
+                "key": "Core Value",
+                "value": "Always prioritize user experience"
+            }
+        }
+
+
+class MemoryResponse(BaseModel):
+    """
+    Response model for memories endpoint.
+    
+    Represents all memories organized by type.
+    """
+    identity: List[MemoryItem] = Field(
+        default_factory=list,
+        description="Identity-related memories"
+    )
+    principles: List[MemoryItem] = Field(
+        default_factory=list,
+        description="Principle-related memories"
+    )
+    focus: List[MemoryItem] = Field(
+        default_factory=list,
+        description="Focus-related memories"
+    )
+    signals: List[MemoryItem] = Field(
+        default_factory=list,
+        description="Signal-related memories"
+    )
+
+    class Config:
+        """Pydantic model configuration"""
+        json_schema_extra = {
+            "example": {
+                "identity": [
+                    {"id": "id1", "key": "Role", "value": "Software Developer"}
+                ],
+                "principles": [
+                    {"id": "p1", "key": "Quality", "value": "Write clean code"}
+                ],
+                "focus": [],
+                "signals": []
             }
         }
 
