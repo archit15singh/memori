@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from contextlib import asynccontextmanager
 import json
 import os
 import sqlite3
@@ -19,6 +20,19 @@ from models import ChatRequest, ChatResponse, ErrorResponse, MemoryItem, MemoryR
 # Load environment variables from .env file
 load_dotenv()
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Lifespan event handler for FastAPI application startup and shutdown.
+    """
+    # Startup
+    init_database()
+    seed_database_with_memory_store()
+    yield
+    # Shutdown (if needed)
+
+
 # Create FastAPI app instance with comprehensive metadata
 app = FastAPI(
     title="Chat Backend API",
@@ -26,7 +40,8 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
-    openapi_url="/openapi.json"
+    openapi_url="/openapi.json",
+    lifespan=lifespan
 )
 
 # Initialize OpenAI client with API key from environment
@@ -205,13 +220,7 @@ app.add_middleware(
 )
 
 
-@app.on_event("startup")
-async def startup_event():
-    """
-    Initialize database and seed with existing data on startup.
-    """
-    init_database()
-    seed_database_with_memory_store()
+
 
 
 # Custom exception handlers for proper error responses
