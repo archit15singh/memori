@@ -82,6 +82,7 @@ body {
   border-radius: 20px;
   word-wrap: break-word;
   font-weight: 400;
+  font-size: 18px;
   line-height: 1.5;
 }
 
@@ -124,7 +125,8 @@ body {
   border: 1px solid #475569;
   border-radius: 20px;
   outline: none;
-  font-size: 14px;
+  font-size: 18px;
+  line-height: 1.5;
   background-color: #334155;
   color: #e2e8f0;
 }
@@ -202,9 +204,9 @@ body {
 
 .section-title {
   color: #f1f5f9;
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.5;
 }
 
 .section-subtitle {
@@ -298,7 +300,8 @@ body {
 .memory-key {
   font-weight: 500;
   color: #f1f5f9;
-  font-size: 14px;
+  font-size: 18px;
+  line-height: 1.5;
   text-transform: capitalize;
   letter-spacing: 0.025em;
 }
@@ -306,7 +309,7 @@ body {
 .memory-text {
   color: #cbd5e1;
   word-wrap: break-word;
-  font-size: 13px;
+  font-size: 16px;
   line-height: 1.5;
   font-weight: 400;
   display: -webkit-box;
