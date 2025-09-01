@@ -483,71 +483,75 @@ function App() {
       <div className="memory-area">
         <h2>Memory</h2>
 
-        {!memoriesLoaded && (
+        {!memoriesLoaded ? (
           <div className="memory-loading">
-            <p>Loading memories...</p>
+            <div className="loading-spinner"></div>
+            <h3>Loading memories...</h3>
+            <p>Retrieving your personal knowledge base</p>
           </div>
+        ) : (
+          <>
+            {/* Identity Section */}
+            <div className="memory-section identity">
+              <h3 className="section-header">
+                <span className="section-icon">🧭</span>
+                <div className="section-text">
+                  <span className="section-title">Identity</span>
+                  <span className="section-subtitle">who I am</span>
+                </div>
+                <span className="section-count">({insights.length})</span>
+              </h3>
+              <div className="memory-items">
+                {renderMemoryItems(insights, 'insights')}
+              </div>
+            </div>
+
+            {/* Principles Section */}
+            <div className="memory-section principles">
+              <h3 className="section-header">
+                <span className="section-icon">📜</span>
+                <div className="section-text">
+                  <span className="section-title">Principles</span>
+                  <span className="section-subtitle">how I operate</span>
+                </div>
+                <span className="section-count">({anchors.length})</span>
+              </h3>
+              <div className="memory-items">
+                {renderMemoryItems(anchors, 'anchors')}
+              </div>
+            </div>
+
+            {/* Focus Section */}
+            <div className="memory-section focus">
+              <h3 className="section-header">
+                <span className="section-icon">🎯</span>
+                <div className="section-text">
+                  <span className="section-title">Focus</span>
+                  <span className="section-subtitle">what matters now</span>
+                </div>
+                <span className="section-count">({routines.length})</span>
+              </h3>
+              <div className="memory-items">
+                {renderMemoryItems(routines, 'routines')}
+              </div>
+            </div>
+
+            {/* Signals Section */}
+            <div className="memory-section signals">
+              <h3 className="section-header">
+                <span className="section-icon">🌡️</span>
+                <div className="section-text">
+                  <span className="section-title">Signals</span>
+                  <span className="section-subtitle">patterns I notice</span>
+                </div>
+                <span className="section-count">({notes.length})</span>
+              </h3>
+              <div className="memory-items">
+                {renderMemoryItems(notes, 'notes')}
+              </div>
+            </div>
+          </>
         )}
-
-        {/* Identity Section */}
-        <div className="memory-section identity">
-          <h3 className="section-header">
-            <span className="section-icon">🧭</span>
-            <div className="section-text">
-              <span className="section-title">Identity</span>
-              <span className="section-subtitle">who I am</span>
-            </div>
-            <span className="section-count">({insights.length})</span>
-          </h3>
-          <div className="memory-items">
-            {renderMemoryItems(insights, 'insights')}
-          </div>
-        </div>
-
-        {/* Principles Section */}
-        <div className="memory-section principles">
-          <h3 className="section-header">
-            <span className="section-icon">📜</span>
-            <div className="section-text">
-              <span className="section-title">Principles</span>
-              <span className="section-subtitle">how I operate</span>
-            </div>
-            <span className="section-count">({anchors.length})</span>
-          </h3>
-          <div className="memory-items">
-            {renderMemoryItems(anchors, 'anchors')}
-          </div>
-        </div>
-
-        {/* Focus Section */}
-        <div className="memory-section focus">
-          <h3 className="section-header">
-            <span className="section-icon">🎯</span>
-            <div className="section-text">
-              <span className="section-title">Focus</span>
-              <span className="section-subtitle">what matters now</span>
-            </div>
-            <span className="section-count">({routines.length})</span>
-          </h3>
-          <div className="memory-items">
-            {renderMemoryItems(routines, 'routines')}
-          </div>
-        </div>
-
-        {/* Signals Section */}
-        <div className="memory-section signals">
-          <h3 className="section-header">
-            <span className="section-icon">🌡️</span>
-            <div className="section-text">
-              <span className="section-title">Signals</span>
-              <span className="section-subtitle">patterns I notice</span>
-            </div>
-            <span className="section-count">({notes.length})</span>
-          </h3>
-          <div className="memory-items">
-            {renderMemoryItems(notes, 'notes')}
-          </div>
-        </div>
       </div>
     </div>
   );

@@ -423,11 +423,39 @@ body {
   text-align: center;
   color: #94a3b8;
   font-style: italic;
-  padding: 24px;
+  padding: 40px 24px;
   background: #1e293b;
-  border-radius: 8px;
+  border-radius: 16px;
   margin-bottom: 16px;
   border: 1px solid #475569;
+}
+
+.memory-loading h3 {
+  margin: 16px 0 8px 0;
+  color: #f1f5f9;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.memory-loading p {
+  margin: 0;
+  font-size: 14px;
+  color: #94a3b8;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #334155;
+  border-top: 3px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 .memory-item.loading {
@@ -554,11 +582,4 @@ body {
 .cancel-button:focus {
   outline: 2px solid #a5b4fc;
   outline-offset: 1px;
-}/* Memo
-ry loading state */
-.memory-loading {
-  text-align: center;
-  padding: 20px;
-  color: #94a3b8;
-  font-style: italic;
 }
