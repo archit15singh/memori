@@ -363,7 +363,10 @@ function App() {
         <div className="memory-section identity">
           <h3 className="section-header">
             <span className="section-icon">🧭</span>
-            <span className="section-title">Identity</span>
+            <div className="section-text">
+              <span className="section-title">Identity</span>
+              <span className="section-subtitle">who I am</span>
+            </div>
             <span className="section-count">({insights.length})</span>
           </h3>
           <div className="memory-items">
@@ -375,7 +378,10 @@ function App() {
         <div className="memory-section principles">
           <h3 className="section-header">
             <span className="section-icon">📜</span>
-            <span className="section-title">Principles</span>
+            <div className="section-text">
+              <span className="section-title">Principles</span>
+              <span className="section-subtitle">how I operate</span>
+            </div>
             <span className="section-count">({anchors.length})</span>
           </h3>
           <div className="memory-items">
@@ -387,7 +393,10 @@ function App() {
         <div className="memory-section focus">
           <h3 className="section-header">
             <span className="section-icon">🎯</span>
-            <span className="section-title">Focus</span>
+            <div className="section-text">
+              <span className="section-title">Focus</span>
+              <span className="section-subtitle">what matters now</span>
+            </div>
             <span className="section-count">({routines.length})</span>
           </h3>
           <div className="memory-items">
@@ -399,7 +408,10 @@ function App() {
         <div className="memory-section signals">
           <h3 className="section-header">
             <span className="section-icon">🌡️</span>
-            <span className="section-title">Signals</span>
+            <div className="section-text">
+              <span className="section-title">Signals</span>
+              <span className="section-subtitle">patterns I notice</span>
+            </div>
             <span className="section-count">({notes.length})</span>
           </h3>
           <div className="memory-items">
