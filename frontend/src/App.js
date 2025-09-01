@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
+import chatApiService from './services/chatApi';
 
 // Mock data for memories
 const MOCK_MEMORIES = {
@@ -82,6 +83,18 @@ function App() {
       return () => clearTimeout(timer);
     }
   }, [highlightedMemory]);
+
+  // Helper function to create consistent message objects
+  const createMessage = (text, sender, id = null) => {
+    // Ensure text is a string and properly formatted
+    const formattedText = typeof text === 'string' ? text.trim() : String(text || '').trim();
+    
+    return {
+      id: id || Date.now(),
+      text: formattedText || 'Empty message',
+      sender: sender
+    };
+  };
 
   const showFeedback = (message, type = 'success') => {
     setFeedback({ message, type });
@@ -197,36 +210,37 @@ function App() {
     }, 300); // 300ms delay to simulate API call
   };
 
-  // Mock chat responses
-  const MOCK_RESPONSES = [
-    "That's really insightful. How does that connect to your core values?",
-    "I can see how that experience shaped your perspective. What did you learn from it?",
-    "That sounds like an important realization. How might you apply this going forward?",
-    "Thanks for sharing that reflection. What patterns do you notice in your thinking?",
-    "That's a meaningful observation. How does this relate to your personal growth?",
-    "I appreciate your openness. What would you like to explore further about this?",
-    "That's an interesting point. How has this insight influenced your recent decisions?",
-    "Your reflection shows real self-awareness. What questions does this raise for you?"
-  ];
-
-  const sendMessage = (userMessage) => {
-    // Add user message immediately
-    const newUserMessage = { id: Date.now(), text: userMessage, sender: 'user' };
+  const sendMessage = async (userMessage) => {
+    // Add user message immediately with consistent formatting
+    const newUserMessage = createMessage(userMessage, 'user');
     setMessages(prev => [...prev, newUserMessage]);
     
     setIsLoading(true);
     
-    // Simulate API call with random response
-    setTimeout(() => {
-      const randomResponse = MOCK_RESPONSES[Math.floor(Math.random() * MOCK_RESPONSES.length)];
-      const botResponse = { 
-        id: Date.now() + 1, 
-        text: randomResponse, 
-        sender: 'bot' 
-      };
+    try {
+      // Call the real API service
+      const response = await chatApiService.sendMessage(userMessage);
+      
+      // Extract and format the response text from the API response
+      // The backend returns: { "response": "message text" }
+      // We extract the 'response' field and ensure it's properly formatted
+      const responseText = response.response || 'No response received.';
+      
+      // Create bot message with consistent formatting
+      const botResponse = createMessage(responseText, 'bot', Date.now() + 1);
+      
+      // Add bot response to conversation flow seamlessly
       setMessages(prev => [...prev, botResponse]);
+    } catch (error) {
+      // Handle API errors by showing an error message as a bot response
+      // Maintain consistent message formatting for errors
+      const errorMessage = `Sorry, I encountered an error: ${error.message}`;
+      const errorResponse = createMessage(errorMessage, 'bot', Date.now() + 1);
+      setMessages(prev => [...prev, errorResponse]);
+    } finally {
+      // Always reset loading state, whether success or error
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   const handleSubmit = (e) => {

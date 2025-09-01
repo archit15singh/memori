@@ -1,97 +1,62 @@
-# Frontend-Backend Integration Requirements
+# Requirements Document
 
 ## Introduction
 
-This specification addresses the critical integration issues between the React frontend and FastAPI backend in the reflective journaling application. The frontend expects 4 memory types (insights, anchors, routines, notes) with key-based operations, while the backend currently only supports insights with ID-based operations. This integration work will ensure seamless communication between both systems.
+This feature involves integrating the existing React frontend with the FastAPI backend's `/chat` endpoint. The frontend currently uses mock responses but needs to be updated to make real HTTP requests to the backend API, handle loading states, errors, and provide a seamless chat experience.
 
 ## Requirements
 
-### Requirement 1: CORS Configuration
+### Requirement 1
 
-**User Story:** As a frontend application, I want to communicate with the backend API without CORS errors, so that I can load and manage memory data.
-
-#### Acceptance Criteria
-
-1. WHEN the frontend makes a request to the backend THEN the backend SHALL include proper CORS headers
-2. WHEN the frontend runs on localhost:3000 THEN the backend SHALL allow cross-origin requests from this origin
-3. WHEN the frontend makes OPTIONS preflight requests THEN the backend SHALL respond with appropriate CORS headers
-
-### Requirement 2: Data Model Consistency
-
-**User Story:** As a frontend application, I want to send and receive data with consistent field names, so that memory operations work correctly.
+**User Story:** As a user, I want the frontend chat to communicate with the real backend API, so that I get actual responses instead of mock data.
 
 #### Acceptance Criteria
 
-1. WHEN the frontend sends memory data THEN it SHALL use the field name "value" for content
-2. WHEN the backend receives memory data THEN it SHALL accept the field name "value" for content
-3. WHEN the backend returns memory data THEN it SHALL include the field name "value" for content
-4. WHEN memory updates are performed THEN both systems SHALL use consistent field naming
+1. WHEN I send a message in the frontend THEN the system SHALL make a POST request to the backend `/chat` endpoint
+2. WHEN the backend responds successfully THEN the system SHALL display the actual response from the API
+3. WHEN I send multiple messages THEN the system SHALL maintain the conversation flow with real backend responses
+4. WHEN the backend is available THEN the system SHALL use the real API instead of mock responses
 
-### Requirement 3: Memory Type Support
+### Requirement 2
 
-**User Story:** As a user, I want to manage four different types of memories (insights, anchors, routines, notes), so that I can organize my reflective content effectively.
-
-#### Acceptance Criteria
-
-1. WHEN the frontend requests insights THEN the backend SHALL provide insights CRUD operations
-2. WHEN the frontend requests anchors THEN the backend SHALL provide anchors CRUD operations
-3. WHEN the frontend requests routines THEN the backend SHALL provide routines CRUD operations
-4. WHEN the frontend requests notes THEN the backend SHALL provide notes CRUD operations
-5. WHEN any memory type is accessed THEN the backend SHALL maintain separate storage for each type
-
-### Requirement 4: Key-Based Operations
-
-**User Story:** As a frontend application, I want to perform memory operations using user-defined keys, so that I can update and delete specific memories without managing backend IDs.
+**User Story:** As a user, I want the system to handle API communication seamlessly, so that I can focus on the conversation.
 
 #### Acceptance Criteria
 
-1. WHEN the frontend updates a memory THEN it SHALL use the memory's key in the URL path
-2. WHEN the frontend deletes a memory THEN it SHALL use the memory's key in the URL path
-3. WHEN the backend receives key-based requests THEN it SHALL locate memories by their key field
-4. WHEN a key is not found THEN the backend SHALL return a 404 error with appropriate message
+1. WHEN the backend server is running THEN the system SHALL communicate successfully with the API
+2. WHEN the API request completes THEN the system SHALL display the response immediately
+3. WHEN using the chat interface THEN the system SHALL provide a smooth user experience
+4. WHEN the system encounters issues THEN the system SHALL handle them gracefully without complex error handling
 
-### Requirement 5: API Endpoint Completeness
+### Requirement 3
 
-**User Story:** As a frontend application, I want all expected API endpoints to exist, so that all memory management features work without errors.
-
-#### Acceptance Criteria
-
-1. WHEN the frontend requests GET /insights THEN the backend SHALL return all insights
-2. WHEN the frontend requests GET /anchors THEN the backend SHALL return all anchors
-3. WHEN the frontend requests GET /routines THEN the backend SHALL return all routines
-4. WHEN the frontend requests GET /notes THEN the backend SHALL return all notes
-5. WHEN the frontend makes PUT requests to /{type}/by-key/{key} THEN the backend SHALL update the specified memory
-6. WHEN the frontend makes DELETE requests to /{type}/by-key/{key} THEN the backend SHALL delete the specified memory
-
-### Requirement 6: Error Handling Consistency
-
-**User Story:** As a frontend application, I want consistent error responses from the backend, so that I can provide appropriate user feedback.
+**User Story:** As a user, I want responsive feedback during API calls, so that I know the system is processing my request.
 
 #### Acceptance Criteria
 
-1. WHEN a memory is not found THEN the backend SHALL return HTTP 404 with error details
-2. WHEN invalid data is submitted THEN the backend SHALL return HTTP 422 with validation errors
-3. WHEN an invalid memory type is requested THEN the backend SHALL return HTTP 400 with error message
-4. WHEN any error occurs THEN the backend SHALL return structured error responses in JSON format
+1. WHEN I send a message THEN the system SHALL show a loading indicator immediately
+2. WHEN the API call is in progress THEN the system SHALL disable the input field to prevent duplicate submissions
+3. WHEN the response arrives THEN the system SHALL hide the loading indicator and show the response
+4. WHEN the API call completes THEN the system SHALL re-enable the input field for the next message
 
-### Requirement 7: Data Validation
+### Requirement 4
 
-**User Story:** As a system, I want to validate memory data to ensure data quality and prevent errors.
-
-#### Acceptance Criteria
-
-1. WHEN memory data is created THEN the key field SHALL not be empty
-2. WHEN memory data is created THEN the value field SHALL not be empty
-3. WHEN invalid memory types are used THEN the system SHALL reject the request
-4. WHEN duplicate keys are created within the same memory type THEN the system SHALL handle appropriately
-
-### Requirement 8: Development Testing Support
-
-**User Story:** As a developer, I want test data and health check endpoints, so that I can verify the integration works correctly.
+**User Story:** As a developer, I want configurable API endpoints, so that I can easily switch between development and production environments.
 
 #### Acceptance Criteria
 
-1. WHEN the system is in development mode THEN it SHALL provide a seed data endpoint
-2. WHEN the health check endpoint is called THEN it SHALL return system status and memory counts
-3. WHEN test data is seeded THEN all memory types SHALL have sample data for testing
-4. WHEN the system starts THEN it SHALL log important operations for debugging
+1. WHEN the application starts THEN the system SHALL use the correct backend URL for the current environment
+2. WHEN in development mode THEN the system SHALL connect to the local backend server (localhost:8000)
+3. WHEN the backend URL changes THEN the system SHALL be easily configurable without code changes
+4. WHEN making API calls THEN the system SHALL use the configured base URL consistently
+
+### Requirement 5
+
+**User Story:** As a user, I want the chat interface to display backend responses correctly, so that the conversation flows naturally.
+
+#### Acceptance Criteria
+
+1. WHEN the backend returns a successful response THEN the system SHALL extract and display the response text correctly
+2. WHEN the backend returns a response THEN the system SHALL display it as a bot message
+3. WHEN receiving API responses THEN the system SHALL maintain the conversation format
+4. WHEN the response arrives THEN the system SHALL integrate it seamlessly into the chat flow
