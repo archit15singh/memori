@@ -382,6 +382,15 @@ function App() {
                 type="text"
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    saveEdit();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    cancelEdit();
+                  }
+                }}
                 className="edit-input"
                 autoFocus
                 disabled={isItemLoading}
