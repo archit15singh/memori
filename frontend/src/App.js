@@ -11,12 +11,7 @@ const MEMORY_TYPE_MAP = {
   notes: 'signals'
 };
 
-const REVERSE_MEMORY_TYPE_MAP = {
-  identity: 'insights',
-  principles: 'anchors',
-  focus: 'routines', 
-  signals: 'notes'
-};
+
 
 function App() {
   const [messages, setMessages] = useState([]);
@@ -205,6 +200,9 @@ function App() {
             item.key === editingMemory.key ? newItem : item
           ));
           break;
+        default:
+          console.warn('Unknown memory type for update:', editingMemory.type);
+          break;
       }
       
       // Highlight the updated memory
@@ -283,6 +281,9 @@ function App() {
           break;
         case 'notes':
           setNotes(prev => prev.filter(item => item.key !== key));
+          break;
+        default:
+          console.warn('Unknown memory type for deletion:', type);
           break;
       }
       
