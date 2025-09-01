@@ -275,7 +275,10 @@ async def get_ai_response(message: str) -> str:
     try:
         resp = client.chat.completions.create(
             model="gpt-5-nano",
-            messages=[{"role": "user", "content": message}]
+            messages=[
+                {"role": "system", "content": "You are a reflective journaling AI bot. Reply to user messages in very, very short responses that encourage reflection and self-awareness."},
+                {"role": "user", "content": message}
+            ]
         )
         return resp.choices[0].message.content
     except Exception as e:
