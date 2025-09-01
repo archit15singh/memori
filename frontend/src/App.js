@@ -6,7 +6,7 @@ import memoryApiService from './services/memoryApi';
 // Memory type mapping between frontend and backend
 const MEMORY_TYPE_MAP = {
   insights: 'identity',
-  anchors: 'principles', 
+  anchors: 'principles',
   routines: 'focus',
   notes: 'signals'
 };
@@ -17,25 +17,25 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
+
   // Memory state - loaded from API
   const [insights, setInsights] = useState([]);
   const [anchors, setAnchors] = useState([]);
   const [routines, setRoutines] = useState([]);
   const [notes, setNotes] = useState([]);
   const [memoriesLoaded, setMemoriesLoaded] = useState(false);
-  
+
   // Edit state
   const [editingMemory, setEditingMemory] = useState(null);
   const [editValue, setEditValue] = useState('');
-  
+
   // Feedback state
   const [feedback, setFeedback] = useState(null);
   const [memoryLoading, setMemoryLoading] = useState({});
-  
+
   // Highlight state for memory updates
   const [highlightedMemory, setHighlightedMemory] = useState(null);
-  
+
   // Refs for auto-scroll and focus
   const messagesEndRef = React.useRef(null);
   const chatInputRef = React.useRef(null);
@@ -77,7 +77,7 @@ function App() {
     const loadMemories = async () => {
       try {
         const memories = await memoryApiService.fetchMemories();
-        
+
         // Map backend response to frontend state
         setInsights(memories.identity || []);
         setAnchors(memories.principles || []);
@@ -98,7 +98,7 @@ function App() {
   const createMessage = (text, sender, id = null) => {
     // Ensure text is a string and properly formatted
     const formattedText = typeof text === 'string' ? text.trim() : String(text || '').trim();
-    
+
     return {
       id: id || Date.now(),
       text: formattedText || 'Empty message',
@@ -123,16 +123,16 @@ function App() {
 
   const saveEdit = async () => {
     if (!editValue.trim() || !editingMemory) return;
-    
+
     // Validate 240 char limit
     if (editValue.trim().length > 240) {
       showFeedback('Value must be 240 characters or less', 'error');
       return;
     }
-    
+
     const loadingKey = `${editingMemory.type}-${editingMemory.key}`;
     setMemoryLoading(prev => ({ ...prev, [loadingKey]: true }));
-    
+
     try {
       // Find the memory item to get its ID
       let memoryItem = null;
@@ -159,44 +159,54 @@ function App() {
         return;
       }
 
+      // Check if the value has actually changed
+      const newValue = editValue.trim();
+      const originalValue = memoryItem.value;
+
+      if (newValue === originalValue) {
+        // No changes made, just cancel edit without showing success message
+        cancelEdit();
+        return;
+      }
+
       // Map frontend type to backend type
       const backendType = MEMORY_TYPE_MAP[editingMemory.type];
-      
+
       // Call API to update memory
       const updatedMemory = await memoryApiService.updateMemory(
         backendType,
         memoryItem.id,
         {
           key: editingMemory.key,
-          value: editValue.trim()
+          value: newValue
         }
       );
-      
+
       // Update local state with the response
-      const newItem = { 
+      const newItem = {
         id: updatedMemory.id,
-        key: updatedMemory.key, 
-        value: updatedMemory.value 
+        key: updatedMemory.key,
+        value: updatedMemory.value
       };
-      
+
       switch (editingMemory.type) {
         case 'insights':
-          setInsights(prev => prev.map(item => 
+          setInsights(prev => prev.map(item =>
             item.key === editingMemory.key ? newItem : item
           ));
           break;
         case 'anchors':
-          setAnchors(prev => prev.map(item => 
+          setAnchors(prev => prev.map(item =>
             item.key === editingMemory.key ? newItem : item
           ));
           break;
         case 'routines':
-          setRoutines(prev => prev.map(item => 
+          setRoutines(prev => prev.map(item =>
             item.key === editingMemory.key ? newItem : item
           ));
           break;
         case 'notes':
-          setNotes(prev => prev.map(item => 
+          setNotes(prev => prev.map(item =>
             item.key === editingMemory.key ? newItem : item
           ));
           break;
@@ -204,14 +214,14 @@ function App() {
           console.warn('Unknown memory type for update:', editingMemory.type);
           break;
       }
-      
+
       // Highlight the updated memory
       const memoryId = `${editingMemory.type}-${editingMemory.key}`;
       setHighlightedMemory(memoryId);
-      
+
       showFeedback('Memory updated successfully');
       cancelEdit();
-      
+
       // Scroll to updated memory after a brief delay
       setTimeout(() => {
         const element = document.querySelector(`[data-memory-id="${memoryId}"]`);
@@ -219,7 +229,7 @@ function App() {
           element.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
       }, 100);
-      
+
     } catch (error) {
       console.error('Failed to update memory:', error);
       showFeedback(`Failed to update memory: ${error.message}`, 'error');
@@ -235,7 +245,7 @@ function App() {
   const deleteMemory = async (type, key) => {
     const loadingKey = `${type}-${key}`;
     setMemoryLoading(prev => ({ ...prev, [loadingKey]: true }));
-    
+
     try {
       // Find the memory item to get its ID
       let memoryItem = null;
@@ -264,10 +274,10 @@ function App() {
 
       // Map frontend type to backend type
       const backendType = MEMORY_TYPE_MAP[type];
-      
+
       // Call API to delete memory
       await memoryApiService.deleteMemory(backendType, memoryItem.id);
-      
+
       // Update local state
       switch (type) {
         case 'insights':
@@ -286,9 +296,9 @@ function App() {
           console.warn('Unknown memory type for deletion:', type);
           break;
       }
-      
+
       showFeedback('Memory deleted successfully');
-      
+
     } catch (error) {
       console.error('Failed to delete memory:', error);
       showFeedback(`Failed to delete memory: ${error.message}`, 'error');
@@ -305,21 +315,21 @@ function App() {
     // Add user message immediately with consistent formatting
     const newUserMessage = createMessage(userMessage, 'user');
     setMessages(prev => [...prev, newUserMessage]);
-    
+
     setIsLoading(true);
-    
+
     try {
       // Call the real API service
       const response = await chatApiService.sendMessage(userMessage);
-      
+
       // Extract and format the response text from the API response
       // The backend returns: { "response": "message text" }
       // We extract the 'response' field and ensure it's properly formatted
       const responseText = response.response || 'No response received.';
-      
+
       // Create bot message with consistent formatting
       const botResponse = createMessage(responseText, 'bot', Date.now() + 1);
-      
+
       // Add bot response to conversation flow seamlessly
       setMessages(prev => [...prev, botResponse]);
     } catch (error) {
@@ -356,13 +366,13 @@ function App() {
       const loadingKey = `${type}-${item.key}`;
       const isItemLoading = memoryLoading[loadingKey];
       const displayKey = getDisplayKey(item.key);
-      
+
       const memoryId = `${type}-${item.key}`;
       const isHighlighted = highlightedMemory === memoryId;
-      
+
       return (
-        <div 
-          key={item.key} 
+        <div
+          key={item.key}
           className={`memory-item ${isItemLoading ? 'loading' : ''} ${isHighlighted ? 'highlighted' : ''}`}
           data-memory-id={memoryId}
         >
@@ -376,16 +386,16 @@ function App() {
                 autoFocus
                 disabled={isItemLoading}
               />
-              <button 
-                onClick={saveEdit} 
+              <button
+                onClick={saveEdit}
                 className="save-button"
                 disabled={isItemLoading}
                 title="Save changes"
               >
                 {isItemLoading ? '⏳' : '✓'}
               </button>
-              <button 
-                onClick={cancelEdit} 
+              <button
+                onClick={cancelEdit}
                 className="cancel-button"
                 disabled={isItemLoading}
                 title="Cancel edit"
@@ -400,7 +410,7 @@ function App() {
                 <span className="memory-text">{item.value}</span>
               </div>
               <div className="memory-actions">
-                <button 
+                <button
                   onClick={() => startEdit(type, item.key, item.value)}
                   className="edit-button"
                   disabled={isItemLoading}
@@ -408,7 +418,7 @@ function App() {
                 >
                   {isItemLoading ? '⏳' : '✏️'}
                 </button>
-                <button 
+                <button
                   onClick={() => deleteMemory(type, item.key)}
                   className="delete-button"
                   disabled={isItemLoading}
@@ -463,13 +473,13 @@ function App() {
       </div>
       <div className="memory-area">
         <h2>Memory</h2>
-        
+
         {!memoriesLoaded && (
           <div className="memory-loading">
             <p>Loading memories...</p>
           </div>
         )}
-        
+
         {/* Identity Section */}
         <div className="memory-section identity">
           <h3 className="section-header">
