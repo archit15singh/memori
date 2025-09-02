@@ -45,7 +45,7 @@ chat-area
 ### **🔄 Chat State Management**
 ```
 Chat State
-├── 📨 messages[]           # Message history
+├── 📨 messages[]           # Current session messages
 ├── 📝 input               # Current input text
 ├── ⏳ isLoading           # Bot response loading
 └── 🎯 chatInputRef        # Input focus reference
