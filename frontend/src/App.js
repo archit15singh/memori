@@ -3,6 +3,24 @@ import './App.css';
 import chatApiService from './services/chatApi';
 import memoryApiService from './services/memoryApi';
 
+// Reflective phrases for typing indicator
+const REFLECTIVE_PHRASES = [
+  "Pausing to reflect…",
+  "Holding space for your words…",
+  "Settling into what this means…",
+  "Listening deeply…",
+  "Exploring that thought…",
+  "Turning it over gently…",
+  "In this moment…",
+  "Gathering reflections…"
+];
+
+// Function to get a random reflective phrase
+const getRandomReflectivePhrase = () => {
+  const randomIndex = Math.floor(Math.random() * REFLECTIVE_PHRASES.length);
+  return REFLECTIVE_PHRASES[randomIndex];
+};
+
 // Memory type mapping between frontend and backend
 const MEMORY_TYPE_MAP = {
   insights: 'identity',
@@ -460,7 +478,7 @@ function App() {
           ))}
           {isLoading && (
             <div className="message bot loading">
-              <span className="message-text">Bot is typing...</span>
+              <span className="message-text">{getRandomReflectivePhrase()}</span>
             </div>
           )}
           <div ref={messagesEndRef} />
