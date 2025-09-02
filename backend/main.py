@@ -203,66 +203,59 @@ def format_memories_for_prompt(memories):
     return formatted_context
 
 
-def render_user_profile(memories):
+def render_user_context(memories):
     """
-    Render user profile from memories for context (not impersonation).
+    Render user context from memories using only the generic bucket structure.
     
-    Extracts key fields from memories and formats them as a profile block
-    that provides context about the user without causing identity confusion.
+    Creates a simple context block using the predefined memory categories
+    without hardcoding specific field names or content expectations.
     
     Args:
         memories (dict): Dictionary with memory types as keys and lists of MemoryItem objects as values
                         Expected keys: identity, principles, focus, signals
     
     Returns:
-        str: Formatted user profile block or empty string if no relevant memories
+        str: Formatted user context block or empty string if no memories
     """
-    # Extract key profile fields from memories
-    profile_data = {}
+    # Define the bucket meanings (only hardcoded part)
+    bucket_info = {
+        "identity": "who the user is",
+        "principles": "how the user operates", 
+        "focus": "what matters to the user now",
+        "signals": "patterns the user notices"
+    }
     
-    # Get identity memories for core profile info
-    identity_memories = memories.get("identity", [])
-    for item in identity_memories:
-        key_lower = item.key.lower()
-        if "name" in key_lower:
-            profile_data["name"] = item.value
-        elif "role" in key_lower or "job" in key_lower or "work" in key_lower:
-            profile_data["role"] = item.value
-        elif "location" in key_lower or "city" in key_lower or "where" in key_lower:
-            profile_data["location"] = item.value
-        elif "interest" in key_lower or "hobby" in key_lower or "like" in key_lower:
-            profile_data["interests"] = item.value
+    context_sections = []
+    total_memories = 0
     
-    # Get principles/values for values field
-    principles_memories = memories.get("principles", [])
-    for item in principles_memories:
-        key_lower = item.key.lower()
-        if "value" in key_lower or "principle" in key_lower or "believe" in key_lower:
-            profile_data["values"] = item.value
-            break  # Take first values-related principle
+    # Build context using only bucket structure
+    for bucket_type, description in bucket_info.items():
+        memory_items = memories.get(bucket_type, [])
+        
+        if memory_items:
+            # Add bucket header
+            section_lines = [f"USER {bucket_type.upper()} ({description}):"]
+            
+            # Add all memories in this bucket generically
+            for item in memory_items:
+                section_lines.append(f"• {item.key}: {item.value}")
+            
+            context_sections.append("\n".join(section_lines))
+            total_memories += len(memory_items)
     
-    # If no profile data found, return empty string
-    if not profile_data:
-        logger.info("📋 No profile data found in memories")
+    # If no memories found, return empty string
+    if total_memories == 0:
+        logger.info("📋 No memories found for user context")
         return ""
     
-    # Build profile block
-    profile_lines = ["USER PROFILE (reference only, do not impersonate):"]
+    # Join all sections
+    context_text = "\n\n".join(context_sections)
     
-    # Add fields in consistent order
-    field_order = ["name", "role", "interests", "values", "location"]
-    for field in field_order:
-        if field in profile_data:
-            profile_lines.append(f"{field}: {profile_data[field]}")
+    # Log context rendering metrics
+    context_length = len(context_text)
+    logger.info(f"📋 Rendered user context with {total_memories} memories ({context_length} chars)")
     
-    profile_text = "\n".join(profile_lines)
-    
-    # Log profile rendering metrics
-    field_count = len(profile_data)
-    profile_length = len(profile_text)
-    logger.info(f"📋 Rendered user profile with {field_count} fields ({profile_length} chars)")
-    
-    return profile_text
+    return context_text
 
 
 def get_system_prompt() -> str:
@@ -620,12 +613,12 @@ async def get_ai_response(message: str) -> str:
         # Get fixed system prompt
         system_prompt = get_system_prompt()
         
-        # Render user profile from memories
-        profile_context = render_user_profile(memories)
+        # Render user context from memories
+        user_context = render_user_context(memories)
         
-        # Add profile context to user message, not system
-        if profile_context:
-            user_message_with_context = f"{profile_context}\n\n{message}"
+        # Add user context to user message, not system
+        if user_context:
+            user_message_with_context = f"{user_context}\n\n{message}"
         else:
             user_message_with_context = message
         
