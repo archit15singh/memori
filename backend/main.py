@@ -13,12 +13,22 @@ from contextlib import asynccontextmanager
 import json
 import os
 import sqlite3
+import logging
+import time
 from dotenv import load_dotenv
 from openai import OpenAI
 from models import ChatRequest, ChatResponse, ErrorResponse, MemoryItem, MemoryResponse
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Configure logging for product insights
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s | %(levelname)s | %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -27,9 +37,12 @@ async def lifespan(app: FastAPI):
     Lifespan event handler for FastAPI application startup and shutdown.
     """
     # Startup
+    logger.info("🚀 Chat Backend starting up...")
     init_database()
+    logger.info("✅ Backend ready - database initialized")
     yield
     # Shutdown (if needed)
+    logger.info("🛑 Chat Backend shutting down...")
 
 
 # Create FastAPI app instance with comprehensive metadata
@@ -61,21 +74,31 @@ def init_database():
     """
     Initialize SQLite database and create memories table if it doesn't exist.
     """
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    # Create memories table with id, type, key, value columns
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS memories (
-            id TEXT PRIMARY KEY,
-            type TEXT NOT NULL,
-            key TEXT NOT NULL,
-            value TEXT NOT NULL
-        )
-    """)
-    
-    conn.commit()
-    conn.close()
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Create memories table with id, type, key, value columns
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS memories (
+                id TEXT PRIMARY KEY,
+                type TEXT NOT NULL,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL
+            )
+        """)
+        
+        # Check existing memory count for product insights
+        cursor.execute("SELECT COUNT(*) FROM memories")
+        memory_count = cursor.fetchone()[0]
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"💾 Database ready - {memory_count} memories loaded")
+    except Exception as e:
+        logger.error(f"❌ Database initialization failed: {str(e)}")
+        raise
 
 
 def get_all_memories():
@@ -85,6 +108,7 @@ def get_all_memories():
     Returns:
         dict: Dictionary with memory types as keys and lists of MemoryItem objects as values
     """
+    start_time = time.time()
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
@@ -105,6 +129,11 @@ def get_all_memories():
         memory_item = MemoryItem(id=memory_id, key=key, value=value)
         if memory_type in memories:
             memories[memory_type].append(memory_item)
+    
+    # Log memory retrieval metrics
+    total_memories = sum(len(memories[t]) for t in memories)
+    query_time = round((time.time() - start_time) * 1000, 2)
+    logger.info(f"🧠 Retrieved {total_memories} memories in {query_time}ms")
     
     return memories
 
@@ -134,7 +163,13 @@ def update_memory_db(memory_type: str, memory_id: str, key: str, value: str):
     conn.commit()
     conn.close()
     
-    return rows_affected > 0
+    success = rows_affected > 0
+    if success:
+        logger.info(f"✏️ Updated {memory_type} memory: '{key}' (id: {memory_id[:8]}...)")
+    else:
+        logger.warning(f"⚠️ Memory update failed - not found: {memory_type}/{memory_id[:8]}...")
+    
+    return success
 
 
 def delete_memory_db(memory_type: str, memory_id: str):
@@ -160,10 +195,34 @@ def delete_memory_db(memory_type: str, memory_id: str):
     conn.commit()
     conn.close()
     
-    return rows_affected > 0
+    success = rows_affected > 0
+    if success:
+        logger.info(f"🗑️ Deleted {memory_type} memory (id: {memory_id[:8]}...)")
+    else:
+        logger.warning(f"⚠️ Memory deletion failed - not found: {memory_type}/{memory_id[:8]}...")
+    
+    return success
 
 
 
+
+# Request logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log all incoming requests for product insights"""
+    start_time = time.time()
+    
+    # Log request
+    logger.info(f"🌐 {request.method} {request.url.path} - User request started")
+    
+    # Process request
+    response = await call_next(request)
+    
+    # Log response
+    process_time = round((time.time() - start_time) * 1000, 2)
+    logger.info(f"📤 {request.method} {request.url.path} - {response.status_code} in {process_time}ms")
+    
+    return response
 
 # Configure CORS for frontend integration
 app.add_middleware(
@@ -198,6 +257,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         error_details.append(f"{field}: {message}")
     
     detail = f"Validation error: {'; '.join(error_details)}"
+    logger.warning(f"⚠️ Validation error on {request.method} {request.url.path}: {detail}")
     
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -212,6 +272,7 @@ async def value_error_handler(request: Request, exc: ValueError):
     
     This handles cases where data cannot be processed due to invalid values.
     """
+    logger.warning(f"⚠️ Bad request on {request.method} {request.url.path}: {str(exc)}")
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
         content={"detail": f"Bad request: {str(exc)}"}
@@ -225,6 +286,7 @@ async def json_decode_error_handler(request: Request, exc: json.JSONDecodeError)
     
     This handles cases where invalid JSON is sent.
     """
+    logger.warning(f"⚠️ Invalid JSON on {request.method} {request.url.path}: {str(exc)}")
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
         content={"detail": "Invalid JSON format in request body"}
@@ -238,6 +300,7 @@ async def general_exception_handler(request: Request, exc: Exception):
     
     This is a catch-all for any unhandled server errors.
     """
+    logger.error(f"❌ Unexpected error on {request.method} {request.url.path}: {str(exc)}")
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"detail": f"Internal server error: {str(exc)}"}
@@ -247,6 +310,7 @@ async def general_exception_handler(request: Request, exc: Exception):
 @app.get("/")
 async def root():
     """Root endpoint for health check"""
+    logger.info("💓 Health check requested")
     return {"message": "Chat Backend API is running"}
 
 
@@ -262,6 +326,7 @@ async def get_memories():
         HTTPException: For any processing errors (500 Internal Server Error)
     """
     try:
+        logger.info("📖 User requested all memories")
         memories = get_all_memories()
         return MemoryResponse(
             identity=memories["identity"],
@@ -270,6 +335,7 @@ async def get_memories():
             signals=memories["signals"]
         )
     except Exception as e:
+        logger.error(f"❌ Memory retrieval failed: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving memories: {str(e)}"
@@ -293,9 +359,12 @@ async def update_memory(memory_type: str, memory_id: str, memory_item: MemoryIte
         HTTPException: For validation errors (400 Bad Request) or not found (404 Not Found)
     """
     try:
+        logger.info(f"📝 User updating {memory_type} memory: '{memory_item.key}'")
+        
         # Validate memory type
         valid_types = ["identity", "principles", "focus", "signals"]
         if memory_type not in valid_types:
+            logger.warning(f"⚠️ Invalid memory type attempted: {memory_type}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid memory type: {memory_type}. Must be one of: identity, principles, focus, signals"
@@ -323,6 +392,7 @@ async def update_memory(memory_type: str, memory_id: str, memory_item: MemoryIte
         # Re-raise HTTP exceptions
         raise
     except Exception as e:
+        logger.error(f"❌ Memory update failed: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error updating memory: {str(e)}"
@@ -345,9 +415,12 @@ async def delete_memory(memory_type: str, memory_id: str):
         HTTPException: For validation errors (400 Bad Request) or not found (404 Not Found)
     """
     try:
+        logger.info(f"🗑️ User deleting {memory_type} memory (id: {memory_id[:8]}...)")
+        
         # Validate memory type
         valid_types = ["identity", "principles", "focus", "signals"]
         if memory_type not in valid_types:
+            logger.warning(f"⚠️ Invalid memory type for deletion: {memory_type}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid memory type: {memory_type}. Must be one of: identity, principles, focus, signals"
@@ -369,6 +442,7 @@ async def delete_memory(memory_type: str, memory_id: str):
         # Re-raise HTTP exceptions
         raise
     except Exception as e:
+        logger.error(f"❌ Memory deletion failed: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting memory: {str(e)}"
@@ -388,6 +462,7 @@ async def get_ai_response(message: str) -> str:
     Raises:
         Exception: For OpenAI API errors
     """
+    start_time = time.time()
     try:
         messages = [
             {"role": "system", "content": "You are a reflective journaling AI bot. Reply to user messages in very, very short responses that encourage reflection and self-awareness."},
@@ -398,8 +473,15 @@ async def get_ai_response(message: str) -> str:
             model="gpt-5-nano",
             messages=messages
         )
-        return resp.choices[0].message.content
+        
+        response_text = resp.choices[0].message.content
+        api_time = round((time.time() - start_time) * 1000, 2)
+        
+        logger.info(f"🤖 AI response generated in {api_time}ms (length: {len(response_text)} chars)")
+        return response_text
     except Exception as e:
+        api_time = round((time.time() - start_time) * 1000, 2)
+        logger.error(f"❌ OpenAI API failed after {api_time}ms: {str(e)}")
         raise Exception(f"OpenAI API error: {str(e)}")
 
 
@@ -419,13 +501,22 @@ async def chat_endpoint(request: ChatRequest):
         RequestValidationError: For validation errors (422 Unprocessable Entity)
         ValueError: For bad request data (400 Bad Request)
     """
+    start_time = time.time()
+    message_preview = request.message[:50] + "..." if len(request.message) > 50 else request.message
+    
     try:
+        logger.info(f"💬 User message: '{message_preview}' (length: {len(request.message)})")
+        
         # Validate that message is not just whitespace
         if not request.message or not request.message.strip():
+            logger.warning("⚠️ Empty message rejected")
             raise ValueError("Message cannot be empty or contain only whitespace")
         
         # Get AI response
         response_text = await get_ai_response(request.message)
+        
+        total_time = round((time.time() - start_time) * 1000, 2)
+        logger.info(f"✅ Chat completed in {total_time}ms")
         
         return ChatResponse(response=response_text)
         
@@ -433,6 +524,8 @@ async def chat_endpoint(request: ChatRequest):
         # Re-raise ValueError to be handled by the custom exception handler
         raise e
     except Exception as e:
+        total_time = round((time.time() - start_time) * 1000, 2)
+        logger.error(f"❌ Chat failed after {total_time}ms: {str(e)}")
         # Handle any unexpected errors during processing
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
