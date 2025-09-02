@@ -5,5 +5,9 @@ uvicorn[standard]==0.24.0
 # Data validation and serialization
 pydantic==2.5.0
 
+# Environment variables and OpenAI
+python-dotenv==1.0.0
+openai==1.3.0
+
 # Development dependencies
 watchfiles==0.21.0  # Better file watching for hot reload

@@ -15,6 +15,8 @@ import os
 import sqlite3
 import logging
 import time
+import uuid
+from typing import List, Dict
 from dotenv import load_dotenv
 from openai import OpenAI
 from models import ChatRequest, ChatResponse, ErrorResponse, MemoryItem, MemoryResponse
@@ -342,6 +344,394 @@ def delete_memory_db(memory_type: str, memory_id: str):
         logger.warning(f"⚠️ Memory deletion failed - not found: {memory_type}/{memory_id[:8]}...")
     
     return success
+
+
+def get_existing_memory_keys() -> Dict[str, List[str]]:
+    """
+    Get existing memory keys organized by bucket to avoid duplicates.
+    
+    Returns:
+        dict: Dictionary with bucket names as keys and lists of existing memory keys as values
+    """
+    start_time = time.time()
+    conn = None
+    
+    try:
+        logger.info("📚 Loading existing memory keys from database")
+        
+        # Enhanced database connection with error handling
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+        except Exception as db_error:
+            logger.error(f"❌ Failed to connect to database for memory keys: {str(db_error)}")
+            raise Exception(f"Database connection failed: {str(db_error)}")
+        
+        # Execute query with error handling
+        try:
+            cursor.execute("SELECT type, key FROM memories")
+            rows = cursor.fetchall()
+            logger.info(f"📚 Retrieved {len(rows)} memory records from database")
+        except sqlite3.Error as query_error:
+            logger.error(f"❌ Failed to query memory keys: {str(query_error)}")
+            raise Exception(f"Database query failed: {str(query_error)}")
+        
+        # Organize keys by bucket with validation
+        existing_keys = {
+            "identity": [],
+            "principles": [],
+            "focus": [],
+            "signals": []
+        }
+        
+        invalid_types = []
+        for memory_type, key in rows:
+            if memory_type in existing_keys:
+                existing_keys[memory_type].append(key)
+            else:
+                invalid_types.append(memory_type)
+        
+        # Log any invalid memory types found
+        if invalid_types:
+            unique_invalid = list(set(invalid_types))
+            logger.warning(f"⚠️ Found {len(invalid_types)} memories with invalid types: {unique_invalid}")
+        
+        # Log summary
+        query_time = round((time.time() - start_time) * 1000, 2)
+        total_keys = sum(len(keys) for keys in existing_keys.values())
+        logger.info(f"✅ Loaded {total_keys} existing memory keys in {query_time}ms")
+        
+        for bucket, keys in existing_keys.items():
+            if keys:
+                logger.info(f"  - {bucket}: {len(keys)} keys")
+        
+        return existing_keys
+        
+    except Exception as e:
+        query_time = round((time.time() - start_time) * 1000, 2)
+        logger.error(f"❌ Failed to get existing memory keys after {query_time}ms: {str(e)}")
+        logger.error(f"❌ Error type: {type(e).__name__}")
+        # Return empty structure as fallback
+        return {
+            "identity": [],
+            "principles": [],
+            "focus": [],
+            "signals": []
+        }
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception as close_error:
+                logger.warning(f"⚠️ Error closing database connection: {str(close_error)}")
+
+
+async def extract_memories(user_message: str, assistant_response: str, existing_memories: Dict[str, List[str]]) -> List[Dict]:
+    """
+    Extract memories from a conversation turn using OpenAI API.
+    
+    Args:
+        user_message: The user's input message
+        assistant_response: The AI's response
+        existing_memories: Current memory keys organized by bucket
+        
+    Returns:
+        List of memory actions: [{"action": "create|update", "bucket": "identity", "key": "name", "value": "Alex"}]
+    """
+    start_time = time.time()
+    
+    try:
+        logger.info("🧠 Starting memory extraction from conversation")
+        
+        # Create system prompt for memory extraction
+        system_prompt = """You are a memory extraction system. Analyze conversations and extract key-value memories into 4 buckets:
+
+BUCKETS:
+- identity: who the user is (name, role, background, characteristics)
+- principles: how the user operates (values, beliefs, approaches, preferences)
+- focus: what matters to the user now (current projects, goals, priorities)
+- signals: patterns the user notices (behaviors, insights, observations)
+
+RULES:
+1. Extract maximum 3 memories per conversation
+2. Only extract significant, lasting information worth remembering
+3. Use clear, descriptive keys (e.g., "name", "current_role", "main_project")
+4. Keep values concise but informative
+5. If a key already exists, decide whether to update it
+6. Output valid JSON array only
+
+OUTPUT FORMAT:
+[
+  {"action": "create", "bucket": "identity", "key": "name", "value": "Alex"},
+  {"action": "update", "bucket": "focus", "key": "current_project", "value": "chat app"}
+]
+
+If no memories should be extracted, return: []"""
+
+        # Format existing memories for context
+        existing_context = "EXISTING MEMORY KEYS:\n"
+        for bucket, keys in existing_memories.items():
+            if keys:
+                existing_context += f"- {bucket}: {', '.join(keys)}\n"
+            else:
+                existing_context += f"- {bucket}: (none)\n"
+
+        # Create user prompt with conversation context
+        user_prompt = f"""{existing_context}
+
+CONVERSATION TO ANALYZE:
+User: {user_message}
+Assistant: {assistant_response}
+
+Extract memories from this conversation:"""
+
+        # Call OpenAI API with enhanced error handling
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                temperature=0.1,
+                max_tokens=500
+            )
+            
+            response_text = response.choices[0].message.content.strip()
+            logger.info(f"🤖 OpenAI API response received (length: {len(response_text)} chars)")
+            
+        except Exception as api_error:
+            api_time = round((time.time() - start_time) * 1000, 2)
+            logger.error(f"❌ OpenAI API call failed after {api_time}ms: {str(api_error)}")
+            # Return empty list on API failure to prevent chat disruption
+            return []
+        
+        # Enhanced JSON parsing with better error handling
+        memory_actions = []
+        try:
+            parsed_response = json.loads(response_text)
+            if isinstance(parsed_response, list):
+                memory_actions = parsed_response
+                logger.info(f"✅ Successfully parsed JSON response with {len(memory_actions)} potential actions")
+            else:
+                logger.warning(f"⚠️ Memory extraction returned non-list type: {type(parsed_response)}, using empty list")
+                memory_actions = []
+        except json.JSONDecodeError as json_error:
+            logger.warning(f"⚠️ Memory extraction returned invalid JSON: {json_error}")
+            logger.warning(f"⚠️ Raw response was: {response_text[:200]}...")
+            
+            # Attempt to extract partial JSON if possible
+            try:
+                # Try to find JSON array in the response
+                import re
+                json_match = re.search(r'\[.*\]', response_text, re.DOTALL)
+                if json_match:
+                    partial_json = json_match.group(0)
+                    memory_actions = json.loads(partial_json)
+                    logger.info(f"✅ Recovered partial JSON with {len(memory_actions)} actions")
+                else:
+                    logger.warning("⚠️ No JSON array found in response, using empty list")
+                    memory_actions = []
+            except Exception as recovery_error:
+                logger.warning(f"⚠️ JSON recovery failed: {recovery_error}, using empty list")
+                memory_actions = []
+        
+        # Enhanced validation with detailed logging
+        valid_actions = []
+        invalid_actions = []
+        valid_buckets = {"identity", "principles", "focus", "signals"}
+        valid_action_types = {"create", "update"}
+        
+        for i, action in enumerate(memory_actions):
+            if not isinstance(action, dict):
+                invalid_actions.append(f"Action {i}: not a dictionary")
+                continue
+                
+            action_type = action.get("action")
+            bucket = action.get("bucket")
+            key = action.get("key")
+            value = action.get("value")
+            
+            # Detailed validation with specific error messages
+            validation_errors = []
+            if action_type not in valid_action_types:
+                validation_errors.append(f"invalid action '{action_type}'")
+            if bucket not in valid_buckets:
+                validation_errors.append(f"invalid bucket '{bucket}'")
+            if not key or not isinstance(key, str) or not key.strip():
+                validation_errors.append("missing or empty key")
+            if not value or not isinstance(value, str) or not value.strip():
+                validation_errors.append("missing or empty value")
+            
+            if validation_errors:
+                invalid_actions.append(f"Action {i}: {', '.join(validation_errors)}")
+            else:
+                valid_actions.append(action)
+        
+        # Log validation results
+        if invalid_actions:
+            logger.warning(f"⚠️ Skipped {len(invalid_actions)} invalid memory actions:")
+            for invalid_action in invalid_actions:
+                logger.warning(f"  - {invalid_action}")
+        
+        api_time = round((time.time() - start_time) * 1000, 2)
+        if valid_actions:
+            logger.info(f"✅ Successfully extracted {len(valid_actions)} valid memories in {api_time}ms")
+            for action in valid_actions:
+                logger.info(f"  - {action['action']} {action['bucket']}.{action['key']}: {action['value'][:50]}...")
+        else:
+            logger.info(f"ℹ️ No valid memories extracted from conversation in {api_time}ms")
+        
+        return valid_actions
+        
+    except Exception as e:
+        api_time = round((time.time() - start_time) * 1000, 2)
+        logger.error(f"❌ Memory extraction failed after {api_time}ms: {str(e)}")
+        logger.error(f"❌ Error type: {type(e).__name__}")
+        # Return empty list to prevent chat disruption
+        return []
+
+
+def apply_memory_actions(memory_actions: List[Dict]) -> None:
+    """
+    Apply extracted memory actions to the database.
+    
+    Processes a list of memory actions by either creating new memories with generated UUIDs
+    or updating existing memories by finding their IDs.
+    
+    Args:
+        memory_actions: List of memory actions from extractor
+                       Format: [{"action": "create|update", "bucket": "identity", "key": "name", "value": "Alex"}]
+    """
+    if not memory_actions:
+        logger.info("🧠 No memory actions to apply")
+        return
+    
+    start_time = time.time()
+    logger.info(f"🧠 Starting to apply {len(memory_actions)} memory actions")
+    
+    conn = None
+    cursor = None
+    
+    created_count = 0
+    updated_count = 0
+    failed_count = 0
+    
+    try:
+        # Enhanced database connection with error handling
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            logger.info("✅ Database connection established for memory actions")
+        except Exception as db_error:
+            logger.error(f"❌ Failed to connect to database: {str(db_error)}")
+            raise Exception(f"Database connection failed: {str(db_error)}")
+        
+        # Process each memory action with detailed error handling
+        for i, action in enumerate(memory_actions):
+            action_type = action.get("action")
+            bucket = action.get("bucket")
+            key = action.get("key")
+            value = action.get("value")
+            
+            try:
+                logger.info(f"🔄 Processing action {i+1}/{len(memory_actions)}: {action_type} {bucket}.{key}")
+                
+                if action_type == "create":
+                    # Generate new UUID for the memory
+                    memory_id = str(uuid.uuid4())
+                    
+                    # Insert new memory into database
+                    cursor.execute(
+                        "INSERT INTO memories (id, type, key, value) VALUES (?, ?, ?, ?)",
+                        (memory_id, bucket, key, value)
+                    )
+                    created_count += 1
+                    logger.info(f"➕ Created {bucket} memory: '{key}' = '{value[:50]}...' (id: {memory_id[:8]}...)")
+                    
+                elif action_type == "update":
+                    # Find existing memory by bucket and key
+                    cursor.execute(
+                        "SELECT id FROM memories WHERE type = ? AND key = ? LIMIT 1",
+                        (bucket, key)
+                    )
+                    result = cursor.fetchone()
+                    
+                    if result:
+                        memory_id = result[0]
+                        # Update existing memory
+                        cursor.execute(
+                            "UPDATE memories SET value = ? WHERE id = ?",
+                            (value, memory_id)
+                        )
+                        updated_count += 1
+                        logger.info(f"✏️ Updated {bucket} memory: '{key}' = '{value[:50]}...' (id: {memory_id[:8]}...)")
+                    else:
+                        # Memory not found for update, create it instead
+                        memory_id = str(uuid.uuid4())
+                        cursor.execute(
+                            "INSERT INTO memories (id, type, key, value) VALUES (?, ?, ?, ?)",
+                            (memory_id, bucket, key, value)
+                        )
+                        created_count += 1
+                        logger.info(f"➕ Created {bucket} memory (update->create): '{key}' = '{value[:50]}...' (id: {memory_id[:8]}...)")
+                else:
+                    # Invalid action type
+                    failed_count += 1
+                    logger.error(f"❌ Invalid action type '{action_type}' for action {i+1}")
+                
+            except sqlite3.IntegrityError as integrity_error:
+                failed_count += 1
+                logger.error(f"❌ Database integrity error for action {i+1} ({action_type} {bucket}.{key}): {str(integrity_error)}")
+            except sqlite3.OperationalError as op_error:
+                failed_count += 1
+                logger.error(f"❌ Database operational error for action {i+1} ({action_type} {bucket}.{key}): {str(op_error)}")
+            except Exception as action_error:
+                failed_count += 1
+                logger.error(f"❌ Failed to apply memory action {i+1} ({action_type} {bucket}.{key}): {str(action_error)}")
+                logger.error(f"❌ Action data: {action}")
+        
+        # Enhanced commit with error handling
+        try:
+            conn.commit()
+            logger.info("✅ All memory actions committed to database")
+        except Exception as commit_error:
+            logger.error(f"❌ Failed to commit memory actions: {str(commit_error)}")
+            conn.rollback()
+            raise Exception(f"Database commit failed: {str(commit_error)}")
+        
+        # Enhanced summary logging
+        process_time = round((time.time() - start_time) * 1000, 2)
+        total_processed = created_count + updated_count + failed_count
+        success_rate = round((created_count + updated_count) / total_processed * 100, 1) if total_processed > 0 else 0
+        
+        logger.info(f"✅ Memory action processing completed in {process_time}ms")
+        logger.info(f"📊 Results: {created_count} created, {updated_count} updated, {failed_count} failed ({success_rate}% success rate)")
+        
+        if failed_count > 0:
+            logger.warning(f"⚠️ {failed_count} memory actions failed - check logs above for details")
+        
+    except sqlite3.Error as db_error:
+        if conn:
+            conn.rollback()
+        logger.error(f"❌ Database error during memory action processing: {str(db_error)}")
+        logger.error(f"❌ Database error type: {type(db_error).__name__}")
+        raise Exception(f"Database error: {str(db_error)}")
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        logger.error(f"❌ Memory action processing failed: {str(e)}")
+        logger.error(f"❌ Error type: {type(e).__name__}")
+        raise Exception(f"Memory action processing failed: {str(e)}")
+    finally:
+        if conn:
+            try:
+                conn.close()
+                logger.info("🔒 Database connection closed")
+            except Exception as close_error:
+                logger.warning(f"⚠️ Error closing database connection: {str(close_error)}")
 
 
 
@@ -673,6 +1063,55 @@ async def chat_endpoint(request: ChatRequest):
         
         # Get AI response
         response_text = await get_ai_response(request.message)
+        
+        # Extract memories asynchronously after generating response with enhanced error handling
+        memory_extraction_start = time.time()
+        try:
+            logger.info("🧠 Starting memory extraction process")
+            
+            # Load existing memory keys by bucket before extraction
+            try:
+                existing_memory_keys = get_existing_memory_keys()
+                total_existing = sum(len(keys) for keys in existing_memory_keys.values())
+                logger.info(f"📚 Loaded {total_existing} existing memory keys across all buckets")
+            except Exception as keys_error:
+                logger.error(f"❌ Failed to load existing memory keys: {str(keys_error)}")
+                # Use empty keys as fallback to allow extraction to continue
+                existing_memory_keys = {"identity": [], "principles": [], "focus": [], "signals": []}
+            
+            # Extract memories from the conversation
+            try:
+                memory_actions = await extract_memories(
+                    user_message=request.message,
+                    assistant_response=response_text,
+                    existing_memories=existing_memory_keys
+                )
+                logger.info(f"🧠 Memory extraction returned {len(memory_actions)} actions")
+            except Exception as extraction_error:
+                logger.error(f"❌ Memory extraction failed: {str(extraction_error)}")
+                logger.error(f"❌ Extraction error type: {type(extraction_error).__name__}")
+                memory_actions = []
+            
+            # Apply memory actions to database
+            if memory_actions:
+                try:
+                    apply_memory_actions(memory_actions)
+                    logger.info("✅ Memory actions applied successfully")
+                except Exception as apply_error:
+                    logger.error(f"❌ Failed to apply memory actions: {str(apply_error)}")
+                    logger.error(f"❌ Apply error type: {type(apply_error).__name__}")
+            else:
+                logger.info("ℹ️ No memory actions to apply")
+            
+            memory_extraction_time = round((time.time() - memory_extraction_start) * 1000, 2)
+            logger.info(f"🧠 Memory extraction process completed in {memory_extraction_time}ms")
+                
+        except Exception as memory_error:
+            # Enhanced error logging for memory extraction failures
+            memory_extraction_time = round((time.time() - memory_extraction_start) * 1000, 2)
+            logger.error(f"❌ Memory extraction process failed after {memory_extraction_time}ms: {str(memory_error)}")
+            logger.error(f"❌ Memory error type: {type(memory_error).__name__}")
+            logger.error(f"❌ Chat will continue normally despite memory extraction failure")
         
         total_time = round((time.time() - start_time) * 1000, 2)
         logger.info(f"✅ Chat completed in {total_time}ms")
