@@ -59,7 +59,7 @@ DB_PATH = "chat_app.db"
 
 def init_database():
     """
-    Initialize SQLite database and create memories table if it doesn't exist.
+    Initialize SQLite database and create memories and conversation_history tables if they don't exist.
     """
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -71,6 +71,16 @@ def init_database():
             type TEXT NOT NULL,
             key TEXT NOT NULL,
             value TEXT NOT NULL
+        )
+    """)
+    
+    # Create conversation_history table for storing chat messages
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS conversation_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message_type TEXT NOT NULL,
+            content TEXT NOT NULL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
     
@@ -161,6 +171,131 @@ def delete_memory_db(memory_type: str, memory_id: str):
     conn.close()
     
     return rows_affected > 0
+
+
+def store_message(message_type: str, content: str):
+    """
+    Store a message in the conversation history database.
+    
+    Args:
+        message_type: Type of message ('user' or 'assistant')
+        content: The message content to store
+        
+    Returns:
+        bool: True if storage was successful, False otherwise
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            "INSERT INTO conversation_history (message_type, content) VALUES (?, ?)",
+            (message_type, content)
+        )
+        
+        conn.commit()
+        conn.close()
+        return True
+        
+    except Exception as e:
+        # Log the error but don't raise it to ensure graceful degradation
+        print(f"Error storing message: {str(e)}")
+        try:
+            conn.close()
+        except:
+            pass
+        return False
+
+
+def get_recent_conversation_history():
+    """
+    Retrieve the last 10 message pairs (20 messages total) from conversation history.
+    
+    Returns:
+        List[dict]: List of message dictionaries with keys: message_type, content, timestamp
+                   Ordered by timestamp (oldest first for proper conversation flow)
+                   Limited to 20 messages total (10 pairs)
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Use a subquery to get the last 20 messages, then order them oldest first
+        cursor.execute("""
+            SELECT message_type, content, timestamp 
+            FROM (
+                SELECT message_type, content, timestamp 
+                FROM conversation_history 
+                ORDER BY timestamp DESC 
+                LIMIT 20
+            ) 
+            ORDER BY timestamp ASC
+        """)
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        # Convert to list of dictionaries
+        messages = []
+        for row in rows:
+            message_type, content, timestamp = row
+            messages.append({
+                "message_type": message_type,
+                "content": content,
+                "timestamp": timestamp
+            })
+        
+        return messages
+        
+    except Exception as e:
+        # Log the error but don't raise it to ensure graceful degradation
+        print(f"Error retrieving conversation history: {str(e)}")
+        try:
+            conn.close()
+        except:
+            pass
+        return []  # Return empty list on error
+
+
+def build_messages_for_openai(user_message: str, history: list) -> list:
+    """
+    Build messages array for OpenAI API by combining system message, conversation history, and current user message.
+    
+    Args:
+        user_message: The current user message to process
+        history: List of conversation history dictionaries with keys: message_type, content, timestamp
+        
+    Returns:
+        List[dict]: Messages array formatted for OpenAI API with role/content structure
+    """
+    # Start with the system message
+    messages = [
+        {"role": "system", "content": "You are a reflective journaling AI bot. Reply to user messages in very, very short responses that encourage reflection and self-awareness."}
+    ]
+    
+    # Add conversation history, converting internal format to OpenAI format
+    for message in history:
+        # Convert message_type to OpenAI role format
+        if message["message_type"] == "user":
+            role = "user"
+        elif message["message_type"] == "assistant":
+            role = "assistant"
+        else:
+            # Skip unknown message types
+            continue
+            
+        messages.append({
+            "role": role,
+            "content": message["content"]
+        })
+    
+    # Add the current user message
+    messages.append({
+        "role": "user",
+        "content": user_message
+    })
+    
+    return messages
 
 # Configure CORS for frontend integration
 app.add_middleware(
@@ -372,12 +507,13 @@ async def delete_memory(memory_type: str, memory_id: str):
         )
 
 
-async def get_ai_response(message: str) -> str:
+async def get_ai_response(message: str, history: list = None) -> str:
     """
-    Get AI response using OpenAI API.
+    Get AI response using OpenAI API with conversation history.
     
     Args:
         message: User's input message
+        history: List of conversation history dictionaries (optional)
         
     Returns:
         str: AI-generated response
@@ -386,12 +522,15 @@ async def get_ai_response(message: str) -> str:
         Exception: For OpenAI API errors
     """
     try:
+        # Use the messages builder function to construct the full messages array
+        if history is None:
+            history = []
+        
+        messages = build_messages_for_openai(message, history)
+        
         resp = client.chat.completions.create(
             model="gpt-5-nano",
-            messages=[
-                {"role": "system", "content": "You are a reflective journaling AI bot. Reply to user messages in very, very short responses that encourage reflection and self-awareness."},
-                {"role": "user", "content": message}
-            ]
+            messages=messages
         )
         return resp.choices[0].message.content
     except Exception as e:
@@ -401,7 +540,7 @@ async def get_ai_response(message: str) -> str:
 @app.post("/chat", response_model=ChatResponse, status_code=status.HTTP_200_OK)
 async def chat_endpoint(request: ChatRequest):
     """
-    Chat endpoint that processes user messages and returns AI-generated responses.
+    Chat endpoint that processes user messages and returns AI-generated responses with conversation history.
     
     Args:
         request: ChatRequest containing the user's message
@@ -419,8 +558,17 @@ async def chat_endpoint(request: ChatRequest):
         if not request.message or not request.message.strip():
             raise ValueError("Message cannot be empty or contain only whitespace")
         
-        # Get AI response
-        response_text = await get_ai_response(request.message)
+        # Store the incoming user message
+        store_message("user", request.message)
+        
+        # Retrieve conversation history before calling OpenAI API
+        history = get_recent_conversation_history()
+        
+        # Get AI response with conversation history
+        response_text = await get_ai_response(request.message, history)
+        
+        # Store the AI response after receiving it from OpenAI
+        store_message("assistant", response_text)
         
         return ChatResponse(response=response_text)
         
