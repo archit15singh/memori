@@ -6,3 +6,4 @@
 2. use python3 not python to run commands.
 3. do not write tests or think of tests for now.
 4. always go for simplest 80/20 pareto principled stuff to requirements, design, tasks and implementation.
+5. use openai key from .env as needed but dont make it public somehow

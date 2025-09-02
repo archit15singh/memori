@@ -203,41 +203,85 @@ def format_memories_for_prompt(memories):
     return formatted_context
 
 
-def build_memory_aware_prompt(memory_context: str, user_message: str) -> str:
+def render_user_profile(memories):
     """
-    Build memory-aware system prompt that includes memory context and user message.
+    Render user profile from memories for context (not impersonation).
     
-    Creates an enhanced system prompt that incorporates all stored memories
-    to provide context for the LLM response generation.
+    Extracts key fields from memories and formats them as a profile block
+    that provides context about the user without causing identity confusion.
     
     Args:
-        memory_context (str): Formatted memory context from format_memories_for_prompt()
-        user_message (str): The user's input message
+        memories (dict): Dictionary with memory types as keys and lists of MemoryItem objects as values
+                        Expected keys: identity, principles, focus, signals
     
     Returns:
-        str: Complete system prompt with memory context and user message
+        str: Formatted user profile block or empty string if no relevant memories
     """
-    # Memory-aware system prompt template
-    if memory_context.strip():
-        # Include memories if available
-        prompt = f"""You are a reflective journaling AI bot. Here is what you know about yourself:
-
-{memory_context}
-
-Reply to user messages in short, reflective responses that naturally reference your memories when relevant.
-
-User: {user_message}"""
-    else:
-        # Fallback to basic prompt if no memories available
-        prompt = f"""You are a reflective journaling AI bot. Reply to user messages in very, very short responses that encourage reflection and self-awareness.
-
-User: {user_message}"""
+    # Extract key profile fields from memories
+    profile_data = {}
     
-    # Log prompt construction metrics
-    prompt_length = len(prompt)
-    has_memories = bool(memory_context.strip())
-    logger.info(f"🔧 Built {'memory-aware' if has_memories else 'basic'} prompt ({prompt_length} chars)")
+    # Get identity memories for core profile info
+    identity_memories = memories.get("identity", [])
+    for item in identity_memories:
+        key_lower = item.key.lower()
+        if "name" in key_lower:
+            profile_data["name"] = item.value
+        elif "role" in key_lower or "job" in key_lower or "work" in key_lower:
+            profile_data["role"] = item.value
+        elif "location" in key_lower or "city" in key_lower or "where" in key_lower:
+            profile_data["location"] = item.value
+        elif "interest" in key_lower or "hobby" in key_lower or "like" in key_lower:
+            profile_data["interests"] = item.value
     
+    # Get principles/values for values field
+    principles_memories = memories.get("principles", [])
+    for item in principles_memories:
+        key_lower = item.key.lower()
+        if "value" in key_lower or "principle" in key_lower or "believe" in key_lower:
+            profile_data["values"] = item.value
+            break  # Take first values-related principle
+    
+    # If no profile data found, return empty string
+    if not profile_data:
+        logger.info("📋 No profile data found in memories")
+        return ""
+    
+    # Build profile block
+    profile_lines = ["USER PROFILE (reference only, do not impersonate):"]
+    
+    # Add fields in consistent order
+    field_order = ["name", "role", "interests", "values", "location"]
+    for field in field_order:
+        if field in profile_data:
+            profile_lines.append(f"{field}: {profile_data[field]}")
+    
+    profile_text = "\n".join(profile_lines)
+    
+    # Log profile rendering metrics
+    field_count = len(profile_data)
+    profile_length = len(profile_text)
+    logger.info(f"📋 Rendered user profile with {field_count} fields ({profile_length} chars)")
+    
+    return profile_text
+
+
+def get_system_prompt() -> str:
+    """
+    Get the clean system prompt for the reflective journaling bot.
+    
+    Returns a fixed system prompt that establishes the AI's role without
+    including any user memory context or identity confusion.
+    
+    Returns:
+        str: Clean system prompt defining the AI's role and behavior
+    """
+    prompt = """You are Reflective Journaling Bot.
+- Reflect back in 1–2 lines.
+- Ask exactly 1 incisive follow-up question.
+- Use second person ("you/your") when referring to the user.
+- Never impersonate the user or claim their identity."""
+    
+    logger.info(f"🔧 Built clean system prompt ({len(prompt)} chars)")
     return prompt
 
 
@@ -554,34 +598,41 @@ async def delete_memory(memory_type: str, memory_id: str):
 
 async def get_ai_response(message: str) -> str:
     """
-    Get AI response using OpenAI API with memory-enhanced context.
+    Get AI response using OpenAI API with user profile context.
     
-    Loads all stored memories and includes them in the system prompt to provide
-    context for generating responses that naturally reference relevant memories.
+    Uses a fixed system prompt and adds user profile context to the user message
+    to avoid identity confusion while maintaining memory-informed responses.
     
     Args:
         message: User's input message
         
     Returns:
-        str: AI-generated response with memory context
+        str: AI-generated response with profile context
         
     Raises:
         Exception: For OpenAI API errors
     """
     start_time = time.time()
     try:
-        # Load all memories for chat context
+        # Load all memories for profile context
         memories = load_all_memories_for_chat()
         
-        # Format memories for prompt context
-        memory_context = format_memories_for_prompt(memories)
+        # Get fixed system prompt
+        system_prompt = get_system_prompt()
         
-        # Build memory-aware system prompt
-        enhanced_prompt = build_memory_aware_prompt(memory_context, message)
+        # Render user profile from memories
+        profile_context = render_user_profile(memories)
         
-        # Use enhanced prompt in OpenAI API call
+        # Add profile context to user message, not system
+        if profile_context:
+            user_message_with_context = f"{profile_context}\n\n{message}"
+        else:
+            user_message_with_context = message
+        
+        # Use fixed system prompt and profile-enhanced user message
         messages = [
-            {"role": "system", "content": enhanced_prompt}
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message_with_context}
         ]
         
         resp = client.chat.completions.create(
@@ -592,7 +643,7 @@ async def get_ai_response(message: str) -> str:
         response_text = resp.choices[0].message.content
         api_time = round((time.time() - start_time) * 1000, 2)
         
-        logger.info(f"🤖 Memory-aware AI response generated in {api_time}ms (length: {len(response_text)} chars)")
+        logger.info(f"🤖 Profile-aware AI response generated in {api_time}ms (length: {len(response_text)} chars)")
         return response_text
     except Exception as e:
         api_time = round((time.time() - start_time) * 1000, 2)
