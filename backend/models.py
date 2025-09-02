@@ -124,6 +124,78 @@ class MemoryResponse(BaseModel):
         }
 
 
+class MessageItem(BaseModel):
+    """
+    Model for individual chat messages.
+    
+    Represents a single chat message with id, content, sender, and timestamp.
+    """
+    id: str = Field(
+        ...,
+        description="Unique identifier for the message",
+        example="msg-123e4567-e89b-12d3-a456-426614174000"
+    )
+    content: str = Field(
+        ...,
+        description="The text content of the message",
+        example="Hello, how are you?"
+    )
+    sender: str = Field(
+        ...,
+        description="Who sent the message: 'user' or 'bot'",
+        example="user"
+    )
+    timestamp: int = Field(
+        ...,
+        description="Unix timestamp when the message was created",
+        example=1640995200000
+    )
+
+    class Config:
+        """Pydantic model configuration"""
+        json_schema_extra = {
+            "example": {
+                "id": "msg-123e4567-e89b-12d3-a456-426614174000",
+                "content": "Hello, how are you?",
+                "sender": "user",
+                "timestamp": 1640995200000
+            }
+        }
+
+
+class MessagesResponse(BaseModel):
+    """
+    Response model for messages endpoint.
+    
+    Represents all stored chat messages in chronological order.
+    """
+    messages: List[MessageItem] = Field(
+        default_factory=list,
+        description="List of chat messages in chronological order"
+    )
+
+    class Config:
+        """Pydantic model configuration"""
+        json_schema_extra = {
+            "example": {
+                "messages": [
+                    {
+                        "id": "msg-123e4567-e89b-12d3-a456-426614174000",
+                        "content": "Hello, how are you?",
+                        "sender": "user",
+                        "timestamp": 1640995200000
+                    },
+                    {
+                        "id": "msg-987fcdeb-51a2-43d7-8f9e-123456789abc",
+                        "content": "Hello! I'm doing well, thank you for asking.",
+                        "sender": "bot",
+                        "timestamp": 1640995201000
+                    }
+                ]
+            }
+        }
+
+
 class ErrorResponse(BaseModel):
     """
     Error response model for API errors.

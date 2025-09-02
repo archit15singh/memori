@@ -112,6 +112,31 @@ function App() {
     loadMemories();
   }, []);
 
+  // Load chat history from backend on app startup
+  useEffect(() => {
+    const loadChatHistory = async () => {
+      try {
+        const response = await chatApiService.fetchMessages();
+        
+        // Convert backend message format to frontend message format
+        const loadedMessages = response.messages.map(message => ({
+          id: message.timestamp, // Use timestamp as unique ID for frontend
+          text: message.content,  // Map 'content' to 'text'
+          sender: message.sender  // Keep sender as-is ('user' or 'bot')
+        }));
+
+        // Set loaded messages to existing messages state
+        setMessages(loadedMessages);
+      } catch (error) {
+        console.error('Failed to load chat history:', error);
+        // Don't show feedback for chat history loading errors to avoid cluttering UI
+        // Chat will just start empty if history fails to load
+      }
+    };
+
+    loadChatHistory();
+  }, []);
+
   // Helper function to create consistent message objects
   const createMessage = (text, sender, id = null) => {
     // Ensure text is a string and properly formatted

@@ -19,7 +19,7 @@ import uuid
 from typing import List, Dict
 from dotenv import load_dotenv
 from openai import OpenAI
-from models import ChatRequest, ChatResponse, ErrorResponse, MemoryItem, MemoryResponse
+from models import ChatRequest, ChatResponse, ErrorResponse, MemoryItem, MemoryResponse, MessageItem, MessagesResponse
 
 # Load environment variables from .env file
 load_dotenv()
@@ -74,7 +74,7 @@ DB_PATH = "chat_app.db"
 
 def init_database():
     """
-    Initialize SQLite database and create memories table if it doesn't exist.
+    Initialize SQLite database and create memories and messages tables if they don't exist.
     """
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -90,14 +90,28 @@ def init_database():
             )
         """)
         
+        # Create messages table with id, content, sender, timestamp columns
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id TEXT PRIMARY KEY,
+                content TEXT NOT NULL,
+                sender TEXT NOT NULL,
+                timestamp INTEGER NOT NULL
+            )
+        """)
+        
         # Check existing memory count for product insights
         cursor.execute("SELECT COUNT(*) FROM memories")
         memory_count = cursor.fetchone()[0]
         
+        # Check existing message count for product insights
+        cursor.execute("SELECT COUNT(*) FROM messages")
+        message_count = cursor.fetchone()[0]
+        
         conn.commit()
         conn.close()
         
-        logger.info(f"💾 Database ready - {memory_count} memories loaded")
+        logger.info(f"💾 Database ready - {memory_count} memories, {message_count} messages loaded")
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {str(e)}")
         raise
@@ -138,6 +152,35 @@ def get_all_memories():
     logger.info(f"🧠 Retrieved {total_memories} memories in {query_time}ms")
     
     return memories
+
+
+def get_all_messages():
+    """
+    Get all messages from the database in chronological order.
+    
+    Returns:
+        List[MessageItem]: List of all messages ordered by timestamp
+    """
+    start_time = time.time()
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT id, content, sender, timestamp FROM messages ORDER BY timestamp ASC")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    # Convert database rows to MessageItem objects
+    messages = []
+    for row in rows:
+        message_id, content, sender, timestamp = row
+        message_item = MessageItem(id=message_id, content=content, sender=sender, timestamp=timestamp)
+        messages.append(message_item)
+    
+    # Log message retrieval metrics
+    query_time = round((time.time() - start_time) * 1000, 2)
+    logger.info(f"💬 Retrieved {len(messages)} messages in {query_time}ms")
+    
+    return messages
 
 
 def load_all_memories_for_chat():
@@ -594,6 +637,56 @@ Extract memories from this conversation:"""
         return []
 
 
+def save_message(content: str, sender: str) -> bool:
+    """
+    Save a chat message to the database.
+    
+    Args:
+        content: The message content/text
+        sender: Who sent the message ('user' or 'bot')
+        
+    Returns:
+        bool: True if message was saved successfully, False otherwise
+    """
+    start_time = time.time()
+    
+    try:
+        # Generate UUID and timestamp for the message
+        message_id = str(uuid.uuid4())
+        timestamp = int(time.time() * 1000)  # Unix timestamp in milliseconds
+        
+        logger.info(f"💬 Saving {sender} message (id: {message_id[:8]}...)")
+        
+        # Connect to database following existing patterns
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Insert message into database
+        cursor.execute(
+            "INSERT INTO messages (id, content, sender, timestamp) VALUES (?, ?, ?, ?)",
+            (message_id, content, sender, timestamp)
+        )
+        
+        conn.commit()
+        conn.close()
+        
+        # Log success metrics
+        save_time = round((time.time() - start_time) * 1000, 2)
+        content_preview = content[:50] + "..." if len(content) > 50 else content
+        logger.info(f"✅ Saved {sender} message in {save_time}ms: '{content_preview}' (id: {message_id[:8]}...)")
+        
+        return True
+        
+    except sqlite3.Error as db_error:
+        save_time = round((time.time() - start_time) * 1000, 2)
+        logger.error(f"❌ Database error saving {sender} message after {save_time}ms: {str(db_error)}")
+        return False
+    except Exception as e:
+        save_time = round((time.time() - start_time) * 1000, 2)
+        logger.error(f"❌ Failed to save {sender} message after {save_time}ms: {str(e)}")
+        return False
+
+
 def apply_memory_actions(memory_actions: List[Dict]) -> None:
     """
     Apply extracted memory actions to the database.
@@ -872,6 +965,29 @@ async def get_memories():
         )
 
 
+@app.get("/messages", response_model=MessagesResponse, status_code=status.HTTP_200_OK)
+async def get_messages():
+    """
+    Get all chat messages in chronological order.
+    
+    Returns:
+        MessagesResponse: All stored chat messages ordered by timestamp
+        
+    Raises:
+        HTTPException: For any processing errors (500 Internal Server Error)
+    """
+    try:
+        logger.info("💬 User requested all messages")
+        messages = get_all_messages()
+        return MessagesResponse(messages=messages)
+    except Exception as e:
+        logger.error(f"❌ Message retrieval failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving messages: {str(e)}"
+        )
+
+
 @app.put("/memories/{memory_type}/{memory_id}", response_model=MemoryItem, status_code=status.HTTP_200_OK)
 async def update_memory(memory_type: str, memory_id: str, memory_item: MemoryItem):
     """
@@ -1063,6 +1179,31 @@ async def chat_endpoint(request: ChatRequest):
         
         # Get AI response
         response_text = await get_ai_response(request.message)
+        
+        # Save user message and bot response to database
+        try:
+            logger.info("💾 Saving messages to database")
+            
+            # Save user message
+            user_save_success = save_message(request.message, "user")
+            if not user_save_success:
+                logger.warning("⚠️ Failed to save user message, but continuing chat")
+            
+            # Save bot response
+            bot_save_success = save_message(response_text, "bot")
+            if not bot_save_success:
+                logger.warning("⚠️ Failed to save bot response, but continuing chat")
+            
+            if user_save_success and bot_save_success:
+                logger.info("✅ Both messages saved successfully")
+            elif user_save_success or bot_save_success:
+                logger.info("⚠️ Partial message save success")
+            else:
+                logger.warning("⚠️ Failed to save both messages")
+                
+        except Exception as save_error:
+            logger.error(f"❌ Message saving failed: {str(save_error)}")
+            logger.error("❌ Chat will continue normally despite message saving failure")
         
         # Extract memories asynchronously after generating response with enhanced error handling
         memory_extraction_start = time.time()

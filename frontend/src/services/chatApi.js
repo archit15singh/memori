@@ -36,6 +36,44 @@ class ChatApiService {
   }
 
   /**
+   * Fetch all messages from the backend
+   * @returns {Promise<Object>} Promise that resolves to the messages response
+   * @throws {Error} Throws error for various failure scenarios
+   */
+  async fetchMessages() {
+    // Create AbortController for timeout handling
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+    try {
+      // Make the API request
+      const response = await fetch(`${this.baseURL}/messages`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+      });
+
+      // Clear timeout since request completed
+      clearTimeout(timeoutId);
+
+      // Handle different response status codes
+      if (!response.ok) {
+        await this.handleApiError(response);
+      }
+
+      // Parse and validate response
+      const data = await response.json();
+      return this.parseMessagesResponse(data);
+
+    } catch (error) {
+      clearTimeout(timeoutId);
+      return this.handleFetchMessagesError(error);
+    }
+  }
+
+  /**
    * Send a message to the chat endpoint
    * @param {string} message - The user's message to send
    * @returns {Promise<Object>} Promise that resolves to the API response
@@ -149,6 +187,85 @@ class ChatApiService {
     }
 
     throw new Error(errorMessage);
+  }
+
+  /**
+   * Handle fetch messages request errors (network, timeout, etc.)
+   * @param {Error} error - The error object
+   * @throws {Error} Throws appropriate error based on error type
+   */
+  handleFetchMessagesError(error) {
+    // Handle different error types
+    if (error.name === 'AbortError') {
+      throw new Error('Request to fetch messages timed out. Please try again.');
+    }
+    
+    if (error.message === 'Failed to fetch' || error.code === 'NETWORK_ERROR') {
+      throw new Error('Unable to connect to chat service. Please check your connection and try again.');
+    }
+
+    // Re-throw if it's already a handled error
+    if (error.message.includes('timed out') || 
+        error.message.includes('Unable to connect') ||
+        error.message.includes('Chat service') ||
+        error.message.includes('Invalid response format')) {
+      throw error;
+    }
+
+    // Generic error fallback
+    throw new Error('An unexpected error occurred while fetching messages. Please try again.');
+  }
+
+  /**
+   * Parse and validate the messages response
+   * @param {Object} data - The response data from the API
+   * @returns {Object} Parsed response object with messages array
+   * @throws {Error} Throws error if response format is invalid
+   */
+  parseMessagesResponse(data) {
+    // Validate response structure
+    if (!data || typeof data !== 'object') {
+      throw new Error('Invalid response format from server.');
+    }
+
+    // Check for required response field
+    if (!data.hasOwnProperty('messages')) {
+      throw new Error('Invalid response format: missing messages field.');
+    }
+
+    // Validate messages is an array
+    if (!Array.isArray(data.messages)) {
+      throw new Error('Invalid response format: messages must be an array.');
+    }
+
+    // Validate each message has required fields
+    const validatedMessages = data.messages.map((message, index) => {
+      if (!message || typeof message !== 'object') {
+        throw new Error(`Invalid message format at index ${index}.`);
+      }
+
+      if (!message.hasOwnProperty('id') || !message.hasOwnProperty('content') || 
+          !message.hasOwnProperty('sender') || !message.hasOwnProperty('timestamp')) {
+        throw new Error(`Invalid message format at index ${index}: missing required fields.`);
+      }
+
+      // Validate sender field
+      if (message.sender !== 'user' && message.sender !== 'bot') {
+        throw new Error(`Invalid message format at index ${index}: sender must be 'user' or 'bot'.`);
+      }
+
+      return {
+        id: message.id,
+        content: message.content,
+        sender: message.sender,
+        timestamp: message.timestamp
+      };
+    });
+
+    // Return the validated response
+    return {
+      messages: validatedMessages
+    };
   }
 
   /**
