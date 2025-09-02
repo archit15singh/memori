@@ -138,6 +138,109 @@ def get_all_memories():
     return memories
 
 
+def load_all_memories_for_chat():
+    """
+    Load all memories for chat context.
+    
+    This function wraps the existing get_all_memories() function to provide
+    a dedicated interface for chat functionality.
+    
+    Returns:
+        dict: Dictionary with memory types as keys and lists of MemoryItem objects as values
+              Categories: identity, principles, focus, signals
+    """
+    logger.info("🧠 Loading memories for chat context")
+    return get_all_memories()
+
+
+def format_memories_for_prompt(memories):
+    """
+    Format memories into readable text for LLM prompt context.
+    
+    Converts memory objects organized by category into a structured text format
+    suitable for inclusion in system prompts.
+    
+    Args:
+        memories (dict): Dictionary with memory types as keys and lists of MemoryItem objects as values
+                        Expected keys: identity, principles, focus, signals
+    
+    Returns:
+        str: Formatted memory context text with clear headers and structure
+    """
+    formatted_sections = []
+    
+    # Define category headers and their descriptions
+    category_info = {
+        "identity": ("IDENTITY (who you are)", "These define your core identity and characteristics:"),
+        "principles": ("PRINCIPLES (how you operate)", "These guide your behavior and decision-making:"),
+        "focus": ("FOCUS (what matters now)", "These are your current priorities and areas of attention:"),
+        "signals": ("SIGNALS (patterns you notice)", "These are patterns and insights you've observed:")
+    }
+    
+    for category, (header, description) in category_info.items():
+        memory_items = memories.get(category, [])
+        
+        if memory_items:
+            # Add category header and description
+            section = [f"{header}", description, ""]
+            
+            # Add each memory item in a readable format
+            for item in memory_items:
+                section.append(f"• {item.key}: {item.value}")
+            
+            # Add empty line after section
+            section.append("")
+            formatted_sections.append("\n".join(section))
+    
+    # Join all sections with newlines
+    formatted_context = "\n".join(formatted_sections).strip()
+    
+    # Log formatting metrics
+    total_memories = sum(len(memories.get(cat, [])) for cat in category_info.keys())
+    context_length = len(formatted_context)
+    logger.info(f"📝 Formatted {total_memories} memories into {context_length} character context")
+    
+    return formatted_context
+
+
+def build_memory_aware_prompt(memory_context: str, user_message: str) -> str:
+    """
+    Build memory-aware system prompt that includes memory context and user message.
+    
+    Creates an enhanced system prompt that incorporates all stored memories
+    to provide context for the LLM response generation.
+    
+    Args:
+        memory_context (str): Formatted memory context from format_memories_for_prompt()
+        user_message (str): The user's input message
+    
+    Returns:
+        str: Complete system prompt with memory context and user message
+    """
+    # Memory-aware system prompt template
+    if memory_context.strip():
+        # Include memories if available
+        prompt = f"""You are a reflective journaling AI bot. Here is what you know about yourself:
+
+{memory_context}
+
+Reply to user messages in short, reflective responses that naturally reference your memories when relevant.
+
+User: {user_message}"""
+    else:
+        # Fallback to basic prompt if no memories available
+        prompt = f"""You are a reflective journaling AI bot. Reply to user messages in very, very short responses that encourage reflection and self-awareness.
+
+User: {user_message}"""
+    
+    # Log prompt construction metrics
+    prompt_length = len(prompt)
+    has_memories = bool(memory_context.strip())
+    logger.info(f"🔧 Built {'memory-aware' if has_memories else 'basic'} prompt ({prompt_length} chars)")
+    
+    return prompt
+
+
 def update_memory_db(memory_type: str, memory_id: str, key: str, value: str):
     """
     Update a memory item in the database.
@@ -451,22 +554,34 @@ async def delete_memory(memory_type: str, memory_id: str):
 
 async def get_ai_response(message: str) -> str:
     """
-    Get AI response using OpenAI API.
+    Get AI response using OpenAI API with memory-enhanced context.
+    
+    Loads all stored memories and includes them in the system prompt to provide
+    context for generating responses that naturally reference relevant memories.
     
     Args:
         message: User's input message
         
     Returns:
-        str: AI-generated response
+        str: AI-generated response with memory context
         
     Raises:
         Exception: For OpenAI API errors
     """
     start_time = time.time()
     try:
+        # Load all memories for chat context
+        memories = load_all_memories_for_chat()
+        
+        # Format memories for prompt context
+        memory_context = format_memories_for_prompt(memories)
+        
+        # Build memory-aware system prompt
+        enhanced_prompt = build_memory_aware_prompt(memory_context, message)
+        
+        # Use enhanced prompt in OpenAI API call
         messages = [
-            {"role": "system", "content": "You are a reflective journaling AI bot. Reply to user messages in very, very short responses that encourage reflection and self-awareness."},
-            {"role": "user", "content": message}
+            {"role": "system", "content": enhanced_prompt}
         ]
         
         resp = client.chat.completions.create(
@@ -477,7 +592,7 @@ async def get_ai_response(message: str) -> str:
         response_text = resp.choices[0].message.content
         api_time = round((time.time() - start_time) * 1000, 2)
         
-        logger.info(f"🤖 AI response generated in {api_time}ms (length: {len(response_text)} chars)")
+        logger.info(f"🤖 Memory-aware AI response generated in {api_time}ms (length: {len(response_text)} chars)")
         return response_text
     except Exception as e:
         api_time = round((time.time() - start_time) * 1000, 2)
