@@ -24,7 +24,7 @@
   - Handle invalid JSON responses from LLM gracefully
   - _Requirements: 1.3_
 
-- [-] 5. Test memory extraction functionality
+- [x] 5. Test memory extraction functionality
   - Create test conversations that should generate memories in each bucket
   - Verify memories are correctly stored in database with proper bucket classification
   - Test memory updates when keys already exist
