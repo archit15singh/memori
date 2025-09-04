@@ -534,7 +534,20 @@ Extract memories from this conversation:"""
             {"role": "user", "content": user_prompt}
         ]
         
+        logger.info("🚀 MEMORY EXTRACTION OPENAI API CALL")
+        logger.info(f"📤 MEMORY EXTRACTION API REQUEST:")
+        logger.info(f"   Model: gpt-4o-mini")
+        logger.info(f"   Temperature: 0.1")
+        logger.info(f"   Max Tokens: 500")
+        logger.info(f"   Messages Count: {len(messages)}")
+        for i, msg in enumerate(messages):
+            logger.info(f"   Message {i+1}:")
+            logger.info(f"     Role: {msg['role']}")
+            logger.info(f"     Content: '{msg['content']}'")
+            logger.info(f"     Content Length: {len(msg['content'])} characters")
+        
         try:
+            logger.info("🌐 Calling OpenAI API for memory extraction...")
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=messages,
@@ -542,12 +555,24 @@ Extract memories from this conversation:"""
                 max_tokens=500
             )
             
+            logger.info("📥 MEMORY EXTRACTION API RESPONSE RECEIVED")
+            logger.info(f"🔍 MEMORY EXTRACTION API RESPONSE DATA:")
+            logger.info(f"   Response Object Type: {type(response)}")
+            logger.info(f"   Choices Count: {len(response.choices)}")
+            logger.info(f"   Model Used: {response.model}")
+            logger.info(f"   Usage: {response.usage}")
+            
             response_text = response.choices[0].message.content.strip()
-            logger.info(f"🤖 OpenAI API response received (length: {len(response_text)} chars)")
+            logger.info(f"📝 MEMORY EXTRACTION RAW RESPONSE:")
+            logger.info(f"   Content: '{response_text}'")
+            logger.info(f"   Length: {len(response_text)} characters")
+            logger.info(f"   Message Role: {response.choices[0].message.role}")
+            logger.info(f"   Finish Reason: {response.choices[0].finish_reason}")
             
         except Exception as api_error:
             api_time = round((time.time() - start_time) * 1000, 2)
             logger.error(f"❌ OpenAI API call failed after {api_time}ms: {str(api_error)}")
+            logger.error(f"❌ API Error Type: {type(api_error).__name__}")
             # Return empty list on API failure to prevent chat disruption
             return []
         
@@ -1113,20 +1138,41 @@ async def get_ai_response(message: str) -> str:
     """
     start_time = time.time()
     try:
+        logger.info("🧠 LOADING MEMORIES FOR AI CONTEXT")
         # Load all memories for profile context
         memories = load_all_memories_for_chat()
         
+        logger.info(f"📚 LOADED MEMORIES DATA:")
+        for memory_type, memory_list in memories.items():
+            logger.info(f"   - {memory_type}: {len(memory_list)} items")
+            for i, memory in enumerate(memory_list):
+                logger.info(f"     [{i+1}] {memory.key}: {memory.value}")
+        
+        logger.info("📝 GENERATING SYSTEM PROMPT")
         # Get fixed system prompt
         system_prompt = get_system_prompt()
+        logger.info(f"🔧 SYSTEM PROMPT:")
+        logger.info(f"   Content: '{system_prompt}'")
+        logger.info(f"   Length: {len(system_prompt)} characters")
         
+        logger.info("👤 RENDERING USER CONTEXT FROM MEMORIES")
         # Render user context from memories
         user_context = render_user_context(memories)
+        logger.info(f"📋 USER CONTEXT:")
+        logger.info(f"   Content: '{user_context}'")
+        logger.info(f"   Length: {len(user_context)} characters")
         
         # Add user context to user message, not system
         if user_context:
             user_message_with_context = f"{user_context}\n\n{message}"
+            logger.info("✅ User context added to message")
         else:
             user_message_with_context = message
+            logger.info("ℹ️ No user context to add")
+        
+        logger.info(f"💬 FINAL USER MESSAGE WITH CONTEXT:")
+        logger.info(f"   Content: '{user_message_with_context}'")
+        logger.info(f"   Length: {len(user_message_with_context)} characters")
         
         # Use fixed system prompt and profile-enhanced user message
         messages = [
@@ -1134,19 +1180,45 @@ async def get_ai_response(message: str) -> str:
             {"role": "user", "content": user_message_with_context}
         ]
         
+        logger.info("🚀 PREPARING OPENAI API CALL")
+        logger.info(f"📤 OPENAI API REQUEST DATA:")
+        logger.info(f"   Model: gpt-4o-mini")
+        logger.info(f"   Messages Count: {len(messages)}")
+        for i, msg in enumerate(messages):
+            logger.info(f"   Message {i+1}:")
+            logger.info(f"     Role: {msg['role']}")
+            logger.info(f"     Content: '{msg['content']}'")
+            logger.info(f"     Content Length: {len(msg['content'])} characters")
+        
+        logger.info("🌐 CALLING OPENAI API...")
         resp = client.chat.completions.create(
-            model="gpt-5-nano",
+            model="gpt-4o-mini",
             messages=messages
         )
         
+        logger.info("📥 OPENAI API RESPONSE RECEIVED")
+        logger.info(f"🔍 OPENAI API RESPONSE DATA:")
+        logger.info(f"   Response Object Type: {type(resp)}")
+        logger.info(f"   Choices Count: {len(resp.choices)}")
+        logger.info(f"   Model Used: {resp.model}")
+        logger.info(f"   Usage: {resp.usage}")
+        
         response_text = resp.choices[0].message.content
+        logger.info(f"📝 EXTRACTED RESPONSE TEXT:")
+        logger.info(f"   Content: '{response_text}'")
+        logger.info(f"   Length: {len(response_text)} characters")
+        logger.info(f"   Message Role: {resp.choices[0].message.role}")
+        logger.info(f"   Finish Reason: {resp.choices[0].finish_reason}")
+        
         api_time = round((time.time() - start_time) * 1000, 2)
         
-        logger.info(f"🤖 Profile-aware AI response generated in {api_time}ms (length: {len(response_text)} chars)")
+        logger.info(f"✅ Profile-aware AI response generated in {api_time}ms")
         return response_text
     except Exception as e:
         api_time = round((time.time() - start_time) * 1000, 2)
         logger.error(f"❌ OpenAI API failed after {api_time}ms: {str(e)}")
+        logger.error(f"❌ Error Type: {type(e).__name__}")
+        logger.error(f"❌ Error Details: {str(e)}")
         raise Exception(f"OpenAI API error: {str(e)}")
 
 
@@ -1170,51 +1242,87 @@ async def chat_endpoint(request: ChatRequest):
     message_preview = request.message[:50] + "..." if len(request.message) > 50 else request.message
     
     try:
-        logger.info(f"💬 User message: '{message_preview}' (length: {len(request.message)})")
+        logger.info("=" * 80)
+        logger.info("🚀 CHAT ENDPOINT STARTED")
+        logger.info("=" * 80)
+        logger.info(f"📥 INCOMING REQUEST DATA:")
+        logger.info(f"   - Message: '{request.message}'")
+        logger.info(f"   - Message Length: {len(request.message)} characters")
+        logger.info(f"   - Message Preview: '{message_preview}'")
+        logger.info(f"   - Request Type: {type(request)}")
+        logger.info(f"   - Timestamp: {time.time()}")
         
         # Validate that message is not just whitespace
         if not request.message or not request.message.strip():
             logger.warning("⚠️ Empty message rejected")
             raise ValueError("Message cannot be empty or contain only whitespace")
         
-        # Get AI response
+        logger.info("✅ Message validation passed")
+        
+        # Get AI response with detailed logging
+        logger.info("🤖 STARTING AI RESPONSE GENERATION")
         response_text = await get_ai_response(request.message)
         
         # Save user message and bot response to database
         try:
-            logger.info("💾 Saving messages to database")
+            logger.info("=" * 60)
+            logger.info("💾 STARTING MESSAGE SAVING PROCESS")
+            logger.info("=" * 60)
+            
+            logger.info(f"💬 SAVING USER MESSAGE:")
+            logger.info(f"   Content: '{request.message}'")
+            logger.info(f"   Sender: 'user'")
+            logger.info(f"   Length: {len(request.message)} characters")
             
             # Save user message
             user_save_success = save_message(request.message, "user")
             if not user_save_success:
                 logger.warning("⚠️ Failed to save user message, but continuing chat")
+            else:
+                logger.info("✅ User message saved successfully")
+            
+            logger.info(f"🤖 SAVING BOT RESPONSE:")
+            logger.info(f"   Content: '{response_text}'")
+            logger.info(f"   Sender: 'bot'")
+            logger.info(f"   Length: {len(response_text)} characters")
             
             # Save bot response
             bot_save_success = save_message(response_text, "bot")
             if not bot_save_success:
                 logger.warning("⚠️ Failed to save bot response, but continuing chat")
+            else:
+                logger.info("✅ Bot response saved successfully")
             
+            logger.info(f"📊 MESSAGE SAVING SUMMARY:")
             if user_save_success and bot_save_success:
                 logger.info("✅ Both messages saved successfully")
             elif user_save_success or bot_save_success:
                 logger.info("⚠️ Partial message save success")
             else:
                 logger.warning("⚠️ Failed to save both messages")
+            logger.info("=" * 60)
                 
         except Exception as save_error:
             logger.error(f"❌ Message saving failed: {str(save_error)}")
+            logger.error(f"❌ Save Error Type: {type(save_error).__name__}")
             logger.error("❌ Chat will continue normally despite message saving failure")
         
         # Extract memories asynchronously after generating response with enhanced error handling
         memory_extraction_start = time.time()
         try:
-            logger.info("🧠 Starting memory extraction process")
+            logger.info("=" * 60)
+            logger.info("🧠 STARTING MEMORY EXTRACTION PROCESS")
+            logger.info("=" * 60)
             
             # Load existing memory keys by bucket before extraction
             try:
+                logger.info("📚 Loading existing memory keys from database...")
                 existing_memory_keys = get_existing_memory_keys()
                 total_existing = sum(len(keys) for keys in existing_memory_keys.values())
-                logger.info(f"📚 Loaded {total_existing} existing memory keys across all buckets")
+                logger.info(f"📚 EXISTING MEMORY KEYS LOADED:")
+                logger.info(f"   Total Keys: {total_existing}")
+                for bucket, keys in existing_memory_keys.items():
+                    logger.info(f"   {bucket}: {len(keys)} keys - {keys}")
             except Exception as keys_error:
                 logger.error(f"❌ Failed to load existing memory keys: {str(keys_error)}")
                 # Use empty keys as fallback to allow extraction to continue
@@ -1222,12 +1330,22 @@ async def chat_endpoint(request: ChatRequest):
             
             # Extract memories from the conversation
             try:
+                logger.info("🔍 CALLING MEMORY EXTRACTION WITH:")
+                logger.info(f"   User Message: '{request.message}'")
+                logger.info(f"   Assistant Response: '{response_text}'")
+                logger.info(f"   Existing Memory Keys: {existing_memory_keys}")
+                
                 memory_actions = await extract_memories(
                     user_message=request.message,
                     assistant_response=response_text,
                     existing_memories=existing_memory_keys
                 )
-                logger.info(f"🧠 Memory extraction returned {len(memory_actions)} actions")
+                
+                logger.info(f"🧠 MEMORY EXTRACTION RESULTS:")
+                logger.info(f"   Actions Returned: {len(memory_actions)}")
+                for i, action in enumerate(memory_actions):
+                    logger.info(f"   Action {i+1}: {action}")
+                    
             except Exception as extraction_error:
                 logger.error(f"❌ Memory extraction failed: {str(extraction_error)}")
                 logger.error(f"❌ Extraction error type: {type(extraction_error).__name__}")
@@ -1236,6 +1354,7 @@ async def chat_endpoint(request: ChatRequest):
             # Apply memory actions to database
             if memory_actions:
                 try:
+                    logger.info(f"💾 APPLYING {len(memory_actions)} MEMORY ACTIONS TO DATABASE")
                     apply_memory_actions(memory_actions)
                     logger.info("✅ Memory actions applied successfully")
                 except Exception as apply_error:
@@ -1245,7 +1364,8 @@ async def chat_endpoint(request: ChatRequest):
                 logger.info("ℹ️ No memory actions to apply")
             
             memory_extraction_time = round((time.time() - memory_extraction_start) * 1000, 2)
-            logger.info(f"🧠 Memory extraction process completed in {memory_extraction_time}ms")
+            logger.info(f"✅ Memory extraction process completed in {memory_extraction_time}ms")
+            logger.info("=" * 60)
                 
         except Exception as memory_error:
             # Enhanced error logging for memory extraction failures
@@ -1255,7 +1375,16 @@ async def chat_endpoint(request: ChatRequest):
             logger.error(f"❌ Chat will continue normally despite memory extraction failure")
         
         total_time = round((time.time() - start_time) * 1000, 2)
-        logger.info(f"✅ Chat completed in {total_time}ms")
+        
+        logger.info("=" * 80)
+        logger.info("✅ CHAT ENDPOINT COMPLETED SUCCESSFULLY")
+        logger.info("=" * 80)
+        logger.info(f"📤 FINAL RESPONSE DATA:")
+        logger.info(f"   - Response: '{response_text}'")
+        logger.info(f"   - Response Length: {len(response_text)} characters")
+        logger.info(f"   - Total Processing Time: {total_time}ms")
+        logger.info(f"   - Response Type: {type(ChatResponse(response=response_text))}")
+        logger.info("=" * 80)
         
         return ChatResponse(response=response_text)
         
