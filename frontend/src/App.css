@@ -127,15 +127,20 @@ body {
   color: #94a3b8;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  transition: color 0.3s ease;
+  transition: all 0.3s ease;
   position: absolute;
-  width: 100%;
+  width: 30px;
   text-align: center;
   z-index: 1;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .memory-toggle-input:checked + .memory-toggle-slider .memory-toggle-label {
   color: #dbeafe;
+  left: 6px;
+  right: auto;
 }
 
 .memory-toggle:hover .memory-toggle-slider {
