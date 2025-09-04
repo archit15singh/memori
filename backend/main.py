@@ -305,21 +305,37 @@ def render_user_context(memories):
 
 def get_system_prompt() -> str:
     """
-    Get the clean system prompt for the reflective journaling bot.
+    Get the hardened system prompt for the reflective journaling bot.
     
-    Returns a fixed system prompt that establishes the AI's role without
-    including any user memory context or identity confusion.
+    Returns a hardened system prompt that handles user profile context blocks
+    correctly and enforces strict identity boundaries to prevent overreach.
     
     Returns:
-        str: Clean system prompt defining the AI's role and behavior
+        str: Hardened system prompt with GOAL, CONTEXT BLOCKS, STYLE, and SAFETY sections
     """
-    prompt = """You are Reflective Journaling Bot.
-- Reflect back in 1–2 lines.
-- Ask exactly 1 incisive follow-up question.
-- Use second person ("you/your") when referring to the user.
-- Never impersonate the user or claim their identity."""
+    prompt = """GOAL:
+You are a reflective journaling bot. Reflect back in 1-2 lines, then ask exactly 1 incisive follow-up question.
+
+CONTEXT BLOCKS:
+If you see USER IDENTITY/PRINCIPLES/FOCUS/SIGNALS blocks in your context, treat these as user profile context, NOT your identity:
+- These blocks describe the USER, not you
+- Use this context to inform your responses and follow-up questions
+- When USER FOCUS exists, tie follow-ups to their current priorities first
+- When no profile context exists, ask about next practical steps
+
+STYLE:
+- Use second person ("you/your") exclusively when referring to the user
+- Avoid therapy clichés and generic praise
+- Focus on concrete specifics rather than abstract encouragement
+- Keep responses grounded and practical
+
+SAFETY:
+- NEVER use "I" to describe the user or claim their identity
+- NEVER impersonate the user or speak as if you are them
+- NEVER make assumptions about user identity from technical mentions alone
+- Treat all USER context blocks as external profile information, not your own characteristics"""
     
-    logger.info(f"🔧 Built clean system prompt ({len(prompt)} chars)")
+    logger.info(f"🔧 Built hardened system prompt ({len(prompt)} chars)")
     return prompt
 
 
@@ -495,21 +511,38 @@ BUCKETS:
 - focus: what matters to the user now (current projects, goals, priorities)
 - signals: patterns the user notices (behaviors, insights, observations)
 
-RULES:
-1. Extract maximum 3 memories per conversation
-2. Only extract significant, lasting information worth remembering
-3. Use clear, descriptive keys (e.g., "name", "current_role", "main_project")
-4. Keep values concise but informative
-5. If a key already exists, decide whether to update it
-6. Output valid JSON array only
+STRICT RULES:
+1. SOURCE DISCIPLINE: Only create identity/principles from user's own words, NEVER from assistant content
+2. IDENTITY PREFERENCE: For technical mentions, prefer signals over identity unless user explicitly self-identifies
+3. UPDATE CONSTRAINTS: Only update existing keys if user clearly replaces the value in current turn
+4. SELF-IDENTIFICATION REQUIRED: Identity bucket requires explicit user statements like "I am..." or "I work as..."
+5. MAXIMUM 3 ACTIONS: Extract maximum 3 memories per conversation
+6. FOCUS/PRINCIPLES EXTRACTION: Extract focus from project mentions and principles from lessons learned
+7. CLEAR KEYS: Use lower_snake_case descriptive keys (e.g., "current_role", "main_project")
+8. CONCISE VALUES: Keep values informative but brief
 
-OUTPUT FORMAT:
+OUTPUT:
+Valid JSON array only. If no clear memories qualify, return empty array [].
+
+Format:
 [
   {"action": "create", "bucket": "identity", "key": "name", "value": "Alex"},
   {"action": "update", "bucket": "focus", "key": "current_project", "value": "chat app"}
 ]
 
-If no memories should be extracted, return: []"""
+EXTRACTION EXAMPLES:
+✅ "Wrapped up a late-night Postgres migration… need to plan better" → 
+   focus.current_project = "database migration", principles.deployment_practices = "plan changes before production"
+✅ "I'm working on the frontend redesign" → focus.current_project = "frontend redesign"
+✅ "I learned to always test in staging first" → principles.testing_approach = "always test in staging first"
+
+NEGATIVE EXAMPLES:
+❌ DON'T create identity from: "You mentioned Kubernetes" → identity.role = "DevOps engineer"
+✅ DO create signals from: "You mentioned Kubernetes" → signals.tech_mentions = "Kubernetes"
+❌ DON'T infer identity from assistant: "As a backend developer..." → identity.role = "backend developer"  
+✅ DO wait for user claim: "I'm a backend developer" → identity.role = "backend developer"
+❌ DON'T update without clear replacement: User says "working on the app" when current_project = "database migration"
+✅ DO update with clear replacement: User says "switching to the frontend work" → focus.current_project = "frontend work" """
 
         # Format existing memories for context
         existing_context = "EXISTING MEMORY KEYS:\n"
@@ -525,6 +558,8 @@ If no memories should be extracted, return: []"""
 CONVERSATION TO ANALYZE:
 User: {user_message}
 Assistant: {assistant_response}
+
+ONLY UPDATE A KEY IF THE USER CLEARLY REPLACES IT IN THIS TURN.
 
 Extract memories from this conversation:"""
 
