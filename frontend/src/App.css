@@ -49,6 +49,104 @@ body {
   font-weight: 600;
 }
 
+/* Memory header with toggle */
+.memory-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.memory-header h2 {
+  margin-bottom: 0;
+}
+
+/* Memory toggle styles */
+.memory-toggle-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.memory-toggle {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 28px;
+  cursor: pointer;
+}
+
+.memory-toggle-input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.memory-toggle-slider {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #475569;
+  border: 1px solid #64748b;
+  border-radius: 14px;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.memory-toggle-slider:before {
+  content: "";
+  position: absolute;
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  background-color: #e2e8f0;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.memory-toggle-input:checked + .memory-toggle-slider {
+  background-color: #3b82f6;
+  border-color: #2563eb;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1), 0 0 8px rgba(59, 130, 246, 0.3);
+}
+
+.memory-toggle-input:checked + .memory-toggle-slider:before {
+  transform: translateX(32px);
+  background-color: #ffffff;
+}
+
+.memory-toggle-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: color 0.3s ease;
+  position: absolute;
+  width: 100%;
+  text-align: center;
+  z-index: 1;
+}
+
+.memory-toggle-input:checked + .memory-toggle-slider .memory-toggle-label {
+  color: #dbeafe;
+}
+
+.memory-toggle:hover .memory-toggle-slider {
+  border-color: #94a3b8;
+}
+
+.memory-toggle-input:checked:hover + .memory-toggle-slider {
+  background-color: #2563eb;
+  border-color: #1d4ed8;
+}
+
 .chat-area p,
 .memory-area p {
   color: #94a3b8;
@@ -166,6 +264,38 @@ body {
   border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+}
+
+/* Disabled memory state styles */
+.memory-area.disabled .memory-section {
+  opacity: 0.4;
+  filter: grayscale(0.6);
+  pointer-events: none;
+}
+
+.memory-disabled-message {
+  text-align: center;
+  padding: 40px 24px;
+  background: #1e293b;
+  border-radius: 16px;
+  margin-bottom: 28px;
+  border: 1px solid #475569;
+  opacity: 0.7;
+}
+
+.memory-disabled-message h3 {
+  margin: 0 0 8px 0;
+  color: #94a3b8;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.memory-disabled-message p {
+  margin: 0;
+  font-size: 14px;
+  color: #64748b;
+  font-style: italic;
 }
 
 .memory-section:last-child {

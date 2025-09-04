@@ -36,6 +36,9 @@ function App() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  // Memory toggle state
+  const [memoryEnabled, setMemoryEnabled] = useState(true);
+
   // Memory state - loaded from API
   const [insights, setInsights] = useState([]);
   const [anchors, setAnchors] = useState([]);
@@ -57,6 +60,14 @@ function App() {
   // Refs for auto-scroll and focus
   const messagesEndRef = React.useRef(null);
   const chatInputRef = React.useRef(null);
+
+  // Load memory toggle state from localStorage on component mount
+  useEffect(() => {
+    const savedMemoryEnabled = localStorage.getItem('memoryEnabled');
+    if (savedMemoryEnabled !== null) {
+      setMemoryEnabled(JSON.parse(savedMemoryEnabled));
+    }
+  }, []);
 
   // Auto-scroll chat to bottom when new messages arrive
   useEffect(() => {
@@ -151,6 +162,12 @@ function App() {
 
   const showFeedback = (message, type = 'success') => {
     setFeedback({ message, type });
+  };
+
+  // Toggle memory functionality and persist to localStorage
+  const toggleMemory = (enabled) => {
+    setMemoryEnabled(enabled);
+    localStorage.setItem('memoryEnabled', JSON.stringify(enabled));
   };
 
   // Memory edit operations
@@ -362,8 +379,8 @@ function App() {
     setIsLoading(true);
 
     try {
-      // Call the real API service
-      const response = await chatApiService.sendMessage(userMessage);
+      // Call the real API service with memory toggle state
+      const response = await chatApiService.sendMessage(userMessage, memoryEnabled);
 
       // Extract and format the response text from the API response
       // The backend returns: { "response": "message text" }
@@ -523,8 +540,25 @@ function App() {
           </button>
         </form>
       </div>
-      <div className="memory-area">
-        <h2>Memory</h2>
+      <div className={`memory-area ${!memoryEnabled ? 'disabled' : ''}`}>
+        <div className="memory-header">
+          <h2>Memory</h2>
+          <div className="memory-toggle-container">
+            <label className="memory-toggle">
+              <input
+                type="checkbox"
+                checked={memoryEnabled}
+                onChange={(e) => toggleMemory(e.target.checked)}
+                className="memory-toggle-input"
+              />
+              <span className="memory-toggle-slider">
+                <span className="memory-toggle-label">
+                  {memoryEnabled ? 'ON' : 'OFF'}
+                </span>
+              </span>
+            </label>
+          </div>
+        </div>
 
         {!memoriesLoaded ? (
           <div className="memory-loading">
@@ -534,6 +568,13 @@ function App() {
           </div>
         ) : (
           <>
+            {!memoryEnabled && (
+              <div className="memory-disabled-message">
+                <h3>Memory disabled</h3>
+                <p>Memory extraction and usage is currently turned off</p>
+              </div>
+            )}
+            
             {/* Identity Section */}
             <div className="memory-section identity">
               <h3 className="section-header">

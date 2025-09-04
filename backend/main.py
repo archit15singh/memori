@@ -1120,33 +1120,55 @@ async def delete_memory(memory_type: str, memory_id: str):
         )
 
 
-async def get_ai_response(message: str) -> str:
+async def get_ai_response(message: str, memory_enabled: bool = True) -> str:
     """
-    Get AI response using OpenAI API with user profile context.
+    Get AI response using OpenAI API with optional user profile context.
     
-    Uses a fixed system prompt and adds user profile context to the user message
+    Uses a fixed system prompt and optionally adds user profile context to the user message
     to avoid identity confusion while maintaining memory-informed responses.
     
     Args:
         message: User's input message
+        memory_enabled: Whether to use memory functionality for context
         
     Returns:
-        str: AI-generated response with profile context
+        str: AI-generated response with optional profile context
         
     Raises:
         Exception: For OpenAI API errors
     """
     start_time = time.time()
     try:
-        logger.info("🧠 LOADING MEMORIES FOR AI CONTEXT")
-        # Load all memories for profile context
-        memories = load_all_memories_for_chat()
+        logger.info(f"🧠 MEMORY ENABLED: {memory_enabled}")
         
-        logger.info(f"📚 LOADED MEMORIES DATA:")
-        for memory_type, memory_list in memories.items():
-            logger.info(f"   - {memory_type}: {len(memory_list)} items")
-            for i, memory in enumerate(memory_list):
-                logger.info(f"     [{i+1}] {memory.key}: {memory.value}")
+        if memory_enabled:
+            logger.info("🧠 LOADING MEMORIES FOR AI CONTEXT")
+            # Load all memories for profile context
+            memories = load_all_memories_for_chat()
+            
+            logger.info(f"📚 LOADED MEMORIES DATA:")
+            for memory_type, memory_list in memories.items():
+                logger.info(f"   - {memory_type}: {len(memory_list)} items")
+                for i, memory in enumerate(memory_list):
+                    logger.info(f"     [{i+1}] {memory.key}: {memory.value}")
+            
+            logger.info("👤 RENDERING USER CONTEXT FROM MEMORIES")
+            # Render user context from memories
+            user_context = render_user_context(memories)
+            logger.info(f"📋 USER CONTEXT:")
+            logger.info(f"   Content: '{user_context}'")
+            logger.info(f"   Length: {len(user_context)} characters")
+            
+            # Add user context to user message, not system
+            if user_context:
+                user_message_with_context = f"{user_context}\n\n{message}"
+                logger.info("✅ User context added to message")
+            else:
+                user_message_with_context = message
+                logger.info("ℹ️ No user context to add")
+        else:
+            logger.info("🚫 MEMORY DISABLED - Skipping memory loading and context rendering")
+            user_message_with_context = message
         
         logger.info("📝 GENERATING SYSTEM PROMPT")
         # Get fixed system prompt
@@ -1154,21 +1176,6 @@ async def get_ai_response(message: str) -> str:
         logger.info(f"🔧 SYSTEM PROMPT:")
         logger.info(f"   Content: '{system_prompt}'")
         logger.info(f"   Length: {len(system_prompt)} characters")
-        
-        logger.info("👤 RENDERING USER CONTEXT FROM MEMORIES")
-        # Render user context from memories
-        user_context = render_user_context(memories)
-        logger.info(f"📋 USER CONTEXT:")
-        logger.info(f"   Content: '{user_context}'")
-        logger.info(f"   Length: {len(user_context)} characters")
-        
-        # Add user context to user message, not system
-        if user_context:
-            user_message_with_context = f"{user_context}\n\n{message}"
-            logger.info("✅ User context added to message")
-        else:
-            user_message_with_context = message
-            logger.info("ℹ️ No user context to add")
         
         logger.info(f"💬 FINAL USER MESSAGE WITH CONTEXT:")
         logger.info(f"   Content: '{user_message_with_context}'")
@@ -1212,7 +1219,10 @@ async def get_ai_response(message: str) -> str:
         
         api_time = round((time.time() - start_time) * 1000, 2)
         
-        logger.info(f"✅ Profile-aware AI response generated in {api_time}ms")
+        if memory_enabled:
+            logger.info(f"✅ Profile-aware AI response generated in {api_time}ms")
+        else:
+            logger.info(f"✅ Memory-disabled AI response generated in {api_time}ms")
         return response_text
     except Exception as e:
         api_time = round((time.time() - start_time) * 1000, 2)
@@ -1249,6 +1259,7 @@ async def chat_endpoint(request: ChatRequest):
         logger.info(f"   - Message: '{request.message}'")
         logger.info(f"   - Message Length: {len(request.message)} characters")
         logger.info(f"   - Message Preview: '{message_preview}'")
+        logger.info(f"   - Memory Enabled: {request.memory_enabled}")
         logger.info(f"   - Request Type: {type(request)}")
         logger.info(f"   - Timestamp: {time.time()}")
         
@@ -1261,7 +1272,7 @@ async def chat_endpoint(request: ChatRequest):
         
         # Get AI response with detailed logging
         logger.info("🤖 STARTING AI RESPONSE GENERATION")
-        response_text = await get_ai_response(request.message)
+        response_text = await get_ai_response(request.message, request.memory_enabled)
         
         # Save user message and bot response to database
         try:
@@ -1309,70 +1320,75 @@ async def chat_endpoint(request: ChatRequest):
         
         # Extract memories asynchronously after generating response with enhanced error handling
         memory_extraction_start = time.time()
-        try:
-            logger.info("=" * 60)
-            logger.info("🧠 STARTING MEMORY EXTRACTION PROCESS")
-            logger.info("=" * 60)
-            
-            # Load existing memory keys by bucket before extraction
+        
+        if request.memory_enabled:
             try:
-                logger.info("📚 Loading existing memory keys from database...")
-                existing_memory_keys = get_existing_memory_keys()
-                total_existing = sum(len(keys) for keys in existing_memory_keys.values())
-                logger.info(f"📚 EXISTING MEMORY KEYS LOADED:")
-                logger.info(f"   Total Keys: {total_existing}")
-                for bucket, keys in existing_memory_keys.items():
-                    logger.info(f"   {bucket}: {len(keys)} keys - {keys}")
-            except Exception as keys_error:
-                logger.error(f"❌ Failed to load existing memory keys: {str(keys_error)}")
-                # Use empty keys as fallback to allow extraction to continue
-                existing_memory_keys = {"identity": [], "principles": [], "focus": [], "signals": []}
-            
-            # Extract memories from the conversation
-            try:
-                logger.info("🔍 CALLING MEMORY EXTRACTION WITH:")
-                logger.info(f"   User Message: '{request.message}'")
-                logger.info(f"   Assistant Response: '{response_text}'")
-                logger.info(f"   Existing Memory Keys: {existing_memory_keys}")
+                logger.info("=" * 60)
+                logger.info("🧠 STARTING MEMORY EXTRACTION PROCESS")
+                logger.info("=" * 60)
                 
-                memory_actions = await extract_memories(
-                    user_message=request.message,
-                    assistant_response=response_text,
-                    existing_memories=existing_memory_keys
-                )
-                
-                logger.info(f"🧠 MEMORY EXTRACTION RESULTS:")
-                logger.info(f"   Actions Returned: {len(memory_actions)}")
-                for i, action in enumerate(memory_actions):
-                    logger.info(f"   Action {i+1}: {action}")
-                    
-            except Exception as extraction_error:
-                logger.error(f"❌ Memory extraction failed: {str(extraction_error)}")
-                logger.error(f"❌ Extraction error type: {type(extraction_error).__name__}")
-                memory_actions = []
-            
-            # Apply memory actions to database
-            if memory_actions:
+                # Load existing memory keys by bucket before extraction
                 try:
-                    logger.info(f"💾 APPLYING {len(memory_actions)} MEMORY ACTIONS TO DATABASE")
-                    apply_memory_actions(memory_actions)
-                    logger.info("✅ Memory actions applied successfully")
-                except Exception as apply_error:
-                    logger.error(f"❌ Failed to apply memory actions: {str(apply_error)}")
-                    logger.error(f"❌ Apply error type: {type(apply_error).__name__}")
-            else:
-                logger.info("ℹ️ No memory actions to apply")
-            
-            memory_extraction_time = round((time.time() - memory_extraction_start) * 1000, 2)
-            logger.info(f"✅ Memory extraction process completed in {memory_extraction_time}ms")
-            logger.info("=" * 60)
+                    logger.info("📚 Loading existing memory keys from database...")
+                    existing_memory_keys = get_existing_memory_keys()
+                    total_existing = sum(len(keys) for keys in existing_memory_keys.values())
+                    logger.info(f"📚 EXISTING MEMORY KEYS LOADED:")
+                    logger.info(f"   Total Keys: {total_existing}")
+                    for bucket, keys in existing_memory_keys.items():
+                        logger.info(f"   {bucket}: {len(keys)} keys - {keys}")
+                except Exception as keys_error:
+                    logger.error(f"❌ Failed to load existing memory keys: {str(keys_error)}")
+                    # Use empty keys as fallback to allow extraction to continue
+                    existing_memory_keys = {"identity": [], "principles": [], "focus": [], "signals": []}
                 
-        except Exception as memory_error:
-            # Enhanced error logging for memory extraction failures
-            memory_extraction_time = round((time.time() - memory_extraction_start) * 1000, 2)
-            logger.error(f"❌ Memory extraction process failed after {memory_extraction_time}ms: {str(memory_error)}")
-            logger.error(f"❌ Memory error type: {type(memory_error).__name__}")
-            logger.error(f"❌ Chat will continue normally despite memory extraction failure")
+                # Extract memories from the conversation
+                try:
+                    logger.info("🔍 CALLING MEMORY EXTRACTION WITH:")
+                    logger.info(f"   User Message: '{request.message}'")
+                    logger.info(f"   Assistant Response: '{response_text}'")
+                    logger.info(f"   Existing Memory Keys: {existing_memory_keys}")
+                    
+                    memory_actions = await extract_memories(
+                        user_message=request.message,
+                        assistant_response=response_text,
+                        existing_memories=existing_memory_keys
+                    )
+                    
+                    logger.info(f"🧠 MEMORY EXTRACTION RESULTS:")
+                    logger.info(f"   Actions Returned: {len(memory_actions)}")
+                    for i, action in enumerate(memory_actions):
+                        logger.info(f"   Action {i+1}: {action}")
+                        
+                except Exception as extraction_error:
+                    logger.error(f"❌ Memory extraction failed: {str(extraction_error)}")
+                    logger.error(f"❌ Extraction error type: {type(extraction_error).__name__}")
+                    memory_actions = []
+                
+                # Apply memory actions to database
+                if memory_actions:
+                    try:
+                        logger.info(f"💾 APPLYING {len(memory_actions)} MEMORY ACTIONS TO DATABASE")
+                        apply_memory_actions(memory_actions)
+                        logger.info("✅ Memory actions applied successfully")
+                    except Exception as apply_error:
+                        logger.error(f"❌ Failed to apply memory actions: {str(apply_error)}")
+                        logger.error(f"❌ Apply error type: {type(apply_error).__name__}")
+                else:
+                    logger.info("ℹ️ No memory actions to apply")
+                
+                memory_extraction_time = round((time.time() - memory_extraction_start) * 1000, 2)
+                logger.info(f"✅ Memory extraction process completed in {memory_extraction_time}ms")
+                logger.info("=" * 60)
+                        
+            except Exception as memory_error:
+                # Enhanced error logging for memory extraction failures
+                memory_extraction_time = round((time.time() - memory_extraction_start) * 1000, 2)
+                logger.error(f"❌ Memory extraction process failed after {memory_extraction_time}ms: {str(memory_error)}")
+                logger.error(f"❌ Memory error type: {type(memory_error).__name__}")
+                logger.error(f"❌ Chat will continue normally despite memory extraction failure")
+        else:
+            logger.info("🚫 MEMORY DISABLED - Skipping memory extraction process")
+            logger.info("=" * 60)
         
         total_time = round((time.time() - start_time) * 1000, 2)
         

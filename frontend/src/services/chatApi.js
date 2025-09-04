@@ -76,14 +76,21 @@ class ChatApiService {
   /**
    * Send a message to the chat endpoint
    * @param {string} message - The user's message to send
+   * @param {boolean} memoryEnabled - Whether memory functionality should be enabled (defaults to true)
    * @returns {Promise<Object>} Promise that resolves to the API response
    * @throws {Error} Throws error for various failure scenarios
    */
-  async sendMessage(message) {
+  async sendMessage(message, memoryEnabled = true) {
     // Validate input
     if (!message || typeof message !== 'string' || !message.trim()) {
       throw new Error('Message cannot be empty');
     }
+
+    // Prepare request body with memory toggle state
+    const requestBody = {
+      message: message.trim(),
+      memory_enabled: memoryEnabled
+    };
 
     // Prepare request configuration
     const requestConfig = {
@@ -91,7 +98,7 @@ class ChatApiService {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ message: message.trim() }),
+      body: JSON.stringify(requestBody),
     };
 
     // Create AbortController for timeout handling

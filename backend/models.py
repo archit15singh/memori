@@ -21,12 +21,18 @@ class ChatRequest(BaseModel):
         description="User's chat message",
         example="Hello, how are you?"
     )
+    memory_enabled: bool = Field(
+        default=True,
+        description="Whether to use memory functionality for this request",
+        example=True
+    )
 
     class Config:
         """Pydantic model configuration"""
         json_schema_extra = {
             "example": {
-                "message": "Hello, how are you?"
+                "message": "Hello, how are you?",
+                "memory_enabled": True
             }
         }
 
