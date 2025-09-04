@@ -152,6 +152,62 @@ body {
   border-color: #1d4ed8;
 }
 
+/* Clear button styles */
+.clear-button {
+  padding: 4px 8px;
+  font-size: 12px;
+  background: transparent;
+  border: 1px solid #dc2626;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #dc2626;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.clear-button:hover:not(:disabled) {
+  background-color: #dc2626;
+  color: white;
+  box-shadow: 0 2px 4px rgba(220, 38, 38, 0.3);
+}
+
+.clear-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  color: #666;
+  border-color: #666;
+}
+
+.clear-button:disabled:hover {
+  background: transparent;
+  color: #666;
+  box-shadow: none;
+}
+
+/* Error state for clear button */
+.clear-button.error-state {
+  border-color: #f59e0b;
+  color: #f59e0b;
+  animation: errorPulse 2s ease-in-out infinite;
+}
+
+.clear-button.error-state:hover:not(:disabled) {
+  background-color: #f59e0b;
+  color: white;
+  box-shadow: 0 2px 4px rgba(245, 158, 11, 0.3);
+}
+
+@keyframes errorPulse {
+  0%, 100% {
+    border-color: #f59e0b;
+    color: #f59e0b;
+  }
+  50% {
+    border-color: #dc2626;
+    color: #dc2626;
+  }
+}
+
 .chat-area p,
 .memory-area p {
   color: #94a3b8;

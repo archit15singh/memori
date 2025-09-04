@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 import chatApiService from './services/chatApi';
 import memoryApiService from './services/memoryApi';
+import clearApiService from './services/clearApi';
 
 // Reflective phrases for typing indicator
 const REFLECTIVE_PHRASES = [
@@ -57,6 +58,10 @@ function App() {
   // Highlight state for memory updates
   const [highlightedMemory, setHighlightedMemory] = useState(null);
   const [highlightType, setHighlightType] = useState(null);
+
+  // Clear functionality state
+  const [isClearLoading, setIsClearLoading] = useState(false);
+  const [clearError, setClearError] = useState(null);
 
   // Refs for auto-scroll and focus
   const messagesEndRef = React.useRef(null);
@@ -530,6 +535,130 @@ function App() {
     localStorage.setItem('memoryEnabled', JSON.stringify(enabled));
   };
 
+  // Clear all data functionality
+  const handleClearAll = async () => {
+    // Show confirmation dialog
+    const confirmed = window.confirm(
+      'Are you sure you want to clear all memories and chat history? This action cannot be undone.'
+    );
+    
+    if (!confirmed) {
+      return;
+    }
+
+    // Store current state for potential rollback
+    const currentState = {
+      messages: [...messages],
+      insights: [...insights],
+      anchors: [...anchors],
+      routines: [...routines],
+      notes: [...notes],
+      input: input,
+      editingMemory: editingMemory,
+      editValue: editValue,
+      highlightedMemory: highlightedMemory,
+      highlightType: highlightType,
+      memoryLoading: { ...memoryLoading }
+    };
+
+    setIsClearLoading(true);
+    setClearError(null); // Clear any previous errors
+
+    try {
+      // Call the clear API with enhanced error handling
+      const response = await clearApiService.clearAll();
+      
+      if (response && response.success) {
+        // Clear all local state only after successful API call
+        setMessages([]);
+        setInsights([]);
+        setAnchors([]);
+        setRoutines([]);
+        setNotes([]);
+        
+        // Reset UI to empty state
+        setInput('');
+        setEditingMemory(null);
+        setEditValue('');
+        setHighlightedMemory(null);
+        setHighlightType(null);
+        setMemoryLoading({});
+        
+        // Show success feedback
+        showFeedback('All data cleared successfully');
+        
+        // Clear any previous error state
+        setClearError(null);
+        
+        // Log successful clear operation
+        console.log('Clear operation completed successfully');
+        
+      } else {
+        // Handle case where response exists but success is false
+        const errorMessage = response?.message || 'Clear operation failed - server returned unsuccessful response';
+        throw new Error(errorMessage);
+      }
+    } catch (error) {
+      console.error('Clear operation failed:', error);
+      
+      // Restore previous state to maintain UI functionality
+      setMessages(currentState.messages);
+      setInsights(currentState.insights);
+      setAnchors(currentState.anchors);
+      setRoutines(currentState.routines);
+      setNotes(currentState.notes);
+      setInput(currentState.input);
+      setEditingMemory(currentState.editingMemory);
+      setEditValue(currentState.editValue);
+      setHighlightedMemory(currentState.highlightedMemory);
+      setHighlightType(currentState.highlightType);
+      setMemoryLoading(currentState.memoryLoading);
+      
+      // Determine appropriate error message based on error type
+      let userMessage = 'Failed to clear data. Please try again.';
+      
+      if (error.message) {
+        // Use specific error messages from the API service
+        if (error.message.includes('timed out')) {
+          userMessage = 'Clear operation timed out. Please check your connection and try again.';
+        } else if (error.message.includes('Unable to connect')) {
+          userMessage = 'Unable to connect to server. Please check your connection and try again.';
+        } else if (error.message.includes('temporarily unavailable')) {
+          userMessage = 'Clear service is temporarily unavailable. Please try again in a moment.';
+        } else if (error.message.includes('Invalid')) {
+          userMessage = 'Invalid clear request. Please refresh the page and try again.';
+        } else {
+          // Use the specific error message from the service
+          userMessage = error.message;
+        }
+      }
+      
+      // Show user-friendly error feedback
+      showFeedback(userMessage, 'error');
+      
+      // Store error state for potential retry functionality
+      setClearError(error.message);
+      
+      // Log detailed error information for debugging
+      console.error('Clear error details:', {
+        message: error.message,
+        type: error.name,
+        stack: error.stack
+      });
+      
+    } finally {
+      // Always reset loading state to ensure UI remains functional
+      setIsClearLoading(false);
+      
+      // Ensure input focus is restored for continued interaction
+      setTimeout(() => {
+        if (chatInputRef.current && !editingMemory) {
+          chatInputRef.current.focus();
+        }
+      }, 100);
+    }
+  };
+
   // Memory edit operations
   const startEdit = (type, key, value) => {
     setEditingMemory({ type, key });
@@ -983,6 +1112,15 @@ function App() {
               }}
             >
               ↻ Refresh
+            </button>
+            <button 
+              onClick={handleClearAll}
+              className={`clear-button ${clearError ? 'error-state' : ''}`}
+              disabled={isClearLoading}
+              title={clearError ? `Last clear failed: ${clearError}. Click to retry.` : "Clear all memories and chat history"}
+              style={{ marginLeft: '8px' }}
+            >
+              {isClearLoading ? '⏳ Clearing...' : clearError ? '⚠️ Retry Clear' : '🗑️ Clear All'}
             </button>
           </div>
         </div>

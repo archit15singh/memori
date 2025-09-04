@@ -19,7 +19,7 @@ import uuid
 from typing import List, Dict
 from dotenv import load_dotenv
 from openai import OpenAI
-from models import ChatRequest, ChatResponse, ErrorResponse, MemoryItem, MemoryResponse, MessageItem, MessagesResponse, MemoryChange
+from models import ChatRequest, ChatResponse, ErrorResponse, MemoryItem, MemoryResponse, MessageItem, MessagesResponse, MemoryChange, ClearResponse
 
 # Load environment variables from .env file
 load_dotenv()
@@ -1156,6 +1156,117 @@ async def delete_memory(memory_type: str, memory_id: str):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting memory: {str(e)}"
         )
+
+
+@app.delete("/clear", response_model=ClearResponse, status_code=status.HTTP_200_OK)
+async def clear_all_data():
+    """
+    Clear all memories and messages from the database.
+    
+    This endpoint removes all stored memories and chat messages, providing a clean slate.
+    The operation is performed within a transaction to ensure data consistency.
+    
+    Returns:
+        ClearResponse: Success status and message
+        
+    Raises:
+        HTTPException: For database errors (500 Internal Server Error)
+    """
+    start_time = time.time()
+    conn = None
+    
+    try:
+        logger.info("🧹 Starting clear all data operation")
+        
+        # Connect to database
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Begin transaction
+        cursor.execute("BEGIN TRANSACTION")
+        
+        # Clear memories table
+        cursor.execute("DELETE FROM memories")
+        memories_deleted = cursor.rowcount
+        
+        # Clear messages table  
+        cursor.execute("DELETE FROM messages")
+        messages_deleted = cursor.rowcount
+        
+        # Commit transaction
+        conn.commit()
+        
+        # Log success metrics
+        clear_time = round((time.time() - start_time) * 1000, 2)
+        logger.info(f"✅ Successfully cleared all data in {clear_time}ms")
+        logger.info(f"   - Deleted {memories_deleted} memories")
+        logger.info(f"   - Deleted {messages_deleted} messages")
+        
+        return ClearResponse(
+            success=True,
+            message="All data cleared successfully"
+        )
+        
+    except sqlite3.Error as db_error:
+        # Rollback transaction on database error
+        if conn:
+            try:
+                conn.rollback()
+                logger.warning("🔄 Transaction rolled back due to database error")
+            except Exception as rollback_error:
+                logger.error(f"❌ Failed to rollback transaction: {str(rollback_error)}")
+        
+        clear_time = round((time.time() - start_time) * 1000, 2)
+        logger.error(f"❌ Database error during clear operation after {clear_time}ms: {str(db_error)}")
+        
+        # Provide more specific error messages based on database error type
+        error_message = "Database error during clear operation"
+        if "database is locked" in str(db_error).lower():
+            error_message = "Database is currently busy. Please try again in a moment."
+        elif "no such table" in str(db_error).lower():
+            error_message = "Database structure error. Please contact support."
+        elif "disk" in str(db_error).lower() or "space" in str(db_error).lower():
+            error_message = "Insufficient disk space. Please free up space and try again."
+        else:
+            error_message = f"Database error: {str(db_error)}"
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_message
+        )
+    except Exception as e:
+        # Rollback transaction on any other error
+        if conn:
+            try:
+                conn.rollback()
+                logger.warning("🔄 Transaction rolled back due to unexpected error")
+            except Exception as rollback_error:
+                logger.error(f"❌ Failed to rollback transaction: {str(rollback_error)}")
+        
+        clear_time = round((time.time() - start_time) * 1000, 2)
+        logger.error(f"❌ Clear operation failed after {clear_time}ms: {str(e)}")
+        logger.error(f"❌ Error type: {type(e).__name__}")
+        
+        # Provide user-friendly error message
+        error_message = "An unexpected error occurred while clearing data"
+        if "permission" in str(e).lower():
+            error_message = "Permission denied. Please check file permissions and try again."
+        elif "connection" in str(e).lower():
+            error_message = "Database connection error. Please try again."
+        else:
+            error_message = f"Error clearing data: {str(e)}"
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_message
+        )
+    finally:
+        # Always close database connection
+        if conn:
+            try:
+                conn.close()
+            except Exception as close_error:
+                logger.warning(f"⚠️ Error closing database connection: {str(close_error)}")
 
 
 async def get_ai_response(message: str, memory_enabled: bool = True) -> str:

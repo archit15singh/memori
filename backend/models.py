@@ -261,6 +261,33 @@ class MessagesResponse(BaseModel):
         }
 
 
+class ClearResponse(BaseModel):
+    """
+    Response model for clear endpoint.
+    
+    Represents the response after clearing all data.
+    """
+    success: bool = Field(
+        ...,
+        description="Whether the clear operation was successful",
+        example=True
+    )
+    message: str = Field(
+        ...,
+        description="Status message describing the result",
+        example="All data cleared successfully"
+    )
+
+    class Config:
+        """Pydantic model configuration"""
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "message": "All data cleared successfully"
+            }
+        }
+
+
 class ErrorResponse(BaseModel):
     """
     Error response model for API errors.
