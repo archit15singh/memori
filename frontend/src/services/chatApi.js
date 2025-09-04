@@ -278,7 +278,7 @@ class ChatApiService {
   /**
    * Parse and validate the API response
    * @param {Object} data - The response data from the API
-   * @returns {Object} Parsed response object with properly formatted message text
+   * @returns {Object} Parsed response object with properly formatted message text and optional memory changes
    * @throws {Error} Throws error if response format is invalid
    */
   parseResponse(data) {
@@ -308,9 +308,90 @@ class ChatApiService {
       responseText = 'No response received.';
     }
 
+    // Extract memory changes if present (graceful handling when missing)
+    let memoryChanges = [];
+    if (data.hasOwnProperty('memory_changes')) {
+      if (data.memory_changes === null || data.memory_changes === undefined) {
+        // Explicitly null/undefined - no memory changes
+        memoryChanges = [];
+      } else if (Array.isArray(data.memory_changes)) {
+        // Validate each memory change has required fields with enhanced error handling
+        const validChanges = [];
+        const invalidChanges = [];
+        
+        data.memory_changes.forEach((change, index) => {
+          try {
+            // Basic structure validation
+            if (!change || typeof change !== 'object') {
+              invalidChanges.push(`Index ${index}: not an object`);
+              return;
+            }
+
+            // Required field validation
+            const requiredFields = ['action', 'type', 'id', 'key'];
+            const missingFields = requiredFields.filter(field => 
+              !change.hasOwnProperty(field) || 
+              typeof change[field] !== 'string' || 
+              !change[field].trim()
+            );
+
+            if (missingFields.length > 0) {
+              invalidChanges.push(`Index ${index}: missing/invalid fields: ${missingFields.join(', ')}`);
+              return;
+            }
+
+            // Action-specific validation
+            const validActions = ['created', 'updated', 'deleted'];
+            if (!validActions.includes(change.action)) {
+              invalidChanges.push(`Index ${index}: invalid action '${change.action}'`);
+              return;
+            }
+
+            // Value validation for created/updated actions
+            if ((change.action === 'created' || change.action === 'updated')) {
+              if (!change.hasOwnProperty('value') || typeof change.value !== 'string') {
+                invalidChanges.push(`Index ${index}: missing/invalid value for ${change.action} action`);
+                return;
+              }
+            }
+
+            // Type validation
+            const validTypes = ['identity', 'principles', 'focus', 'signals'];
+            if (!validTypes.includes(change.type)) {
+              invalidChanges.push(`Index ${index}: invalid type '${change.type}'`);
+              return;
+            }
+
+            // If we get here, the change is valid
+            validChanges.push(change);
+
+          } catch (validationError) {
+            invalidChanges.push(`Index ${index}: validation error - ${validationError.message}`);
+          }
+        });
+
+        // Log any invalid changes for debugging
+        if (invalidChanges.length > 0) {
+          console.warn(`Found ${invalidChanges.length} invalid memory changes:`, invalidChanges);
+        }
+
+        memoryChanges = validChanges;
+        
+        // Log validation summary
+        if (data.memory_changes.length > 0) {
+          console.log(`Memory changes validation: ${validChanges.length}/${data.memory_changes.length} valid`);
+        }
+      } else {
+        // Invalid format - not an array
+        console.warn('Invalid memory_changes format - expected array, got:', typeof data.memory_changes);
+        memoryChanges = [];
+      }
+    }
+
     // Return the validated and formatted response
     return {
-      response: responseText
+      response: responseText,
+      memory_changes: memoryChanges
     };
   }
 

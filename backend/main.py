@@ -19,7 +19,7 @@ import uuid
 from typing import List, Dict
 from dotenv import load_dotenv
 from openai import OpenAI
-from models import ChatRequest, ChatResponse, ErrorResponse, MemoryItem, MemoryResponse, MessageItem, MessagesResponse
+from models import ChatRequest, ChatResponse, ErrorResponse, MemoryItem, MemoryResponse, MessageItem, MessagesResponse, MemoryChange
 
 # Load environment variables from .env file
 load_dotenv()
@@ -712,20 +712,25 @@ def save_message(content: str, sender: str) -> bool:
         return False
 
 
-def apply_memory_actions(memory_actions: List[Dict]) -> None:
+def apply_memory_actions(memory_actions: List[Dict]) -> List[Dict]:
     """
-    Apply extracted memory actions to the database.
+    Apply extracted memory actions to the database and return successful changes.
     
     Processes a list of memory actions by either creating new memories with generated UUIDs
-    or updating existing memories by finding their IDs.
+    or updating existing memories by finding their IDs. Returns only the changes that were
+    successfully committed to the database.
     
     Args:
         memory_actions: List of memory actions from extractor
                        Format: [{"action": "create|update", "bucket": "identity", "key": "name", "value": "Alex"}]
+    
+    Returns:
+        List[Dict]: List of successful memory changes in MemoryChange format
+                   Format: [{"action": "created|updated", "type": "identity", "id": "uuid", "key": "name", "value": "Alex"}]
     """
     if not memory_actions:
         logger.info("🧠 No memory actions to apply")
-        return
+        return []
     
     start_time = time.time()
     logger.info(f"🧠 Starting to apply {len(memory_actions)} memory actions")
@@ -736,6 +741,7 @@ def apply_memory_actions(memory_actions: List[Dict]) -> None:
     created_count = 0
     updated_count = 0
     failed_count = 0
+    successful_changes = []
     
     try:
         # Enhanced database connection with error handling
@@ -769,6 +775,15 @@ def apply_memory_actions(memory_actions: List[Dict]) -> None:
                     created_count += 1
                     logger.info(f"➕ Created {bucket} memory: '{key}' = '{value[:50]}...' (id: {memory_id[:8]}...)")
                     
+                    # Add successful change to return list
+                    successful_changes.append({
+                        "action": "created",
+                        "type": bucket,
+                        "id": memory_id,
+                        "key": key,
+                        "value": value
+                    })
+                    
                 elif action_type == "update":
                     # Find existing memory by bucket and key
                     cursor.execute(
@@ -786,6 +801,15 @@ def apply_memory_actions(memory_actions: List[Dict]) -> None:
                         )
                         updated_count += 1
                         logger.info(f"✏️ Updated {bucket} memory: '{key}' = '{value[:50]}...' (id: {memory_id[:8]}...)")
+                        
+                        # Add successful change to return list
+                        successful_changes.append({
+                            "action": "updated",
+                            "type": bucket,
+                            "id": memory_id,
+                            "key": key,
+                            "value": value
+                        })
                     else:
                         # Memory not found for update, create it instead
                         memory_id = str(uuid.uuid4())
@@ -795,6 +819,15 @@ def apply_memory_actions(memory_actions: List[Dict]) -> None:
                         )
                         created_count += 1
                         logger.info(f"➕ Created {bucket} memory (update->create): '{key}' = '{value[:50]}...' (id: {memory_id[:8]}...)")
+                        
+                        # Add successful change to return list (created, not updated)
+                        successful_changes.append({
+                            "action": "created",
+                            "type": bucket,
+                            "id": memory_id,
+                            "key": key,
+                            "value": value
+                        })
                 else:
                     # Invalid action type
                     failed_count += 1
@@ -827,22 +860,27 @@ def apply_memory_actions(memory_actions: List[Dict]) -> None:
         
         logger.info(f"✅ Memory action processing completed in {process_time}ms")
         logger.info(f"📊 Results: {created_count} created, {updated_count} updated, {failed_count} failed ({success_rate}% success rate)")
+        logger.info(f"🔄 Returning {len(successful_changes)} successful memory changes")
         
         if failed_count > 0:
             logger.warning(f"⚠️ {failed_count} memory actions failed - check logs above for details")
+        
+        return successful_changes
         
     except sqlite3.Error as db_error:
         if conn:
             conn.rollback()
         logger.error(f"❌ Database error during memory action processing: {str(db_error)}")
         logger.error(f"❌ Database error type: {type(db_error).__name__}")
-        raise Exception(f"Database error: {str(db_error)}")
+        # Return empty list instead of raising exception to prevent chat disruption
+        return []
     except Exception as e:
         if conn:
             conn.rollback()
         logger.error(f"❌ Memory action processing failed: {str(e)}")
         logger.error(f"❌ Error type: {type(e).__name__}")
-        raise Exception(f"Memory action processing failed: {str(e)}")
+        # Return empty list instead of raising exception to prevent chat disruption
+        return []
     finally:
         if conn:
             try:
@@ -1320,6 +1358,7 @@ async def chat_endpoint(request: ChatRequest):
         
         # Extract memories asynchronously after generating response with enhanced error handling
         memory_extraction_start = time.time()
+        memory_changes = []  # Initialize memory changes list
         
         if request.memory_enabled:
             try:
@@ -1364,15 +1403,18 @@ async def chat_endpoint(request: ChatRequest):
                     logger.error(f"❌ Extraction error type: {type(extraction_error).__name__}")
                     memory_actions = []
                 
-                # Apply memory actions to database
+                # Apply memory actions to database and capture successful changes
                 if memory_actions:
                     try:
                         logger.info(f"💾 APPLYING {len(memory_actions)} MEMORY ACTIONS TO DATABASE")
-                        apply_memory_actions(memory_actions)
-                        logger.info("✅ Memory actions applied successfully")
+                        memory_changes = apply_memory_actions(memory_actions)
+                        logger.info(f"✅ Memory actions applied successfully - {len(memory_changes)} changes returned")
+                        for i, change in enumerate(memory_changes):
+                            logger.info(f"   Change {i+1}: {change['action']} {change['type']}.{change['key']}")
                     except Exception as apply_error:
                         logger.error(f"❌ Failed to apply memory actions: {str(apply_error)}")
                         logger.error(f"❌ Apply error type: {type(apply_error).__name__}")
+                        memory_changes = []  # Reset to empty list on error
                 else:
                     logger.info("ℹ️ No memory actions to apply")
                 
@@ -1386,6 +1428,7 @@ async def chat_endpoint(request: ChatRequest):
                 logger.error(f"❌ Memory extraction process failed after {memory_extraction_time}ms: {str(memory_error)}")
                 logger.error(f"❌ Memory error type: {type(memory_error).__name__}")
                 logger.error(f"❌ Chat will continue normally despite memory extraction failure")
+                memory_changes = []  # Reset to empty list on error
         else:
             logger.info("🚫 MEMORY DISABLED - Skipping memory extraction process")
             logger.info("=" * 60)
@@ -1398,11 +1441,16 @@ async def chat_endpoint(request: ChatRequest):
         logger.info(f"📤 FINAL RESPONSE DATA:")
         logger.info(f"   - Response: '{response_text}'")
         logger.info(f"   - Response Length: {len(response_text)} characters")
+        logger.info(f"   - Memory Changes: {len(memory_changes)} changes")
         logger.info(f"   - Total Processing Time: {total_time}ms")
-        logger.info(f"   - Response Type: {type(ChatResponse(response=response_text))}")
+        logger.info(f"   - Response Type: {type(ChatResponse(response=response_text, memory_changes=memory_changes if memory_changes else None))}")
         logger.info("=" * 80)
         
-        return ChatResponse(response=response_text)
+        # Include memory changes in response if any occurred
+        return ChatResponse(
+            response=response_text,
+            memory_changes=memory_changes if memory_changes else None
+        )
         
     except ValueError as e:
         # Re-raise ValueError to be handled by the custom exception handler

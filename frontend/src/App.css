@@ -393,6 +393,22 @@ body {
   background: #1e293b;
 }
 
+/* Smooth entrance for new memory items */
+.memory-item {
+  animation: memoryEnter 300ms ease-out;
+}
+
+@keyframes memoryEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .memory-item {
   display: flex;
   align-items: flex-start;
@@ -405,6 +421,8 @@ body {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
   transition: all 0.15s ease-in-out;
   position: relative;
+  opacity: 1;
+  transform: scale(1);
 }
 
 .memory-item:hover {
@@ -602,32 +620,113 @@ body {
   opacity: 0.3;
 }
 
-/* Memory highlight animation */
+/* Memory highlight animations for real-time changes */
 .memory-item.highlighted {
-  animation: memoryGlow 600ms ease-out;
   border-color: #3b82f6 !important;
 }
 
-@keyframes memoryGlow {
+/* Created memory animation - bright entrance */
+.memory-item.highlighted.created {
+  animation: memoryCreated 800ms ease-out;
+}
+
+@keyframes memoryCreated {
+  0% {
+    opacity: 0;
+    transform: scale(0.9) translateY(-10px);
+    background: #065f46;
+    border-color: #10b981;
+    box-shadow: 0 0 32px rgba(16, 185, 129, 0.6);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.05) translateY(0);
+    background: #047857;
+    border-color: #10b981;
+    box-shadow: 0 0 24px rgba(16, 185, 129, 0.4);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    background: #334155;
+    border-color: #475569;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  }
+}
+
+/* Updated memory animation - blue pulse */
+.memory-item.highlighted.updated {
+  animation: memoryUpdated 700ms ease-out;
+}
+
+@keyframes memoryUpdated {
   0% {
     background: #1e3a8a;
     transform: scale(1.02);
-    box-shadow: 0 0 24px rgba(59, 130, 246, 0.4);
     border-color: #3b82f6;
+    box-shadow: 0 0 24px rgba(59, 130, 246, 0.5);
   }
 
-  30% {
+  40% {
     background: #1e40af;
     transform: scale(1.01);
+    border-color: #3b82f6;
     box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
   }
 
   100% {
     background: #334155;
     transform: scale(1);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
     border-color: #475569;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
   }
+}
+
+/* Deleted memory animation - fade out with red tint */
+.memory-item.highlighted.deleted {
+  animation: memoryDeleted 600ms ease-out forwards;
+  pointer-events: none; /* Prevent interaction during deletion */
+}
+
+@keyframes memoryDeleted {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+    background: #7f1d1d;
+    border-color: #ef4444;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+  }
+
+  50% {
+    opacity: 0.7;
+    transform: scale(0.98);
+    background: #991b1b;
+    border-color: #ef4444;
+    box-shadow: 0 0 16px rgba(239, 68, 68, 0.3);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(0.95) translateY(-5px);
+    background: #450a0a;
+    border-color: #dc2626;
+    box-shadow: 0 0 8px rgba(220, 38, 38, 0.2);
+  }
+}
+
+/* Prevent hover effects during animations */
+.memory-item.highlighted:hover {
+  transform: none !important;
+  box-shadow: inherit !important;
+  border-color: inherit !important;
+  background: inherit !important;
+}
+
+.memory-item.highlighted .memory-actions {
+  opacity: 0 !important;
+  pointer-events: none;
 }
 
 .memory-item button:disabled {

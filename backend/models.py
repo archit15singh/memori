@@ -5,7 +5,7 @@ This module contains the request and response models used by the FastAPI endpoin
 """
 
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional
 
 
 class ChatRequest(BaseModel):
@@ -37,6 +37,51 @@ class ChatRequest(BaseModel):
         }
 
 
+class MemoryChange(BaseModel):
+    """
+    Model for memory change notifications.
+    
+    Represents a change that occurred to a memory during chat processing.
+    """
+    action: str = Field(
+        ...,
+        description="Type of change: 'created', 'updated', or 'deleted'",
+        example="created"
+    )
+    type: str = Field(
+        ...,
+        description="Memory category: 'identity', 'principles', 'focus', or 'signals'",
+        example="identity"
+    )
+    id: str = Field(
+        ...,
+        description="Unique identifier for the memory item",
+        example="mem-123e4567-e89b-12d3-a456-426614174000"
+    )
+    key: str = Field(
+        ...,
+        description="Label or title for the memory item",
+        example="Current Project"
+    )
+    value: Optional[str] = Field(
+        default=None,
+        description="Memory content (None for deleted memories)",
+        example="chat app development"
+    )
+
+    class Config:
+        """Pydantic model configuration"""
+        json_schema_extra = {
+            "example": {
+                "action": "created",
+                "type": "identity",
+                "id": "mem-123e4567-e89b-12d3-a456-426614174000",
+                "key": "Current Project",
+                "value": "chat app development"
+            }
+        }
+
+
 class ChatResponse(BaseModel):
     """
     Response model for chat endpoint.
@@ -48,12 +93,26 @@ class ChatResponse(BaseModel):
         description="System response to the user's message",
         example="Hello! I'm doing well, thank you for asking."
     )
+    memory_changes: Optional[List[MemoryChange]] = Field(
+        default=None,
+        description="List of memory changes that occurred during chat processing",
+        example=[]
+    )
 
     class Config:
         """Pydantic model configuration"""
         json_schema_extra = {
             "example": {
-                "response": "Hello! I'm doing well, thank you for asking."
+                "response": "Hello! I'm doing well, thank you for asking.",
+                "memory_changes": [
+                    {
+                        "action": "created",
+                        "type": "identity",
+                        "id": "mem-123e4567-e89b-12d3-a456-426614174000",
+                        "key": "Current Project",
+                        "value": "chat app development"
+                    }
+                ]
             }
         }
 

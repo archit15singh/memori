@@ -56,6 +56,7 @@ function App() {
 
   // Highlight state for memory updates
   const [highlightedMemory, setHighlightedMemory] = useState(null);
+  const [highlightType, setHighlightType] = useState(null);
 
   // Refs for auto-scroll and focus
   const messagesEndRef = React.useRef(null);
@@ -94,12 +95,18 @@ function App() {
   // Auto-hide memory highlight after animation
   useEffect(() => {
     if (highlightedMemory) {
+      // Different timing based on highlight type
+      const duration = highlightType === 'created' ? 800 : 
+                      highlightType === 'updated' ? 700 : 
+                      highlightType === 'deleted' ? 600 : 700;
+      
       const timer = setTimeout(() => {
         setHighlightedMemory(null);
-      }, 2000);
+        setHighlightType(null);
+      }, duration);
       return () => clearTimeout(timer);
     }
-  }, [highlightedMemory]);
+  }, [highlightedMemory, highlightType]);
 
   // Load memories from backend on app startup
   useEffect(() => {
@@ -162,6 +169,359 @@ function App() {
 
   const showFeedback = (message, type = 'success') => {
     setFeedback({ message, type });
+  };
+
+  // Apply memory changes from chat response with enhanced error handling
+  const applyMemoryChanges = (changes) => {
+    // Enhanced input validation
+    if (!changes) {
+      console.warn('Memory changes is null or undefined, skipping processing');
+      return;
+    }
+
+    if (!Array.isArray(changes)) {
+      console.error('Invalid memory changes received - expected array, got:', typeof changes, changes);
+      showFeedback('Invalid memory changes format received', 'error');
+      return;
+    }
+
+    if (changes.length === 0) {
+      console.log('No memory changes to process');
+      return;
+    }
+
+    console.log(`Processing ${changes.length} memory changes`);
+
+    let successCount = 0;
+    let errorCount = 0;
+    const errors = [];
+
+    changes.forEach((change, index) => {
+      try {
+        // Enhanced validation with detailed error messages
+        if (!change || typeof change !== 'object') {
+          const error = `Invalid memory change at index ${index}: expected object, got ${typeof change}`;
+          console.warn(error);
+          errors.push(error);
+          errorCount++;
+          return;
+        }
+
+        // Validate required fields with specific error messages
+        const requiredFields = ['action', 'type', 'id', 'key'];
+        const missingFields = requiredFields.filter(field => !change[field]);
+        
+        if (missingFields.length > 0) {
+          const error = `Memory change at index ${index} missing required fields: ${missingFields.join(', ')}`;
+          console.warn(error, change);
+          errors.push(error);
+          errorCount++;
+          return;
+        }
+
+        // Validate action type
+        const validActions = ['created', 'updated', 'deleted'];
+        if (!validActions.includes(change.action)) {
+          const error = `Invalid action '${change.action}' at index ${index}, expected one of: ${validActions.join(', ')}`;
+          console.warn(error);
+          errors.push(error);
+          errorCount++;
+          return;
+        }
+
+        // Map backend memory type to frontend state with validation
+        let frontendType;
+        switch (change.type) {
+          case 'identity':
+            frontendType = 'insights';
+            break;
+          case 'principles':
+            frontendType = 'anchors';
+            break;
+          case 'focus':
+            frontendType = 'routines';
+            break;
+          case 'signals':
+            frontendType = 'notes';
+            break;
+          default:
+            const error = `Unknown memory type '${change.type}' at index ${index}`;
+            console.warn(error);
+            errors.push(error);
+            errorCount++;
+            return;
+        }
+
+        // Validate value field for created/updated actions
+        if ((change.action === 'created' || change.action === 'updated') && !change.value) {
+          const error = `Missing value for ${change.action} action at index ${index}`;
+          console.warn(error);
+          errors.push(error);
+          errorCount++;
+          return;
+        }
+
+        // Create memory item object (for created/updated actions)
+        const memoryItem = {
+          id: change.id,
+          key: change.key,
+          value: change.value
+        };
+
+        // Apply the change based on action type with enhanced error handling
+        try {
+          switch (change.action) {
+            case 'created':
+              console.log(`Creating new ${frontendType} memory:`, change.key);
+              // Add new memory to appropriate array with error handling
+              switch (frontendType) {
+                case 'insights':
+                  setInsights(prev => {
+                    // Check for duplicates
+                    if (prev.some(item => item.id === change.id)) {
+                      console.warn(`Duplicate memory ID ${change.id} for insights, skipping creation`);
+                      return prev;
+                    }
+                    return [...prev, memoryItem];
+                  });
+                  break;
+                case 'anchors':
+                  setAnchors(prev => {
+                    if (prev.some(item => item.id === change.id)) {
+                      console.warn(`Duplicate memory ID ${change.id} for anchors, skipping creation`);
+                      return prev;
+                    }
+                    return [...prev, memoryItem];
+                  });
+                  break;
+                case 'routines':
+                  setRoutines(prev => {
+                    if (prev.some(item => item.id === change.id)) {
+                      console.warn(`Duplicate memory ID ${change.id} for routines, skipping creation`);
+                      return prev;
+                    }
+                    return [...prev, memoryItem];
+                  });
+                  break;
+                case 'notes':
+                  setNotes(prev => {
+                    if (prev.some(item => item.id === change.id)) {
+                      console.warn(`Duplicate memory ID ${change.id} for notes, skipping creation`);
+                      return prev;
+                    }
+                    return [...prev, memoryItem];
+                  });
+                  break;
+                default:
+                  console.warn(`Unknown frontend memory type: ${frontendType}`);
+                  break;
+              }
+              break;
+
+            case 'updated':
+              console.log(`Updating ${frontendType} memory:`, change.key);
+              // Update existing memory in appropriate array with existence check
+              let updateFound = false;
+              switch (frontendType) {
+                case 'insights':
+                  setInsights(prev => {
+                    const updated = prev.map(item => {
+                      if (item.id === change.id) {
+                        updateFound = true;
+                        return memoryItem;
+                      }
+                      return item;
+                    });
+                    if (!updateFound) {
+                      console.warn(`Memory ID ${change.id} not found in insights for update, adding as new`);
+                      return [...prev, memoryItem];
+                    }
+                    return updated;
+                  });
+                  break;
+                case 'anchors':
+                  setAnchors(prev => {
+                    const updated = prev.map(item => {
+                      if (item.id === change.id) {
+                        updateFound = true;
+                        return memoryItem;
+                      }
+                      return item;
+                    });
+                    if (!updateFound) {
+                      console.warn(`Memory ID ${change.id} not found in anchors for update, adding as new`);
+                      return [...prev, memoryItem];
+                    }
+                    return updated;
+                  });
+                  break;
+                case 'routines':
+                  setRoutines(prev => {
+                    const updated = prev.map(item => {
+                      if (item.id === change.id) {
+                        updateFound = true;
+                        return memoryItem;
+                      }
+                      return item;
+                    });
+                    if (!updateFound) {
+                      console.warn(`Memory ID ${change.id} not found in routines for update, adding as new`);
+                      return [...prev, memoryItem];
+                    }
+                    return updated;
+                  });
+                  break;
+                case 'notes':
+                  setNotes(prev => {
+                    const updated = prev.map(item => {
+                      if (item.id === change.id) {
+                        updateFound = true;
+                        return memoryItem;
+                      }
+                      return item;
+                    });
+                    if (!updateFound) {
+                      console.warn(`Memory ID ${change.id} not found in notes for update, adding as new`);
+                      return [...prev, memoryItem];
+                    }
+                    return updated;
+                  });
+                  break;
+                default:
+                  console.warn(`Unknown frontend memory type: ${frontendType}`);
+                  break;
+              }
+              break;
+
+            case 'deleted':
+              console.log(`Deleting ${frontendType} memory:`, change.key);
+              // First highlight the memory for deletion animation
+              const deleteMemoryId = `${frontendType}-${change.key}`;
+              setHighlightedMemory(deleteMemoryId);
+              setHighlightType('deleted');
+              
+              // Remove memory from appropriate array after animation delay with existence check
+              setTimeout(() => {
+                switch (frontendType) {
+                  case 'insights':
+                    setInsights(prev => {
+                      const filtered = prev.filter(item => item.id !== change.id);
+                      if (filtered.length === prev.length) {
+                        console.warn(`Memory ID ${change.id} not found in insights for deletion`);
+                      }
+                      return filtered;
+                    });
+                    break;
+                  case 'anchors':
+                    setAnchors(prev => {
+                      const filtered = prev.filter(item => item.id !== change.id);
+                      if (filtered.length === prev.length) {
+                        console.warn(`Memory ID ${change.id} not found in anchors for deletion`);
+                      }
+                      return filtered;
+                    });
+                    break;
+                  case 'routines':
+                    setRoutines(prev => {
+                      const filtered = prev.filter(item => item.id !== change.id);
+                      if (filtered.length === prev.length) {
+                        console.warn(`Memory ID ${change.id} not found in routines for deletion`);
+                      }
+                      return filtered;
+                    });
+                    break;
+                  case 'notes':
+                    setNotes(prev => {
+                      const filtered = prev.filter(item => item.id !== change.id);
+                      if (filtered.length === prev.length) {
+                        console.warn(`Memory ID ${change.id} not found in notes for deletion`);
+                      }
+                      return filtered;
+                    });
+                    break;
+                  default:
+                    console.warn(`Unknown frontend memory type: ${frontendType}`);
+                    break;
+                }
+              }, 600); // Match the animation duration
+              break;
+
+            default:
+              // This should not happen due to earlier validation, but keeping for safety
+              const error = `Unknown memory change action: ${change.action}`;
+              console.warn(error);
+              errors.push(error);
+              errorCount++;
+              return;
+          }
+
+          // Highlight the changed memory for visual feedback with appropriate animation
+          // Only for created/updated actions (deleted already handled above)
+          if (change.action !== 'deleted') {
+            const memoryId = `${frontendType}-${change.key}`;
+            setHighlightedMemory(memoryId);
+            setHighlightType(change.action);
+          }
+
+          successCount++;
+
+        } catch (stateError) {
+          const error = `Failed to update UI state for memory change at index ${index}: ${stateError.message}`;
+          console.error(error, stateError);
+          errors.push(error);
+          errorCount++;
+        }
+
+      } catch (error) {
+        const errorMsg = `Error processing memory change at index ${index}: ${error.message}`;
+        console.error(errorMsg, error, change);
+        errors.push(errorMsg);
+        errorCount++;
+      }
+    });
+
+    // Enhanced logging and user feedback
+    console.log(`Memory changes processing completed: ${successCount} successful, ${errorCount} failed`);
+    
+    if (errorCount > 0) {
+      console.warn('Memory change processing errors:', errors);
+      console.warn('Failed changes details:', changes.filter((_, index) => 
+        errors.some(error => error.includes(`index ${index}`))
+      ));
+      
+      // Show user feedback for errors, but don't break the chat experience
+      if (successCount === 0) {
+        // All changes failed
+        console.error('All memory changes failed - this may indicate a serious issue');
+        showFeedback('Failed to update memories - please refresh to see latest state', 'error');
+      } else if (errorCount < changes.length) {
+        // Partial success
+        console.warn(`Partial memory update success: ${successCount}/${changes.length}`);
+        showFeedback(`Some memory updates failed (${successCount}/${changes.length} successful)`, 'error');
+      }
+    } else if (successCount > 0) {
+      // All successful - no need to show feedback as the visual highlights will indicate success
+      console.log('All memory changes applied successfully');
+    } else {
+      // No changes processed (shouldn't happen if we got here, but safety check)
+      console.warn('No memory changes were processed - this may indicate an issue');
+    }
+
+    // Additional debugging information
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Memory processing debug info:', {
+        totalChanges: changes.length,
+        successCount,
+        errorCount,
+        errors: errors.slice(0, 5), // Limit to first 5 errors to avoid console spam
+        currentMemoryState: {
+          insights: insights.length,
+          anchors: anchors.length,
+          routines: routines.length,
+          notes: notes.length
+        }
+      });
+    }
   };
 
   // Toggle memory functionality and persist to localStorage
@@ -278,6 +638,7 @@ function App() {
       // Highlight the updated memory
       const memoryId = `${editingMemory.type}-${editingMemory.key}`;
       setHighlightedMemory(memoryId);
+      setHighlightType('updated');
 
       showFeedback('Memory updated successfully');
       cancelEdit();
@@ -338,24 +699,31 @@ function App() {
       // Call API to delete memory
       await memoryApiService.deleteMemory(backendType, memoryItem.id);
 
-      // Update local state
-      switch (type) {
-        case 'insights':
-          setInsights(prev => prev.filter(item => item.key !== key));
-          break;
-        case 'anchors':
-          setAnchors(prev => prev.filter(item => item.key !== key));
-          break;
-        case 'routines':
-          setRoutines(prev => prev.filter(item => item.key !== key));
-          break;
-        case 'notes':
-          setNotes(prev => prev.filter(item => item.key !== key));
-          break;
-        default:
-          console.warn('Unknown memory type for deletion:', type);
-          break;
-      }
+      // Animate deletion before removing from state
+      const deleteMemoryId = `${type}-${key}`;
+      setHighlightedMemory(deleteMemoryId);
+      setHighlightType('deleted');
+
+      // Update local state after animation delay
+      setTimeout(() => {
+        switch (type) {
+          case 'insights':
+            setInsights(prev => prev.filter(item => item.key !== key));
+            break;
+          case 'anchors':
+            setAnchors(prev => prev.filter(item => item.key !== key));
+            break;
+          case 'routines':
+            setRoutines(prev => prev.filter(item => item.key !== key));
+            break;
+          case 'notes':
+            setNotes(prev => prev.filter(item => item.key !== key));
+            break;
+          default:
+            console.warn('Unknown memory type for deletion:', type);
+            break;
+        }
+      }, 600); // Match the animation duration
 
       showFeedback('Memory deleted successfully');
 
@@ -383,7 +751,7 @@ function App() {
       const response = await chatApiService.sendMessage(userMessage, memoryEnabled);
 
       // Extract and format the response text from the API response
-      // The backend returns: { "response": "message text" }
+      // The backend returns: { "response": "message text", "memory_changes": [...] }
       // We extract the 'response' field and ensure it's properly formatted
       const responseText = response.response || 'No response received.';
 
@@ -392,10 +760,51 @@ function App() {
 
       // Add bot response to conversation flow seamlessly
       setMessages(prev => [...prev, botResponse]);
+
+      // Apply memory changes immediately after updating chat UI with enhanced error handling
+      // This ensures real-time memory updates as per requirements 1.1 and 1.4
+      try {
+        if (response.memory_changes) {
+          if (Array.isArray(response.memory_changes)) {
+            if (response.memory_changes.length > 0) {
+              console.log('Applying memory changes:', response.memory_changes);
+              applyMemoryChanges(response.memory_changes);
+            } else {
+              console.log('No memory changes to apply (empty array)');
+            }
+          } else {
+            console.warn('Invalid memory_changes format - expected array, got:', typeof response.memory_changes);
+            showFeedback('Invalid memory changes format received', 'error');
+          }
+        } else {
+          console.log('No memory changes in response');
+        }
+      } catch (memoryError) {
+        console.error('Error processing memory changes:', memoryError);
+        showFeedback('Failed to process memory updates - please refresh to see latest state', 'error');
+        // Chat functionality continues normally despite memory processing error
+      }
     } catch (error) {
       // Handle API errors by showing an error message as a bot response
       // Maintain consistent message formatting for errors
-      const errorMessage = `Sorry, I encountered an error: ${error.message}`;
+      console.error('Chat API error:', error);
+      
+      // Determine if this is a memory-related error or a general chat error
+      const isMemoryError = error.message && (
+        error.message.includes('memory') || 
+        error.message.includes('Memory') ||
+        error.message.includes('Invalid memory changes')
+      );
+      
+      let errorMessage;
+      if (isMemoryError) {
+        errorMessage = `Sorry, I encountered an issue with memory processing: ${error.message}. Chat functionality continues normally.`;
+        // Also show a feedback message for memory errors
+        showFeedback('Memory processing error - please refresh if needed', 'error');
+      } else {
+        errorMessage = `Sorry, I encountered an error: ${error.message}`;
+      }
+      
       const errorResponse = createMessage(errorMessage, 'bot', Date.now() + 1);
       setMessages(prev => [...prev, errorResponse]);
     } finally {
@@ -429,11 +838,12 @@ function App() {
 
       const memoryId = `${type}-${item.key}`;
       const isHighlighted = highlightedMemory === memoryId;
+      const highlightClass = isHighlighted ? `highlighted ${highlightType || ''}` : '';
 
       return (
         <div
           key={item.key}
-          className={`memory-item ${isItemLoading ? 'loading' : ''} ${isHighlighted ? 'highlighted' : ''}`}
+          className={`memory-item ${isItemLoading ? 'loading' : ''} ${highlightClass}`}
           data-memory-id={memoryId}
         >
           {editingMemory && editingMemory.type === type && editingMemory.key === item.key ? (
@@ -557,6 +967,23 @@ function App() {
                 </span>
               </span>
             </label>
+            <button 
+              onClick={() => window.location.reload()} 
+              className="refresh-button"
+              title="Refresh page to reload memories if real-time updates fail"
+              style={{
+                marginLeft: '10px',
+                padding: '4px 8px',
+                fontSize: '12px',
+                background: 'transparent',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                color: '#666'
+              }}
+            >
+              ↻ Refresh
+            </button>
           </div>
         </div>
 
