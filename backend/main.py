@@ -100,6 +100,12 @@ def init_database():
             )
         """)
         
+        # Add unique index to prevent duplicate memories with same type and key
+        cursor.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_type_key
+            ON memories(type, key)
+        """)
+        
         # Check existing memory count for product insights
         cursor.execute("SELECT COUNT(*) FROM memories")
         memory_count = cursor.fetchone()[0]
@@ -747,6 +753,22 @@ def save_message(content: str, sender: str) -> bool:
         return False
 
 
+def _normalize_key(key: str) -> str:
+    """
+    Normalize memory keys to prevent duplicates with different formatting.
+    
+    Converts keys to lowercase and replaces spaces with underscores to ensure
+    consistent key formatting (e.g., "Current Goal" -> "current_goal").
+    
+    Args:
+        key: Raw key string from memory extraction
+        
+    Returns:
+        str: Normalized key in lowercase with underscores
+    """
+    return "_".join(key.strip().lower().split())
+
+
 def apply_memory_actions(memory_actions: List[Dict]) -> List[Dict]:
     """
     Apply extracted memory actions to the database and return successful changes.
@@ -792,32 +814,54 @@ def apply_memory_actions(memory_actions: List[Dict]) -> List[Dict]:
         for i, action in enumerate(memory_actions):
             action_type = action.get("action")
             bucket = action.get("bucket")
-            key = action.get("key")
+            raw_key = action.get("key")
             value = action.get("value")
+            
+            # Normalize key before processing to prevent duplicates
+            key = _normalize_key(raw_key) if raw_key else ""
             
             try:
                 logger.info(f"🔄 Processing action {i+1}/{len(memory_actions)}: {action_type} {bucket}.{key}")
                 
                 if action_type == "create":
-                    # Generate new UUID for the memory
-                    memory_id = str(uuid.uuid4())
                     
-                    # Insert new memory into database
-                    cursor.execute(
-                        "INSERT INTO memories (id, type, key, value) VALUES (?, ?, ?, ?)",
-                        (memory_id, bucket, key, value)
-                    )
-                    created_count += 1
-                    logger.info(f"➕ Created {bucket} memory: '{key}' = '{value[:50]}...' (id: {memory_id[:8]}...)")
+                    # Check if memory with this type and key already exists (upsert logic)
+                    cursor.execute("SELECT id FROM memories WHERE type=? AND key=? LIMIT 1", (bucket, key))
+                    row = cursor.fetchone()
                     
-                    # Add successful change to return list
-                    successful_changes.append({
-                        "action": "created",
-                        "type": bucket,
-                        "id": memory_id,
-                        "key": key,
-                        "value": value
-                    })
+                    if row:
+                        # Memory exists, update it instead of creating duplicate
+                        memory_id = row[0]
+                        cursor.execute("UPDATE memories SET value=? WHERE id=?", (value, memory_id))
+                        updated_count += 1
+                        logger.info(f"✏️ Updated existing {bucket} memory: '{key}' = '{value[:50]}...' (id: {memory_id[:8]}...)")
+                        
+                        # Add successful change to return list
+                        successful_changes.append({
+                            "action": "updated",
+                            "type": bucket,
+                            "id": memory_id,
+                            "key": key,
+                            "value": value
+                        })
+                    else:
+                        # Memory doesn't exist, create new one
+                        memory_id = str(uuid.uuid4())
+                        cursor.execute(
+                            "INSERT INTO memories (id, type, key, value) VALUES (?, ?, ?, ?)",
+                            (memory_id, bucket, key, value)
+                        )
+                        created_count += 1
+                        logger.info(f"➕ Created {bucket} memory: '{key}' = '{value[:50]}...' (id: {memory_id[:8]}...)")
+                        
+                        # Add successful change to return list
+                        successful_changes.append({
+                            "action": "created",
+                            "type": bucket,
+                            "id": memory_id,
+                            "key": key,
+                            "value": value
+                        })
                     
                 elif action_type == "update":
                     # Find existing memory by bucket and key
