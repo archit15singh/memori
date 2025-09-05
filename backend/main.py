@@ -22,7 +22,9 @@ from openai import OpenAI
 from models import ChatRequest, ChatResponse, ErrorResponse, MemoryItem, MemoryResponse, MessageItem, MessagesResponse, MemoryChange, ClearResponse
 
 # Load environment variables from .env file
+logger_setup_start = time.time()
 load_dotenv()
+logger_setup_env_time = round((time.time() - logger_setup_start) * 1000, 2)
 
 # Configure logging for product insights
 logging.basicConfig(
@@ -32,19 +34,103 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Log environment setup completion
+logger_setup_total_time = round((time.time() - logger_setup_start) * 1000, 2)
+logger.info(f"🔧 Environment setup completed in {logger_setup_total_time}ms (env: {logger_setup_env_time}ms)")
+
+# Log environment variables status (without exposing sensitive data)
+openai_key_status = "✅ SET" if os.getenv("OPENAI_API_KEY") else "❌ MISSING"
+logger.info(f"🔑 Environment variables status: OPENAI_API_KEY={openai_key_status}")
+
+# Log Python and system information
+import sys
+import platform
+logger.info(f"🐍 Python version: {sys.version}")
+logger.info(f"💻 Platform: {platform.system()} {platform.release()}")
+logger.info(f"📁 Working directory: {os.getcwd()}")
+logger.info(f"📄 Database path: {os.path.abspath('chat_app.db')}")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Lifespan event handler for FastAPI application startup and shutdown.
     """
+    startup_start = time.time()
+    
     # Startup
-    logger.info("🚀 Chat Backend starting up...")
-    init_database()
-    logger.info("✅ Backend ready - database initialized")
-    yield
-    # Shutdown (if needed)
-    logger.info("🛑 Chat Backend shutting down...")
+    logger.info("=" * 80)
+    logger.info("🚀 CHAT BACKEND STARTUP SEQUENCE INITIATED")
+    logger.info("=" * 80)
+    
+    try:
+        # Initialize database
+        logger.info("📊 Step 1/3: Initializing database...")
+        init_database()
+        
+        # Verify OpenAI client
+        logger.info("📊 Step 2/3: Verifying OpenAI client...")
+        if not client:
+            raise Exception("OpenAI client not initialized")
+        logger.info("✅ OpenAI client verified")
+        
+        # Final startup checks
+        logger.info("📊 Step 3/3: Performing final startup checks...")
+        startup_time = round((time.time() - startup_start) * 1000, 2)
+        
+        logger.info("=" * 80)
+        logger.info("✅ CHAT BACKEND STARTUP COMPLETED SUCCESSFULLY")
+        logger.info(f"⏱️ Total startup time: {startup_time}ms")
+        logger.info("🌟 Backend is ready to serve requests")
+        logger.info("=" * 80)
+        
+        yield
+        
+    except Exception as startup_error:
+        startup_time = round((time.time() - startup_start) * 1000, 2)
+        logger.error("=" * 80)
+        logger.error("❌ CHAT BACKEND STARTUP FAILED")
+        logger.error(f"⏱️ Failed after: {startup_time}ms")
+        logger.error(f"💥 Error: {str(startup_error)}")
+        logger.error("=" * 80)
+        raise
+    
+    # Shutdown
+    shutdown_start = time.time()
+    logger.info("=" * 80)
+    logger.info("🛑 CHAT BACKEND SHUTDOWN SEQUENCE INITIATED")
+    logger.info("=" * 80)
+    
+    try:
+        # Perform cleanup operations
+        logger.info("🧹 Performing cleanup operations...")
+        
+        # Log final statistics if possible
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM memories")
+            final_memory_count = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM messages")
+            final_message_count = cursor.fetchone()[0]
+            conn.close()
+            
+            logger.info(f"📊 Final statistics:")
+            logger.info(f"   - Memories: {final_memory_count}")
+            logger.info(f"   - Messages: {final_message_count}")
+        except Exception as stats_error:
+            logger.warning(f"⚠️ Could not retrieve final statistics: {str(stats_error)}")
+        
+        shutdown_time = round((time.time() - shutdown_start) * 1000, 2)
+        logger.info("=" * 80)
+        logger.info("✅ CHAT BACKEND SHUTDOWN COMPLETED")
+        logger.info(f"⏱️ Shutdown time: {shutdown_time}ms")
+        logger.info("👋 Goodbye!")
+        logger.info("=" * 80)
+        
+    except Exception as shutdown_error:
+        shutdown_time = round((time.time() - shutdown_start) * 1000, 2)
+        logger.error(f"❌ Shutdown error after {shutdown_time}ms: {str(shutdown_error)}")
 
 
 # Create FastAPI app instance with comprehensive metadata
@@ -59,9 +145,21 @@ app = FastAPI(
 )
 
 # Initialize OpenAI client with API key from environment
-client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY")
-)
+openai_init_start = time.time()
+try:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        logger.error("❌ OPENAI_API_KEY environment variable is not set")
+        raise ValueError("OPENAI_API_KEY environment variable must be set")
+    
+    client = OpenAI(api_key=api_key)
+    openai_init_time = round((time.time() - openai_init_start) * 1000, 2)
+    logger.info(f"🤖 OpenAI client initialized successfully in {openai_init_time}ms")
+    logger.info(f"🔑 API key length: {len(api_key)} characters (masked: {api_key[:8]}...{api_key[-4:]})")
+except Exception as e:
+    openai_init_time = round((time.time() - openai_init_start) * 1000, 2)
+    logger.error(f"❌ OpenAI client initialization failed after {openai_init_time}ms: {str(e)}")
+    raise
 
 
 
@@ -76,9 +174,23 @@ def init_database():
     """
     Initialize SQLite database and create memories and messages tables if they don't exist.
     """
+    db_init_start = time.time()
+    logger.info(f"💾 Starting database initialization at {DB_PATH}")
+    
     try:
+        # Log database file status before connection
+        db_exists = os.path.exists(DB_PATH)
+        if db_exists:
+            db_size = os.path.getsize(DB_PATH)
+            logger.info(f"📄 Database file exists: {DB_PATH} ({db_size} bytes)")
+        else:
+            logger.info(f"📄 Database file will be created: {DB_PATH}")
+        
+        conn_start = time.time()
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
+        conn_time = round((time.time() - conn_start) * 1000, 2)
+        logger.info(f"🔗 Database connection established in {conn_time}ms")
         
         # Create memories table with id, type, key, value columns
         cursor.execute("""
@@ -114,12 +226,25 @@ def init_database():
         cursor.execute("SELECT COUNT(*) FROM messages")
         message_count = cursor.fetchone()[0]
         
+        commit_start = time.time()
         conn.commit()
+        commit_time = round((time.time() - commit_start) * 1000, 2)
+        
         conn.close()
         
-        logger.info(f"💾 Database ready - {memory_count} memories, {message_count} messages loaded")
+        db_init_total_time = round((time.time() - db_init_start) * 1000, 2)
+        logger.info(f"💾 Database initialization completed in {db_init_total_time}ms (commit: {commit_time}ms)")
+        logger.info(f"📊 Database contents: {memory_count} memories, {message_count} messages")
+        
+        # Log final database file size
+        final_db_size = os.path.getsize(DB_PATH)
+        logger.info(f"📄 Final database size: {final_db_size} bytes")
+        
     except Exception as e:
-        logger.error(f"❌ Database initialization failed: {str(e)}")
+        db_init_time = round((time.time() - db_init_start) * 1000, 2)
+        logger.error(f"❌ Database initialization failed after {db_init_time}ms: {str(e)}")
+        logger.error(f"❌ Database path: {DB_PATH}")
+        logger.error(f"❌ Error type: {type(e).__name__}")
         raise
 
 
@@ -530,13 +655,15 @@ STRICT RULES:
 4) Max 3 actions. Keys must be lower_snake_case. Values concise.
 
 OUTPUT:
-Valid JSON array only. If no clear memories qualify, return empty array [].
+Return ONLY a JSON object with a single field "actions" that is an array. No prose, no backticks. Example: {"actions":[{"action":"create","bucket":"focus","key":"current_goal","value":"..."}]}
 
 Format:
-[
-  {"action": "create", "bucket": "identity", "key": "name", "value": "Alex"},
-  {"action": "update", "bucket": "focus", "key": "current_project", "value": "chat app"}
-]
+{
+  "actions": [
+    {"action": "create", "bucket": "identity", "key": "name", "value": "Alex"},
+    {"action": "update", "bucket": "focus", "key": "current_project", "value": "chat app"}
+  ]
+}
 
 EXTRACTION EXAMPLES:
 ✅ "Wrapped up a late-night Postgres migration… need to plan better" → 
@@ -579,7 +706,7 @@ Extract memories from this conversation:"""
         
         logger.info("🚀 MEMORY EXTRACTION OPENAI API CALL")
         logger.info(f"📤 MEMORY EXTRACTION API REQUEST:")
-        logger.info(f"   Model: gpt-4o-mini")
+        logger.info(f"   Model: gpt-5")
         logger.info(f"   Temperature: 0.1")
         logger.info(f"   Max Tokens: 500")
         logger.info(f"   Messages Count: {len(messages)}")
@@ -594,8 +721,10 @@ Extract memories from this conversation:"""
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=messages,
-                temperature=0.1,
-                max_tokens=500
+                temperature=0,
+                max_tokens=150,                    # small but sufficient for ≤3 actions
+                response_format={"type": "json_object"},  # forces a single JSON object
+                seed=42
             )
             
             logger.info("📥 MEMORY EXTRACTION API RESPONSE RECEIVED")
@@ -619,35 +748,25 @@ Extract memories from this conversation:"""
             # Return empty list on API failure to prevent chat disruption
             return []
         
-        # Enhanced JSON parsing with better error handling
+        # Parse structured JSON response with enhanced handling
         memory_actions = []
         try:
-            parsed_response = json.loads(response_text)
-            if isinstance(parsed_response, list):
-                memory_actions = parsed_response
+            if response_text:
+                parsed = json.loads(response_text or "{}")
+                if isinstance(parsed, dict) and "actions" in parsed:
+                    memory_actions = parsed.get("actions", [])[:3]  # limit to 3 actions
+                elif isinstance(parsed, list):
+                    memory_actions = parsed[:3]  # handle direct array response
+                else:
+                    memory_actions = []
                 logger.info(f"✅ Successfully parsed JSON response with {len(memory_actions)} potential actions")
             else:
-                logger.warning(f"⚠️ Memory extraction returned non-list type: {type(parsed_response)}, using empty list")
+                logger.info("ℹ️ Empty response from OpenAI, no memories to extract")
                 memory_actions = []
         except json.JSONDecodeError as json_error:
             logger.warning(f"⚠️ Memory extraction returned invalid JSON: {json_error}")
             logger.warning(f"⚠️ Raw response was: {response_text[:200]}...")
-            
-            # Attempt to extract partial JSON if possible
-            try:
-                # Try to find JSON array in the response
-                import re
-                json_match = re.search(r'\[.*\]', response_text, re.DOTALL)
-                if json_match:
-                    partial_json = json_match.group(0)
-                    memory_actions = json.loads(partial_json)
-                    logger.info(f"✅ Recovered partial JSON with {len(memory_actions)} actions")
-                else:
-                    logger.warning("⚠️ No JSON array found in response, using empty list")
-                    memory_actions = []
-            except Exception as recovery_error:
-                logger.warning(f"⚠️ JSON recovery failed: {recovery_error}, using empty list")
-                memory_actions = []
+            memory_actions = []
         
         # Enhanced validation with detailed logging
         valid_actions = []
@@ -979,30 +1098,63 @@ async def log_requests(request: Request, call_next):
     """Log all incoming requests for product insights"""
     start_time = time.time()
     
-    # Log request
-    logger.info(f"🌐 {request.method} {request.url.path} - User request started")
+    # Generate unique request ID for tracking
+    request_id = str(uuid.uuid4())[:8]
+    
+    # Log detailed request information
+    logger.info(f"🌐 [{request_id}] {request.method} {request.url.path} - Request started")
+    logger.info(f"📋 [{request_id}] Request details:")
+    logger.info(f"   - URL: {request.url}")
+    logger.info(f"   - Headers: {dict(request.headers)}")
+    logger.info(f"   - Query params: {dict(request.query_params)}")
+    logger.info(f"   - Client: {request.client.host if request.client else 'unknown'}")
+    logger.info(f"   - User-Agent: {request.headers.get('user-agent', 'unknown')}")
     
     # Process request
     response = await call_next(request)
     
-    # Log response
+    # Log detailed response information
     process_time = round((time.time() - start_time) * 1000, 2)
-    logger.info(f"📤 {request.method} {request.url.path} - {response.status_code} in {process_time}ms")
+    logger.info(f"📤 [{request_id}] {request.method} {request.url.path} - {response.status_code} completed in {process_time}ms")
+    logger.info(f"📋 [{request_id}] Response details:")
+    logger.info(f"   - Status: {response.status_code}")
+    logger.info(f"   - Headers: {dict(response.headers)}")
+    logger.info(f"   - Media type: {response.headers.get('content-type', 'unknown')}")
+    
+    # Log performance metrics
+    if process_time > 1000:  # Slow request (>1s)
+        logger.warning(f"🐌 [{request_id}] Slow request detected: {process_time}ms")
+    elif process_time > 500:  # Medium request (>500ms)
+        logger.info(f"⏱️ [{request_id}] Medium response time: {process_time}ms")
+    else:
+        logger.info(f"⚡ [{request_id}] Fast response: {process_time}ms")
     
     return response
 
 # Configure CORS for frontend integration
+cors_setup_start = time.time()
+allowed_origins = [
+    "http://localhost:3000",  # React development server
+    "http://127.0.0.1:3000",  # Alternative localhost
+    "http://localhost:3001",  # Alternative React port
+]
+
+logger.info("🌐 Configuring CORS middleware:")
+logger.info(f"   - Allowed origins: {allowed_origins}")
+logger.info(f"   - Allow credentials: True")
+logger.info(f"   - Allowed methods: GET, POST, PUT, DELETE, OPTIONS")
+logger.info(f"   - Allowed headers: *")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",  # React development server
-        "http://127.0.0.1:3000",  # Alternative localhost
-        "http://localhost:3001",  # Alternative React port
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+cors_setup_time = round((time.time() - cors_setup_start) * 1000, 2)
+logger.info(f"✅ CORS middleware configured in {cors_setup_time}ms")
 
 
 
@@ -1077,8 +1229,48 @@ async def general_exception_handler(request: Request, exc: Exception):
 @app.get("/")
 async def root():
     """Root endpoint for health check"""
+    health_start = time.time()
     logger.info("💓 Health check requested")
-    return {"message": "Chat Backend API is running"}
+    
+    # Perform basic system health checks
+    try:
+        # Check database connectivity
+        db_check_start = time.time()
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
+        table_count = cursor.fetchone()[0]
+        conn.close()
+        db_check_time = round((time.time() - db_check_start) * 1000, 2)
+        
+        # Check OpenAI client status
+        openai_status = "✅ Ready" if client else "❌ Not initialized"
+        
+        health_time = round((time.time() - health_start) * 1000, 2)
+        
+        logger.info(f"💓 Health check completed in {health_time}ms:")
+        logger.info(f"   - Database: ✅ Connected ({table_count} tables, {db_check_time}ms)")
+        logger.info(f"   - OpenAI: {openai_status}")
+        logger.info(f"   - Memory: ✅ Available")
+        
+        return {
+            "message": "Chat Backend API is running",
+            "status": "healthy",
+            "checks": {
+                "database": "connected",
+                "openai": "ready" if client else "not_ready",
+                "response_time_ms": health_time
+            }
+        }
+    except Exception as e:
+        health_time = round((time.time() - health_start) * 1000, 2)
+        logger.error(f"❌ Health check failed after {health_time}ms: {str(e)}")
+        return {
+            "message": "Chat Backend API has issues",
+            "status": "unhealthy",
+            "error": str(e),
+            "response_time_ms": health_time
+        }
 
 
 @app.get("/memories", response_model=MemoryResponse, status_code=status.HTTP_200_OK)
@@ -1419,7 +1611,7 @@ async def get_ai_response(message: str, memory_enabled: bool = True) -> str:
         
         logger.info("🚀 PREPARING OPENAI API CALL")
         logger.info(f"📤 OPENAI API REQUEST DATA:")
-        logger.info(f"   Model: gpt-4o-mini")
+        logger.info(f"   Model: gpt-5")
         logger.info(f"   Messages Count: {len(messages)}")
         for i, msg in enumerate(messages):
             logger.info(f"   Message {i+1}:")
@@ -1429,7 +1621,7 @@ async def get_ai_response(message: str, memory_enabled: bool = True) -> str:
         
         logger.info("🌐 CALLING OPENAI API...")
         resp = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-5",
             messages=messages
         )
         
@@ -1659,4 +1851,22 @@ async def chat_endpoint(request: ChatRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    
+    # Log direct execution details
+    logger.info("=" * 80)
+    logger.info("🎯 DIRECT EXECUTION MODE")
+    logger.info("=" * 80)
+    logger.info("🚀 Starting uvicorn server with configuration:")
+    logger.info("   - Host: 0.0.0.0 (all interfaces)")
+    logger.info("   - Port: 8000")
+    logger.info("   - Reload: True (development mode)")
+    logger.info("   - App: main:app")
+    logger.info("=" * 80)
+    
+    try:
+        uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    except KeyboardInterrupt:
+        logger.info("🛑 Server stopped by user (Ctrl+C)")
+    except Exception as server_error:
+        logger.error(f"❌ Server failed to start: {str(server_error)}")
+        raise

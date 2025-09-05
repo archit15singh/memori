@@ -118,7 +118,7 @@ POSTGRES_PASSWORD=memori
 REDIS_URL=redis://redis:6379/0
 
 LLM_PROVIDER=openai
-LLM_MODEL=gpt-4o-mini
+LLM_MODEL=gpt-5
 LLM_API_KEY=<key>
 ```
 

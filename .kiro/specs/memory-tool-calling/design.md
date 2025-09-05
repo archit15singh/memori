@@ -126,7 +126,7 @@ async def get_ai_response_with_tools(message: str) -> str:
     
     # Call OpenAI with tools enabled
     response = await openai.chat.completions.create(
-        model="gpt-4",
+        model="gpt-5",
         messages=[{"role": "system", "content": enhanced_prompt}],
         tools=MEMORY_TOOLS,
         tool_choice="auto"
