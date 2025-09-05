@@ -712,8 +712,6 @@ Extract memories from this conversation:"""
         logger.info("🚀 MEMORY EXTRACTION OPENAI API CALL")
         logger.info(f"📤 MEMORY EXTRACTION API REQUEST:")
         logger.info(f"   Model: {EXTRACTOR_MODEL}")
-        logger.info(f"   Temperature: 0")
-        logger.info(f"   Max Tokens: 150")
         logger.info(f"   Messages Count: {len(messages)}")
         for i, msg in enumerate(messages):
             logger.info(f"   Message {i+1}:")
@@ -726,8 +724,6 @@ Extract memories from this conversation:"""
             response = client.chat.completions.create(
                 model=EXTRACTOR_MODEL,
                 messages=messages,
-                temperature=0,
-                max_tokens=150,                    # small but sufficient for ≤3 actions
                 response_format={"type": "json_object"},  # forces a single JSON object
                 seed=42
             )
