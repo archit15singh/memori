@@ -144,6 +144,10 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Model constants for single source of truth
+CHAT_MODEL = "gpt-5"
+EXTRACTOR_MODEL = "gpt-5-mini"
+
 # Initialize OpenAI client with API key from environment
 openai_init_start = time.time()
 try:
@@ -156,6 +160,7 @@ try:
     openai_init_time = round((time.time() - openai_init_start) * 1000, 2)
     logger.info(f"🤖 OpenAI client initialized successfully in {openai_init_time}ms")
     logger.info(f"🔑 API key length: {len(api_key)} characters (masked: {api_key[:8]}...{api_key[-4:]})")
+    logger.info(f"🎯 Model configuration: Chat={CHAT_MODEL}, Memory Extraction={EXTRACTOR_MODEL}")
 except Exception as e:
     openai_init_time = round((time.time() - openai_init_start) * 1000, 2)
     logger.error(f"❌ OpenAI client initialization failed after {openai_init_time}ms: {str(e)}")
@@ -706,9 +711,9 @@ Extract memories from this conversation:"""
         
         logger.info("🚀 MEMORY EXTRACTION OPENAI API CALL")
         logger.info(f"📤 MEMORY EXTRACTION API REQUEST:")
-        logger.info(f"   Model: gpt-5")
-        logger.info(f"   Temperature: 0.1")
-        logger.info(f"   Max Tokens: 500")
+        logger.info(f"   Model: {EXTRACTOR_MODEL}")
+        logger.info(f"   Temperature: 0")
+        logger.info(f"   Max Tokens: 150")
         logger.info(f"   Messages Count: {len(messages)}")
         for i, msg in enumerate(messages):
             logger.info(f"   Message {i+1}:")
@@ -719,7 +724,7 @@ Extract memories from this conversation:"""
         try:
             logger.info("🌐 Calling OpenAI API for memory extraction...")
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=EXTRACTOR_MODEL,
                 messages=messages,
                 temperature=0,
                 max_tokens=150,                    # small but sufficient for ≤3 actions
@@ -733,6 +738,10 @@ Extract memories from this conversation:"""
             logger.info(f"   Choices Count: {len(response.choices)}")
             logger.info(f"   Model Used: {response.model}")
             logger.info(f"   Usage: {response.usage}")
+            
+            # Verify we got the expected model
+            if not response.model.startswith(EXTRACTOR_MODEL):
+                logger.warning(f"⚠️ Expected model {EXTRACTOR_MODEL}, got {response.model}")
             
             response_text = response.choices[0].message.content.strip()
             logger.info(f"📝 MEMORY EXTRACTION RAW RESPONSE:")
@@ -1611,7 +1620,7 @@ async def get_ai_response(message: str, memory_enabled: bool = True) -> str:
         
         logger.info("🚀 PREPARING OPENAI API CALL")
         logger.info(f"📤 OPENAI API REQUEST DATA:")
-        logger.info(f"   Model: gpt-5")
+        logger.info(f"   Model: {CHAT_MODEL}")
         logger.info(f"   Messages Count: {len(messages)}")
         for i, msg in enumerate(messages):
             logger.info(f"   Message {i+1}:")
@@ -1621,7 +1630,7 @@ async def get_ai_response(message: str, memory_enabled: bool = True) -> str:
         
         logger.info("🌐 CALLING OPENAI API...")
         resp = client.chat.completions.create(
-            model="gpt-5",
+            model=CHAT_MODEL,
             messages=messages
         )
         
@@ -1631,6 +1640,10 @@ async def get_ai_response(message: str, memory_enabled: bool = True) -> str:
         logger.info(f"   Choices Count: {len(resp.choices)}")
         logger.info(f"   Model Used: {resp.model}")
         logger.info(f"   Usage: {resp.usage}")
+        
+        # Verify we got the expected model
+        if not resp.model.startswith(CHAT_MODEL):
+            logger.warning(f"⚠️ Expected model {CHAT_MODEL}, got {resp.model}")
         
         response_text = resp.choices[0].message.content
         logger.info(f"📝 EXTRACTED RESPONSE TEXT:")
