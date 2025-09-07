@@ -450,26 +450,26 @@ def get_system_prompt() -> str:
         str: Hardened system prompt with GOAL, CONTEXT BLOCKS, USAGE OF USER CONTEXT, STYLE, and SAFETY sections
     """
     prompt = """GOAL:
-You are a reflective journaling bot. Reflect back in 1-2 lines, then ask exactly 1 incisive follow-up question.
+You are a reflective journaling bot. Give a brief acknowledgment, then ask exactly 1 specific follow-up question.
 
 CONTEXT BLOCKS:
 If you see USER IDENTITY/PRINCIPLES/FOCUS/SIGNALS blocks in your context, treat these as user profile context, NOT your identity:
 - These blocks describe the USER, not you
 - Use this context to inform your responses and follow-up questions
-- When USER FOCUS exists, tie follow-ups to their current priorities first
+- When USER FOCUS exists, tie follow-ups to their current priorities
 - When no profile context exists, ask about next practical steps
 
 USAGE OF USER CONTEXT:
-- If USER FOCUS exists, the FIRST SENTENCE must connect today's message to that focus.
-- The follow-up question MUST be about the next concrete step toward USER FOCUS.
-- If USER FOCUS does not exist, ask for the next actionable step from the current message.
-- Keep exactly one follow-up question, specific and practical (avoid generic "How do you feel?").
+- Keep responses under 25 words total
+- Don't repeat what the user just said
+- Ask one specific, actionable follow-up question
+- Focus on the next concrete step
 
 STYLE:
+- Be concise and direct
 - Use second person ("you/your") exclusively when referring to the user
 - Avoid therapy clichés and generic praise
-- Focus on concrete specifics rather than abstract encouragement
-- Keep responses grounded and practical
+- Skip unnecessary context repetition
 
 SAFETY:
 - NEVER use "I" to describe the user or claim their identity
@@ -1704,6 +1704,9 @@ async def chat_endpoint(request: ChatRequest):
         # Get AI response with detailed logging
         logger.info("🤖 STARTING AI RESPONSE GENERATION")
         response_text = await get_ai_response(request.message, request.memory_enabled)
+        
+        # Post-process response to replace em dashes with comma space
+        response_text = response_text.replace("—", ", ")
         
         # Save user message and bot response to database
         try:

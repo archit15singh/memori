@@ -32,7 +32,7 @@ class ClearApiService {
    */
   getTimeout() {
     const isDevelopment = process.env.NODE_ENV === 'development';
-    return isDevelopment ? 10000 : 15000; // 10s dev, 15s prod
+    return isDevelopment ? 300000 : 300000; // 5 minutes for both dev and prod
   }
 
   /**

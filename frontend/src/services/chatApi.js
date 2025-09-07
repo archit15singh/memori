@@ -32,7 +32,7 @@ class ChatApiService {
    */
   getTimeout() {
     const isDevelopment = process.env.NODE_ENV === 'development';
-    return isDevelopment ? 30000 : 45000; // 30s dev, 45s prod - increased for AI processing
+    return isDevelopment ? 300000 : 300000; // 5 minutes for both dev and prod
   }
 
   /**
