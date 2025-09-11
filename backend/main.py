@@ -658,17 +658,17 @@ STRICT RULES:
 1) EXTRACT ONLY FROM THE USER'S WORDS IN THIS TURN. Ignore the assistant content completely for all buckets. 
 2) IDENTITY requires explicit self-identification ("I am…", "I work as…"). Never infer from tech mentions. 
 3) Only UPDATE an existing key if the user clearly replaces it in THIS TURN. 
-4) Max 3 actions. Use HIGH-LEVEL SEMANTIC KEYS that represent stable concepts, not literal content.
+4) Max 3 actions. Use NATURAL CONVERSATIONAL KEYS that sound like how people talk.
 
-HIGH-LEVEL KEY STRATEGY:
-Think conceptually about what TYPE of information this is, not the specific content.
-Use stable, reusable keys that can hold different values over time.
+NATURAL KEY STRATEGY:
+Use phrases that sound like natural conversation, not database fields.
+Prefer spaces over underscores. Think "how would someone describe this about themselves?"
 
-SEMANTIC KEY CATEGORIES:
-- identity: name, role, background, location, experience_level
-- principles: work_style, tech_philosophy, deployment_strategy, coding_approach, learning_style
-- focus: current_project, main_goal, priority_area, deadline_focus
-- signals: recurring_pattern, observed_trend, workflow_insight, team_dynamic
+CONVERSATIONAL KEY EXAMPLES:
+- identity: "my name", "my role", "where I work", "my background", "experience level"
+- principles: "work style", "tech preferences", "how I deploy", "coding approach", "learning style"
+- focus: "working on", "main goal", "top priority", "deadline pressure"
+- signals: "pattern I notice", "recent insight", "team dynamic", "workflow observation"
 
 OUTPUT:
 Return ONLY a JSON object with a single field "actions" that is an array. No prose, no backticks. Example: {"actions":[{"action":"create","bucket":"focus","key":"current_goal","value":"..."}]}
@@ -681,28 +681,28 @@ Format:
   ]
 }
 
-EXTRACTION EXAMPLES (HIGH-LEVEL SEMANTIC KEYS):
+EXTRACTION EXAMPLES (NATURAL CONVERSATIONAL KEYS):
 ✅ "Wrapped up a late-night Postgres migration… need to plan better" → 
-   focus.current_project = "Postgres database migration", principles.deployment_strategy = "plan changes before production"
-✅ "I'm working on the frontend redesign" → focus.current_project = "frontend redesign"
-✅ "I learned to always test in staging first" → principles.coding_approach = "always test in staging first"
-✅ "I use Third Wave cold coffee for late nights" → principles.work_style = "late night coding with Third Wave coffee"
-✅ "My goal this week is Pycon submission" → focus.main_goal = "Pycon submission", focus.deadline_focus = "this week"
-✅ "I'm a senior React developer" → identity.role = "senior React developer"
-✅ "I prefer PostgreSQL for databases" → principles.tech_philosophy = "PostgreSQL for database projects"
-✅ "I notice our team always rushes Friday deployments" → signals.team_dynamic = "team rushes Friday deployments"
+   focus."working on" = "Postgres database migration", principles."how I deploy" = "plan changes before production"
+✅ "I'm working on the frontend redesign" → focus."working on" = "frontend redesign"
+✅ "I learned to always test in staging first" → principles."coding approach" = "always test in staging first"
+✅ "I use Third Wave cold coffee for late nights" → principles."work style" = "late night coding with Third Wave coffee"
+✅ "My goal this week is Pycon submission" → focus."main goal" = "Pycon submission", focus."deadline pressure" = "this week"
+✅ "I'm a senior React developer" → identity."my role" = "senior React developer"
+✅ "I prefer PostgreSQL for databases" → principles."tech preferences" = "PostgreSQL for database projects"
+✅ "I notice our team always rushes Friday deployments" → signals."team dynamic" = "team rushes Friday deployments"
 
 NEGATIVE EXAMPLES:
-❌ DON'T create literal keys: "project_react_performance_optimization" 
-✅ DO use semantic keys: focus.current_project = "React performance optimization"
-❌ DON'T create literal keys: "preferred_database_postgres"
-✅ DO use semantic keys: principles.tech_philosophy = "PostgreSQL for databases"
-❌ DON'T create identity from tech mentions: "You mentioned Kubernetes" → identity.role = "DevOps"
-✅ DO create signals: "You mentioned Kubernetes" → signals.observed_trend = "Kubernetes adoption"
+❌ DON'T use underscores: "current_project", "tech_philosophy", "deadline_focus"
+✅ DO use natural phrases: "working on", "tech preferences", "deadline pressure"
+❌ DON'T sound technical: "deployment_strategy", "workflow_insight"
+✅ DO sound conversational: "how I deploy", "recent insight"
+❌ DON'T create identity from tech mentions: "You mentioned Kubernetes" → identity."my role" = "DevOps"
+✅ DO create signals: "You mentioned Kubernetes" → signals."pattern I notice" = "Kubernetes adoption"
 ❌ DON'T infer identity from assistant words
-✅ DO wait for explicit user self-identification: "I'm a backend developer" → identity.role = "backend developer"
+✅ DO wait for explicit user self-identification: "I'm a backend developer" → identity."my role" = "backend developer"
 ❌ DON'T update without clear replacement
-✅ DO update when user clearly switches: "switching to frontend work" → focus.current_project = "frontend work" """
+✅ DO update when user clearly switches: "switching to frontend work" → focus."working on" = "frontend work" """
 
         # Format existing memories for context
         existing_context = "EXISTING MEMORY KEYS:\n"
@@ -903,16 +903,16 @@ def _normalize_key(key: str) -> str:
     """
     Normalize memory keys to prevent duplicates with different formatting.
     
-    Converts keys to lowercase and replaces spaces with underscores to ensure
-    consistent key formatting (e.g., "Current Goal" -> "current_goal").
+    Converts keys to lowercase and normalizes whitespace to ensure
+    consistent key formatting (e.g., "Current Goal" -> "current goal").
     
     Args:
         key: Raw key string from memory extraction
         
     Returns:
-        str: Normalized key in lowercase with underscores
+        str: Normalized key in lowercase with normalized spaces
     """
-    return "_".join(key.strip().lower().split())
+    return " ".join(key.strip().lower().split())
 
 
 def apply_memory_actions(memory_actions: List[Dict]) -> List[Dict]:
