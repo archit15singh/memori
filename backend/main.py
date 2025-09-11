@@ -658,7 +658,17 @@ STRICT RULES:
 1) EXTRACT ONLY FROM THE USER'S WORDS IN THIS TURN. Ignore the assistant content completely for all buckets. 
 2) IDENTITY requires explicit self-identification ("I am…", "I work as…"). Never infer from tech mentions. 
 3) Only UPDATE an existing key if the user clearly replaces it in THIS TURN. 
-4) Max 3 actions. Keys must be lower_snake_case. Values concise.
+4) Max 3 actions. Use HIGH-LEVEL SEMANTIC KEYS that represent stable concepts, not literal content.
+
+HIGH-LEVEL KEY STRATEGY:
+Think conceptually about what TYPE of information this is, not the specific content.
+Use stable, reusable keys that can hold different values over time.
+
+SEMANTIC KEY CATEGORIES:
+- identity: name, role, background, location, experience_level
+- principles: work_style, tech_philosophy, deployment_strategy, coding_approach, learning_style
+- focus: current_project, main_goal, priority_area, deadline_focus
+- signals: recurring_pattern, observed_trend, workflow_insight, team_dynamic
 
 OUTPUT:
 Return ONLY a JSON object with a single field "actions" that is an array. No prose, no backticks. Example: {"actions":[{"action":"create","bucket":"focus","key":"current_goal","value":"..."}]}
@@ -671,19 +681,28 @@ Format:
   ]
 }
 
-EXTRACTION EXAMPLES:
+EXTRACTION EXAMPLES (HIGH-LEVEL SEMANTIC KEYS):
 ✅ "Wrapped up a late-night Postgres migration… need to plan better" → 
-   focus.current_project = "database migration", principles.deployment_practices = "plan changes before production"
+   focus.current_project = "Postgres database migration", principles.deployment_strategy = "plan changes before production"
 ✅ "I'm working on the frontend redesign" → focus.current_project = "frontend redesign"
-✅ "I learned to always test in staging first" → principles.testing_approach = "always test in staging first"
+✅ "I learned to always test in staging first" → principles.coding_approach = "always test in staging first"
+✅ "I use Third Wave cold coffee for late nights" → principles.work_style = "late night coding with Third Wave coffee"
+✅ "My goal this week is Pycon submission" → focus.main_goal = "Pycon submission", focus.deadline_focus = "this week"
+✅ "I'm a senior React developer" → identity.role = "senior React developer"
+✅ "I prefer PostgreSQL for databases" → principles.tech_philosophy = "PostgreSQL for database projects"
+✅ "I notice our team always rushes Friday deployments" → signals.team_dynamic = "team rushes Friday deployments"
 
 NEGATIVE EXAMPLES:
-❌ DON'T create identity from: "You mentioned Kubernetes" → identity.role = "DevOps engineer"
-✅ DO create signals from: "You mentioned Kubernetes" → signals.tech_mentions = "Kubernetes"
-❌ DON'T infer identity from assistant: "As a backend developer..." → identity.role = "backend developer"  
-✅ DO wait for user claim: "I'm a backend developer" → identity.role = "backend developer"
-❌ DON'T update without clear replacement: User says "working on the app" when current_project = "database migration"
-✅ DO update with clear replacement: User says "switching to the frontend work" → focus.current_project = "frontend work" """
+❌ DON'T create literal keys: "project_react_performance_optimization" 
+✅ DO use semantic keys: focus.current_project = "React performance optimization"
+❌ DON'T create literal keys: "preferred_database_postgres"
+✅ DO use semantic keys: principles.tech_philosophy = "PostgreSQL for databases"
+❌ DON'T create identity from tech mentions: "You mentioned Kubernetes" → identity.role = "DevOps"
+✅ DO create signals: "You mentioned Kubernetes" → signals.observed_trend = "Kubernetes adoption"
+❌ DON'T infer identity from assistant words
+✅ DO wait for explicit user self-identification: "I'm a backend developer" → identity.role = "backend developer"
+❌ DON'T update without clear replacement
+✅ DO update when user clearly switches: "switching to frontend work" → focus.current_project = "frontend work" """
 
         # Format existing memories for context
         existing_context = "EXISTING MEMORY KEYS:\n"
