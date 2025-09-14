@@ -230,3 +230,90 @@ Docs: Update API.md (/retrieve/search) with examples.
 
 ---
 
+
+
+
+# V1 Components
+
+1. **Schema Registry (Postgres)**
+
+   * Stores user-defined classes (name, description, columns: dtype/enum/desc/pii).
+   * Stores **LLM annotations**: `searchable_fields[]` (+ boosts), `identity_fields[]`, confidence.
+
+2. **LLM Annotator (one-shot per schema version)**
+
+   * Input: the class + columns (+ a tiny sample, optional).
+   * Output: `searchable_fields`, `identity_fields`, confidence.
+   * Gate: if identity confidence low → require human approve.
+
+3. **Memory Extractor (per message)**
+
+   * Emits **create-proposals** for classes in the active schema version.
+
+4. **Validator/Normalizer**
+
+   * Enforces schema constraints; drops junk; applies basic normalizers (trim/lower).
+
+5. **Resolver + Decision**
+
+   * **Identity-first**: if identity matches → **UPDATE**.
+   * Else **BM25 (Postgres FTS)** over **annotated searchable fields** of that class:
+
+     * score ≥ **0.80** → UPDATE
+     * **0.55–0.80** → UPSERT if partial identity overlap; else CREATE
+     * < **0.55** → CREATE
+   * **DELETE** only if extractor says delete **and** identity matches → soft-delete.
+
+6. **Memory Store (Postgres) + FTS**
+
+   * Single source of truth (rows + JSONB payload).
+   * `tsvector` index built **only** on `searchable_fields` (GIN). Auto-refresh on write.
+
+# Flow (one diagram)
+
+```
+User Msg → Extractor → Proposals
+            │
+            ▼
+       Validate/Normalize
+            │
+            ▼
+      Identity Lookup (PG)
+        ├─ found → UPDATE
+        └─ not found → FTS(BM25) on searchable fields
+                         ├─ score≥0.80 → UPDATE
+                         ├─ 0.55–0.80 → UPSERT heuristics
+                         └─ <0.55 → CREATE
+            │
+            ▼
+        Write to Postgres  (FTS auto-updates)
+            │
+            ▼
+        Log metrics (create/update/reject, scores)
+```
+
+# Defaults (don’t overthink)
+
+* **Searchable fields**: short `string`, `enum`, `list[string]` (titles/names/tags/notes). No dates/numbers/bools.
+* **Boosts**: `name/title/subject:3`, `enum/tags:2`, `notes/desc:1`.
+* **Caps**: none needed yet (this is about writes, not prompt packing).
+* **Idempotency (per turn)**: drop dupes by hash of `{class + identity_fields + values}`.
+
+# Minimal tables (conceptual)
+
+* `schema_versions`: classes, columns, LLM annotations, status.
+* `memories`: `tenant_id, class, schema_version, object_key (identity hash), payload jsonb, is_deleted, created_at, updated_at`.
+* `memories_fts`: `tsvector` generated from annotated fields (or as a computed column + GIN index).
+* `audit_log` (optional): action, basis, bm25\_score.
+
+# Ops you actually need
+
+* **Schema change = new version** → run **backfill**: compute identity keys, rebuild FTS.
+* **Monitors**: false-update rate (should \~0), missed-update rate, zero-hit rate on FTS, index size.
+* **Kill switch**: if identity confidence low or false-updates spike, fall back to **create-only**.
+
+# What you get
+
+* One database (Postgres) running everything.
+* LLM decides *what to search* and *how to identify*; backend makes final calls.
+* Deterministic writes with simple, explainable rules.
