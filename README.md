@@ -1,7 +1,7 @@
 # memori (working title)
 
 # Reflective Journaling Bot  
-*PyCon India 2025 Demo — "Memory is the Agent: Edit the Memory, Edit the Agent"*
+*PyCon India 2025 Demo: "Memory is the Agent: Edit the Memory, Edit the Agent"*
 
 ---
 
