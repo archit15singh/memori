@@ -1,0 +1,3 @@
+[workspace]
+members = ["memori-core", "memori-python"]
+resolver = "2"

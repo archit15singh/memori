@@ -1,0 +1,13 @@
+[package]
+name = "memori-python"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "memori"
+crate-type = ["cdylib"]
+
+[dependencies]
+memori-core = { path = "../memori-core" }
+pyo3 = { version = "0.22", features = ["abi3-py39"] }
+serde_json = "1"
