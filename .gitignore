@@ -1,0 +1,12 @@
+target/
+__pycache__/
+*.so
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+*.whl
+dist/
+memori_dev.md
+memori_usage.md
+tests/

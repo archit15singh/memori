@@ -1,0 +1,28 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "memori"
+version = "0.2.0"
+description = "Embedded AI agent memory -- SQLite + vector search + FTS5"
+requires-python = ">=3.9"
+license = "MIT"
+readme = "../README.md"
+keywords = ["ai", "memory", "vector-search", "sqlite", "agent"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Repository = "https://github.com/archit-singhh/memori"
+
+[project.scripts]
+memori = "memori_cli:main"
+
+[tool.maturin]
+features = ["pyo3/abi3-py39"]
+python-source = "python"
+python-packages = ["memori", "memori_cli"]
