@@ -10,3 +10,4 @@ dist/
 memori_dev.md
 memori_usage.md
 tests/
+.fastembed_cache/
