@@ -7,7 +7,12 @@ edition = "2021"
 name = "memori"
 crate-type = ["cdylib"]
 
+[features]
+default = ["embeddings"]
+embeddings = ["memori-core/embeddings"]
+
 [dependencies]
 memori-core = { path = "../memori-core" }
 pyo3 = { version = "0.22", features = ["abi3-py39"] }
 serde_json = "1"
+uuid = { version = "1", features = ["v4"] }

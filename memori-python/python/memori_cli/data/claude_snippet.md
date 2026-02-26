@@ -2,7 +2,7 @@
 ## Memori -- Persistent Agent Memory
 
 Persistent memory across sessions via `memori` CLI. DB at `~/.claude/memori.db`.
-Search matches both content text and metadata values.
+Search matches both content text and metadata values. Embeddings are auto-generated on store -- no manual `--vector` needed.
 
 ### Session Start (always do this)
 
@@ -10,8 +10,11 @@ Search matches both content text and metadata values.
 2. If relevant matches exist, briefly tell the user what you already know about their topic from past sessions.
 3. If results include memories that conflict with what you now see in the codebase, update them: `memori update <id> --content "corrected ..."` or `memori tag <id> status=outdated`.
 4. If the database is empty (total: 0), skip to working -- memories will accumulate naturally from the triggers below.
+5. If `memori stats` shows low embedding coverage (e.g. <80%), run `memori embed` to backfill embeddings on old memories for better search quality.
 
 ### When to Store
+
+Embeddings are auto-generated at store time -- just provide the text content and optional metadata. Deduplication is also automatic: storing similar content of the same type updates the existing memory instead of creating a duplicate.
 
 **After fixing a bug where the root cause was not obvious from the error message** -- store the root cause chain, not the fix itself (the fix is in git): `memori store "<symptom -> root cause -> why>" --meta '{"type": "debugging", "topic": "<area>"}'`
 
@@ -31,6 +34,7 @@ Search matches both content text and metadata values.
 - Session-specific context (current file paths, variable names, temp state)
 - Trivially re-discoverable information (file locations, function signatures)
 - Anything you're uncertain about -- verify first, store after
+- Don't worry about storing duplicates -- memori auto-merges similar memories of the same type
 
 ### When to Search
 
@@ -75,15 +79,16 @@ Bad: (3 paragraphs reproducing an entire investigation) -- store the conclusion,
 | Command | Purpose |
 |---------|---------|
 | `memori context "<topic>"` | Load relevant + recent memories + type stats |
-| `memori store "<text>" --meta '{"type": "..."}'` | Store with typed metadata |
-| `memori search --text "<query>"` | Full-text search (content + metadata) |
+| `memori store "<text>" --meta '{"type": "..."}'` | Store with typed metadata (auto-embeds, auto-dedup) |
+| `memori search --text "<query>"` | Full-text + vector hybrid search |
 | `memori search --filter '{"type": "..."}'` | Filter by metadata fields |
 | `memori update <id> --content/--meta` | Correct or enrich existing memory |
 | `memori tag <id> key=value ...` | Merge key-value tags into metadata |
 | `memori get <id>` | Read full memory by ID |
 | `memori delete <id>` | Remove single memory |
+| `memori embed` | Backfill embeddings on old memories |
 | `memori purge --type/--before` | Bulk preview (add `--confirm` to delete) |
 | `memori export > backup.jsonl` | JSONL backup to stdout |
 | `memori import < backup.jsonl` | Restore from JSONL stdin |
-| `memori stats` | DB size, memory count, type distribution |
+| `memori stats` | DB size, memory count, type distribution, embedding coverage |
 <!-- memori:end -->

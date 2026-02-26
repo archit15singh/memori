@@ -1,3 +1,4 @@
+pub mod embed;
 pub mod schema;
 pub mod search;
 pub mod storage;
@@ -5,7 +6,7 @@ pub mod types;
 
 use std::collections::HashMap;
 
-pub use types::{Memory, MemoriError, Result, SearchQuery};
+pub use types::{InsertResult, Memory, MemoriError, Result, SearchQuery};
 
 pub struct Memori {
     conn: rusqlite::Connection,
@@ -27,8 +28,9 @@ impl Memori {
         content: &str,
         vector: Option<&[f32]>,
         metadata: Option<serde_json::Value>,
-    ) -> Result<String> {
-        storage::insert(&self.conn, content, vector, metadata)
+        dedup_threshold: Option<f32>,
+    ) -> Result<InsertResult> {
+        storage::insert(&self.conn, content, vector, metadata, dedup_threshold)
     }
 
     pub fn insert_with_id(
@@ -79,5 +81,17 @@ impl Memori {
 
     pub fn delete_by_type(&self, type_value: &str) -> Result<usize> {
         storage::delete_by_type(&self.conn, type_value)
+    }
+
+    pub fn touch(&self, id: &str) -> Result<()> {
+        storage::touch(&self.conn, id)
+    }
+
+    pub fn backfill_embeddings(&self, batch_size: usize) -> Result<usize> {
+        storage::backfill_embeddings(&self.conn, batch_size)
+    }
+
+    pub fn embedding_stats(&self) -> Result<(usize, usize)> {
+        storage::embedding_stats(&self.conn)
     }
 }
