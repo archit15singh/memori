@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use memori_core::{Memori, Memory, SearchQuery};
+use memori_core::{InsertResult, Memori, Memory, SearchQuery};
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
@@ -76,6 +76,8 @@ fn memory_to_dict(py: Python<'_>, mem: &Memory) -> PyResult<PyObject> {
     dict.set_item("content", &mem.content)?;
     dict.set_item("created_at", mem.created_at)?;
     dict.set_item("updated_at", mem.updated_at)?;
+    dict.set_item("last_accessed", mem.last_accessed)?;
+    dict.set_item("access_count", mem.access_count)?;
 
     match &mem.vector {
         Some(v) => dict.set_item("vector", v.to_object(py))?,
@@ -95,6 +97,20 @@ fn memory_to_dict(py: Python<'_>, mem: &Memory) -> PyResult<PyObject> {
     Ok(dict.to_object(py))
 }
 
+fn insert_result_to_dict(py: Python<'_>, result: &InsertResult) -> PyResult<PyObject> {
+    let dict = PyDict::new_bound(py);
+    dict.set_item("id", result.id())?;
+    dict.set_item(
+        "action",
+        if result.is_deduplicated() {
+            "deduplicated"
+        } else {
+            "created"
+        },
+    )?;
+    Ok(dict.to_object(py))
+}
+
 #[pyclass]
 struct PyMemori {
     inner: Mutex<Memori>,
@@ -110,19 +126,69 @@ impl PyMemori {
         })
     }
 
-    #[pyo3(signature = (content, vector=None, metadata=None))]
+    #[pyo3(signature = (content, vector=None, metadata=None, dedup_threshold=None, no_embed=false))]
     fn insert(
         &self,
+        py: Python<'_>,
         content: &str,
         vector: Option<Vec<f32>>,
         metadata: Option<&Bound<'_, PyDict>>,
-    ) -> PyResult<String> {
+        dedup_threshold: Option<f32>,
+        no_embed: bool,
+    ) -> PyResult<PyObject> {
         let meta = metadata.map(pydict_to_value).transpose()?;
-        self.inner
+
+        // If no_embed, pass the explicit vector (or None) -- skip auto-embed by
+        // providing a dummy zero-len vector would be wrong, so we handle it in Rust.
+        // Actually, no_embed is handled by passing a vector that's Some([]) to signal
+        // "don't auto-embed". But that would fail cosine similarity. Instead, we
+        // use a feature: if no_embed is true, we pass vector as-is (even if None).
+        // The Rust auto_embed function checks if vector.is_some() to skip.
+        // So if no_embed=true and vector=None, we need a way to tell Rust "don't embed".
+        // Simplest: pass no_embed down. But the Rust API doesn't have that param.
+        // Alternative: when no_embed=true and no vector, just don't embed by
+        // generating a placeholder. Actually the cleanest approach: if no_embed,
+        // skip the vector entirely and Rust won't auto-embed if we don't have the feature.
+        // But we DO have the feature enabled.
+        //
+        // Solution: When no_embed is requested, we pass a fake zero vector to Rust,
+        // which will see vector.is_some() and skip auto-embed. No -- that corrupts the DB.
+        //
+        // Best solution: If no_embed, call insert_with_id to bypass auto-embed,
+        // or restructure the Rust API. Let's just handle it here: embed in Python
+        // if needed, otherwise pass None.
+        //
+        // Actually, the simplest: just call the Rust insert and if no_embed, we skip
+        // by not enabling the feature. But feature is compile-time.
+        //
+        // Real solution: add no_embed to the Rust insert. Let me refactor.
+        // For now: if no_embed=true, use insert_with_id which doesn't dedup/embed.
+        if no_embed {
+            let id = uuid::Uuid::new_v4().to_string();
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs_f64();
+            let result_id = self
+                .inner
+                .lock()
+                .unwrap()
+                .insert_with_id(&id, content, vector.as_deref(), meta, now, now)
+                .map_err(memori_err)?;
+            let dict = PyDict::new_bound(py);
+            dict.set_item("id", result_id)?;
+            dict.set_item("action", "created")?;
+            return Ok(dict.to_object(py));
+        }
+
+        let result = self
+            .inner
             .lock()
             .unwrap()
-            .insert(content, vector.as_deref(), meta)
-            .map_err(memori_err)
+            .insert(content, vector.as_deref(), meta, dedup_threshold)
+            .map_err(memori_err)?;
+
+        insert_result_to_dict(py, &result)
     }
 
     fn get(&self, py: Python<'_>, id: &str) -> PyResult<Option<PyObject>> {
@@ -233,6 +299,43 @@ impl PyMemori {
             .unwrap()
             .delete_by_type(type_value)
             .map_err(memori_err)
+    }
+
+    #[pyo3(signature = (text,))]
+    fn embed(&self, text: &str) -> PyResult<Vec<f32>> {
+        #[cfg(feature = "embeddings")]
+        {
+            Ok(memori_core::embed::embed_text(text))
+        }
+        #[cfg(not(feature = "embeddings"))]
+        {
+            let _ = text;
+            Err(PyRuntimeError::new_err(
+                "embeddings feature not enabled at compile time",
+            ))
+        }
+    }
+
+    #[pyo3(signature = (batch_size=50))]
+    fn backfill_embeddings(&self, batch_size: usize) -> PyResult<usize> {
+        self.inner
+            .lock()
+            .unwrap()
+            .backfill_embeddings(batch_size)
+            .map_err(memori_err)
+    }
+
+    fn embedding_stats(&self, py: Python<'_>) -> PyResult<PyObject> {
+        let (embedded, total) = self
+            .inner
+            .lock()
+            .unwrap()
+            .embedding_stats()
+            .map_err(memori_err)?;
+        let dict = PyDict::new_bound(py);
+        dict.set_item("embedded", embedded)?;
+        dict.set_item("total", total)?;
+        Ok(dict.to_object(py))
     }
 }
 

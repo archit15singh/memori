@@ -11,6 +11,7 @@ Usage:
   memori count
   memori stats
   memori context "kafka architecture"
+  memori embed               # backfill embeddings on old memories
   memori export > backup.jsonl
   memori import < backup.jsonl
   memori purge --type temporary --confirm
@@ -27,9 +28,10 @@ from pathlib import Path
 
 from memori import PyMemori
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 DEFAULT_DB = os.path.expanduser("~/.claude/memori.db")
+DEFAULT_DEDUP_THRESHOLD = 0.92
 
 SNIPPET_START = "<!-- memori:start -->"
 SNIPPET_END = "<!-- memori:end -->"
@@ -62,11 +64,30 @@ def cmd_store(args):
   db = _get_db(args.db)
   meta = _parse_json(args.meta, "--meta") if args.meta else None
   vector = _parse_json(args.vector, "--vector") if args.vector else None
-  mid = db.insert(args.content, vector=vector, metadata=meta)
+
+  # Determine dedup threshold
+  dedup_threshold = None
+  if not args.no_dedup:
+    dedup_threshold = args.dedup_threshold
+
+  result = db.insert(
+    args.content,
+    vector=vector,
+    metadata=meta,
+    dedup_threshold=dedup_threshold,
+    no_embed=args.no_embed,
+  )
+
+  mid = result["id"]
+  action = result["action"]
+
   if args.json:
-    print(json.dumps({"id": mid, "status": "stored"}))
+    print(json.dumps({"id": mid, "status": action}))
   else:
-    print(f"Stored: {mid}")
+    if action == "deduplicated":
+      print(f"Deduplicated: {mid} (updated existing memory)")
+    else:
+      print(f"Stored: {mid}")
 
 
 def cmd_search(args):
@@ -78,13 +99,15 @@ def cmd_search(args):
   if args.json:
     out = []
     for r in results:
-      out.append({
+      entry = {
         "id": r["id"],
         "content": r["content"],
         "score": r.get("score"),
         "metadata": r.get("metadata"),
         "created_at": r.get("created_at"),
-      })
+        "access_count": r.get("access_count", 0),
+      }
+      out.append(entry)
     print(json.dumps(out, indent=2, default=str))
   else:
     if not results:
@@ -93,7 +116,9 @@ def cmd_search(args):
     for r in results:
       score = f"[{r['score']:.4f}]" if r.get("score") is not None else ""
       meta = json.dumps(r.get("metadata") or {})
-      print(f"{r['id'][:8]} {score} {r['content']}  meta={meta}")
+      access = r.get("access_count", 0)
+      access_str = f" ({access} hits)" if access > 5 else ""
+      print(f"{r['id'][:8]} {score} {r['content']}  meta={meta}{access_str}")
 
 
 def cmd_get(args):
@@ -224,6 +249,35 @@ def cmd_context(args):
       print(f"Types: {', '.join(parts)}")
 
 
+def cmd_embed(args):
+  db = _get_db(args.db)
+  stats = db.embedding_stats()
+  total = stats["total"]
+  already_embedded = stats["embedded"]
+  to_embed = total - already_embedded
+
+  if to_embed == 0:
+    if args.json:
+      print(json.dumps({"embedded": 0, "total": total, "skipped": total}))
+    else:
+      print(f"All {total} memories already have embeddings.")
+    return
+
+  if not args.json:
+    print(f"Backfilling embeddings for {to_embed} memories (batch size: {args.batch_size})...")
+
+  processed = db.backfill_embeddings(args.batch_size)
+
+  if args.json:
+    print(json.dumps({
+      "embedded": processed,
+      "total": total,
+      "skipped": already_embedded,
+    }))
+  else:
+    print(f"Embedded {processed}/{total} memories ({already_embedded} already had embeddings)")
+
+
 def cmd_export(args):
   db = _get_db(args.db)
   include_vectors = args.include_vectors
@@ -260,7 +314,7 @@ def cmd_import(args):
       updated_at = entry.get("updated_at")
 
       if new_ids:
-        db.insert(content, vector=vector, metadata=metadata)
+        db.insert(content, vector=vector, metadata=metadata, no_embed=False)
       else:
         db.insert_with_id(
           entry["id"], content,
@@ -398,17 +452,27 @@ def cmd_stats(args):
   # Metadata type distribution via SQL (O(1) vs old O(N) Python loop)
   type_counts = db.type_distribution()
 
+  # Embedding coverage
+  embed_stats = db.embedding_stats()
+  embedded = embed_stats["embedded"]
+  total = embed_stats["total"]
+
   if args.json:
     print(json.dumps({
       "db_path": db_path,
       "count": count,
       "file_size": size_str,
       "types": type_counts,
+      "embedded": embedded,
+      "embedding_coverage": f"{embedded}/{total}" if total > 0 else "0/0",
     }, indent=2))
   else:
     print(f"Database:  {db_path}")
     print(f"Memories:  {count}")
     print(f"File size: {size_str}")
+    if total > 0:
+      pct = embedded * 100 // total
+      print(f"Embedded:  {embedded}/{total} ({pct}%)")
     if type_counts:
       print("Types:")
       for t, c in sorted(type_counts.items(), key=lambda x: -x[1]):
@@ -488,6 +552,12 @@ def main():
   p_store.add_argument("content", help="Text content to store")
   p_store.add_argument("--meta", help="JSON metadata object")
   p_store.add_argument("--vector", help="JSON array of floats")
+  p_store.add_argument("--no-embed", action="store_true",
+                        help="Skip auto-embedding (store without vector)")
+  p_store.add_argument("--no-dedup", action="store_true",
+                        help="Skip deduplication check")
+  p_store.add_argument("--dedup-threshold", type=float, default=DEFAULT_DEDUP_THRESHOLD,
+                        help=f"Cosine similarity threshold for dedup (default: {DEFAULT_DEDUP_THRESHOLD})")
   p_store.set_defaults(func=cmd_store)
 
   # search
@@ -535,6 +605,12 @@ def main():
   p_context.add_argument("topic", help="Topic to search for")
   p_context.add_argument("--limit", type=int, default=10, help="Max relevant matches")
   p_context.set_defaults(func=cmd_context)
+
+  # embed
+  p_embed = sub.add_parser("embed", help="Backfill embeddings for memories without vectors")
+  p_embed.add_argument("--batch-size", type=int, default=50,
+                        help="Number of memories to embed per batch (default: 50)")
+  p_embed.set_defaults(func=cmd_embed)
 
   # export
   p_export = sub.add_parser("export", help="Export all memories as JSONL to stdout")
