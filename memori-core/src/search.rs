@@ -2,7 +2,7 @@ use rusqlite::params;
 use serde_json::Value;
 use std::collections::HashMap;
 
-use crate::storage::row_to_memory;
+use crate::storage::{row_to_memory, touch};
 use crate::types::{Memory, Result, SearchQuery};
 
 const RRF_K: f32 = 60.0;
@@ -10,20 +10,37 @@ const RRF_K: f32 = 60.0;
 pub fn search(conn: &rusqlite::Connection, query: SearchQuery) -> Result<Vec<Memory>> {
     let filter_clause = query.filter.as_ref().map(|f| build_filter_clause(f));
 
-    match (&query.vector, &query.text) {
+    let mut results = match (&query.vector, &query.text) {
         (Some(vec), Some(text)) => {
-            hybrid_search(conn, vec, text, filter_clause.as_deref(), query.limit)
+            hybrid_search(conn, vec, text, filter_clause.as_deref(), query.limit)?
         }
         (Some(vec), None) => {
-            vector_search(conn, vec, filter_clause.as_deref(), query.limit)
+            vector_search(conn, vec, filter_clause.as_deref(), query.limit)?
         }
         (None, Some(text)) => {
-            text_search(conn, text, filter_clause.as_deref(), query.limit)
+            text_search(conn, text, filter_clause.as_deref(), query.limit)?
         }
         (None, None) => {
-            recent_search(conn, filter_clause.as_deref(), query.limit)
+            recent_search(conn, filter_clause.as_deref(), query.limit)?
         }
+    };
+
+    // Batch-touch all search results to track access
+    for mem in &results {
+        let _ = touch(conn, &mem.id);
     }
+
+    // Re-read access counts after touching (they just got bumped)
+    for mem in &mut results {
+        mem.access_count += 1;
+    }
+
+    Ok(results)
+}
+
+fn apply_access_boost(base_score: f32, access_count: i64) -> f32 {
+    let boost = 1.0 + 0.1 * (1.0 + access_count as f32).ln();
+    base_score * boost
 }
 
 fn vector_search(
@@ -34,7 +51,7 @@ fn vector_search(
 ) -> Result<Vec<Memory>> {
     let where_clause = filter.map_or(String::new(), |f| format!("WHERE {}", f));
     let sql = format!(
-        "SELECT id, content, vector, metadata, created_at, updated_at
+        "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count
          FROM memories {} ORDER BY rowid",
         where_clause
     );
@@ -47,7 +64,8 @@ fn vector_search(
         let mem = row_to_memory(row)?;
         if let Some(ref vec) = mem.vector {
             let sim = cosine_similarity(query_vec, vec);
-            scored.push((mem, sim));
+            let boosted = apply_access_boost(sim, mem.access_count);
+            scored.push((mem, boosted));
         }
     }
 
@@ -84,7 +102,8 @@ fn text_search(
 
     let sql = if let Some(f) = filter {
         format!(
-            "SELECT m.id, m.content, m.vector, m.metadata, m.created_at, m.updated_at, fts.rank
+            "SELECT m.id, m.content, m.vector, m.metadata, m.created_at, m.updated_at,
+                    m.last_accessed, m.access_count, fts.rank
              FROM memories_fts fts
              JOIN memories m ON m.rowid = fts.rowid
              WHERE memories_fts MATCH ?1 AND {}
@@ -93,7 +112,8 @@ fn text_search(
             f.replace("metadata", "m.metadata")
         )
     } else {
-        "SELECT m.id, m.content, m.vector, m.metadata, m.created_at, m.updated_at, fts.rank
+        "SELECT m.id, m.content, m.vector, m.metadata, m.created_at, m.updated_at,
+                m.last_accessed, m.access_count, fts.rank
          FROM memories_fts fts
          JOIN memories m ON m.rowid = fts.rowid
          WHERE memories_fts MATCH ?1
@@ -107,24 +127,25 @@ fn text_search(
     let mut results = Vec::new();
 
     while let Some(row) = rows.next()? {
-        let rank: f64 = row.get(6)?;
-        let mut mem = Memory {
+        let rank: f64 = row.get(8)?;
+        let vector_blob: Option<Vec<u8>> = row.get(2)?;
+        let metadata_str: Option<String> = row.get(3)?;
+        let access_count: i64 = row.get(7)?;
+
+        let base_score = -rank as f32;
+        let boosted = apply_access_boost(base_score, access_count);
+
+        let mem = Memory {
             id: row.get(0)?,
             content: row.get(1)?,
-            vector: {
-                let blob: Option<Vec<u8>> = row.get(2)?;
-                blob.map(|b| blob_to_vec(&b))
-            },
-            metadata: {
-                let s: Option<String> = row.get(3)?;
-                s.and_then(|s| serde_json::from_str(&s).ok())
-            },
+            vector: vector_blob.map(|b| blob_to_vec(&b)),
+            metadata: metadata_str.and_then(|s| serde_json::from_str(&s).ok()),
             created_at: row.get(4)?,
             updated_at: row.get(5)?,
-            score: None,
+            last_accessed: row.get(6)?,
+            access_count,
+            score: Some(boosted),
         };
-        // FTS5 rank is negative (lower = better), normalize to 0..1 range
-        mem.score = Some(-rank as f32);
         results.push(mem);
     }
 
@@ -164,7 +185,7 @@ fn hybrid_search(
         all_memories.entry(m.id.clone()).or_insert(m);
     }
 
-    // Compute RRF scores
+    // Compute RRF scores (access boost already applied in sub-searches)
     let mut scored: Vec<(Memory, f32)> = all_memories
         .into_values()
         .map(|m| {
@@ -194,7 +215,7 @@ fn recent_search(
 ) -> Result<Vec<Memory>> {
     let where_clause = filter.map_or(String::new(), |f| format!("WHERE {}", f));
     let sql = format!(
-        "SELECT id, content, vector, metadata, created_at, updated_at
+        "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count
          FROM memories {} ORDER BY updated_at DESC LIMIT ?1",
         where_clause
     );

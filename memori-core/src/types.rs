@@ -26,6 +26,8 @@ pub struct Memory {
     pub metadata: Option<serde_json::Value>,
     pub created_at: f64,
     pub updated_at: f64,
+    pub last_accessed: f64,
+    pub access_count: i64,
     pub score: Option<f32>,
 }
 
@@ -45,5 +47,25 @@ impl Default for SearchQuery {
             filter: None,
             limit: 10,
         }
+    }
+}
+
+/// Result of an insert operation -- either a new memory was created or
+/// an existing one was updated via deduplication.
+#[derive(Clone, Debug)]
+pub enum InsertResult {
+    Created(String),
+    Deduplicated(String),
+}
+
+impl InsertResult {
+    pub fn id(&self) -> &str {
+        match self {
+            InsertResult::Created(id) | InsertResult::Deduplicated(id) => id,
+        }
+    }
+
+    pub fn is_deduplicated(&self) -> bool {
+        matches!(self, InsertResult::Deduplicated(_))
     }
 }

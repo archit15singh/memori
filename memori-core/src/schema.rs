@@ -63,5 +63,20 @@ pub fn init_db(conn: &Connection) -> rusqlite::Result<()> {
     )?;
   }
 
+  // Re-read version after potential v0->v1 migration
+  let version: i32 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
+
+  if version < 2 {
+    // Add access tracking columns for v0.3 ranking boost.
+    // SQLite ALTER TABLE ADD COLUMN sets defaults for existing rows.
+    conn.execute_batch(
+      "
+      ALTER TABLE memories ADD COLUMN last_accessed REAL DEFAULT 0.0;
+      ALTER TABLE memories ADD COLUMN access_count INTEGER DEFAULT 0;
+      PRAGMA user_version = 2;
+      ",
+    )?;
+  }
+
   Ok(())
 }
