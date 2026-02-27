@@ -1,4 +1,4 @@
-<!-- memori:start -->
+<!-- memori:start v0.6.0 -->
 ## Memori -- Persistent Agent Memory
 
 Persistent memory across sessions via `memori` CLI. DB at `~/.claude/memori.db`.
@@ -8,7 +8,7 @@ IDs can be shortened to unique prefixes (e.g. `memori get a1b2c3d4` instead of t
 
 ### Session Start (always do this)
 
-1. Run `memori context "<task topic>"` to load relevant memories and recent activity.
+1. Run `memori context "<task topic>"` to load relevant memories and recent activity. Use `memori context "<topic>" --compact` for minimal JSON when you need to save tokens.
 2. If relevant matches exist, briefly tell the user what you already know about their topic from past sessions.
 3. If results include memories that conflict with what you now see in the codebase, update them: `memori update <id> --content "corrected ..."` or `memori tag <id> status=outdated`.
 4. If the database is empty (total: 0), skip to working -- memories will accumulate naturally from the triggers below.
@@ -36,7 +36,7 @@ Embeddings are auto-generated at store time -- just provide the text content and
 - Session-specific context (current file paths, variable names, temp state)
 - Trivially re-discoverable information (file locations, function signatures)
 - Anything you're uncertain about -- verify first, store after
-- Don't worry about storing duplicates -- memori auto-merges similar memories of the same type
+- Don't worry about storing duplicates -- memori auto-merges similar memories of the same type (note: tagging a memory shifts its embedding vector, so identical content stored later may create a new entry instead of deduplicating against a heavily-tagged original)
 
 ### When to Search
 
@@ -83,6 +83,7 @@ Bad: (3 paragraphs reproducing an entire investigation) -- store the conclusion,
 | Command | Purpose |
 |---------|---------|
 | `memori context "<topic>"` | Load relevant + recent + frequent + stale memories + stats |
+| `memori context "<topic>" --compact` | Minimal flat JSON for agent consumption (saves tokens) |
 | `memori store "<text>" --meta '{"type": "..."}'` | Store with typed metadata (auto-embeds, auto-dedup) |
 | `memori search --text "<query>"` | Hybrid search (FTS5 + vector, auto-vectorizes) |
 | `memori search --text "<query>" --text-only` | FTS5-only search (faster, no embedding) |
@@ -93,7 +94,7 @@ Bad: (3 paragraphs reproducing an entire investigation) -- store the conclusion,
 | `memori list --before/--after <ISO date>` | List filtered by creation date |
 | `memori related <id> --limit 5` | Find memories similar to a given one |
 | `memori update <id> --content/--meta` | Correct or enrich (metadata merged by default, `--replace` for full replacement) |
-| `memori tag <id> key=value ...` | Merge key-value tags into metadata |
+| `memori tag <id> key=value ...` | Merge key-value tags into metadata (auto-types: `42`->int, `3.14`->float, `true`/`false`->bool) |
 | `memori get <id>` | Read full memory by ID (vectors stripped by default) |
 | `memori delete <id>` | Remove single memory |
 | `memori embed` | Backfill embeddings on old memories |
@@ -102,4 +103,4 @@ Bad: (3 paragraphs reproducing an entire investigation) -- store the conclusion,
 | `memori export > backup.jsonl` | JSONL backup to stdout |
 | `memori import < backup.jsonl` | Restore from JSONL (preserves access stats) |
 | `memori stats` | DB size, memory count, type distribution, embedding coverage |
-<!-- memori:end -->
+<!-- memori:end v0.6.0 -->

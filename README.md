@@ -114,8 +114,8 @@ a1c2d3e4 [0.4521] WAL mode enables concurrent reads with single writer.  meta={"
 ### Tag memories with key=value pairs
 
 ```bash
-$ memori tag b338b67f verified=true severity=high
-Tagged b338b67f-b40b-4243-9219-2a2375e3d249: {'severity': 'high', 'topic': 'sqlite', 'type': 'debugging', 'verified': 'true'}
+$ memori tag b338b67f verified=true severity=high count=3
+Tagged b338b67f-b40b-4243-9219-2a2375e3d249: {'count': 3, 'severity': 'high', 'topic': 'sqlite', 'type': 'debugging', 'verified': True}
 ```
 
 ### Context loading (one call for session start)
@@ -223,6 +223,7 @@ memori search --text "query" --include-vectors  # include embedding data
 memori context "topic"                  # load relevant + recent + stats
 memori context "topic" --limit 5        # fewer relevant matches
 memori context "topic" --project myapp  # scoped to metadata.project
+memori context "topic" --compact        # minimal flat JSON for agents
 ```
 
 ### Get / Update / Tag / Delete
@@ -236,7 +237,7 @@ memori update <id> --meta '{"key": "value"}'  # merged by default
 memori update <id> --meta '{"key": "value"}' --replace  # replace all metadata
 memori update <id> --vector '[1.0, 0.0, ...]'  # explicit vector replacement
 
-memori tag <id> verified=true topic=fts5
+memori tag <id> verified=true topic=fts5 count=42  # auto-types: bool, str, int
 
 memori delete <id>
 ```
@@ -290,12 +291,12 @@ memori ui --port 9000        # custom port
 memori ui --no-open          # don't auto-open browser
 ```
 
-Browse, search, and visualize your memory database in a dark-themed web dashboard. Read-only -- UI browsing does not inflate access counts. Features: search with 300ms debounce, type/sort/date filters, interactive type donut chart, timeline scatter plot (capped at 500 memories), memory detail panel, and D3 force-directed connection graph (2-hop traversal from any memory). Charts require internet (Chart.js and D3 loaded from CDN); the memory list works offline.
+Browse, search, and visualize your memory database in a dark-themed web dashboard. Read-only -- UI browsing does not inflate access counts. Features: search with 300ms debounce, type/sort/date filters, interactive type donut chart, timeline scatter plot (capped at 500 memories), memory detail panel, and D3 force-directed connection graph (2-hop traversal from any memory). Charts require internet (Chart.js and D3 loaded from CDN) -- a "Charts require internet connection" banner shows when offline instead of silent failure. The memory list works offline.
 
 ### Setup
 
 ```bash
-memori setup          # inject snippet into CLAUDE.md
+memori setup          # inject snippet into CLAUDE.md (auto-updates stale versions)
 memori setup --show   # preview snippet
 memori setup --undo   # remove snippet
 ```
