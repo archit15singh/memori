@@ -199,6 +199,7 @@ Global options work before or after the subcommand.
 
 ```bash
 memori store "memory text" --meta '{"type": "debugging"}'
+memori store "text" --vector '[1.0, 0.0, ...]'  # explicit embedding
 memori store "text" --no-embed          # skip auto-embedding
 memori store "text" --no-dedup          # skip dedup check
 memori store "text" --dedup-threshold 0.95  # stricter dedup (default: 0.92)
@@ -233,6 +234,7 @@ memori get <id> --include-vectors
 memori update <id> --content "new text"
 memori update <id> --meta '{"key": "value"}'  # merged by default
 memori update <id> --meta '{"key": "value"}' --replace  # replace all metadata
+memori update <id> --vector '[1.0, 0.0, ...]'  # explicit vector replacement
 
 memori tag <id> verified=true topic=fts5
 
@@ -325,6 +327,9 @@ results = db.search(text="query", before=1772000000.0, after=1771000000.0)
 mem = db.get("abc123")  # 6+ char prefix
 mem = db.get("abc12345-full-uuid-here")
 
+# Get without bumping access_count (read-only, used by dashboard)
+mem = db.get_readonly("abc123")
+
 # Related (find similar by vector)
 similar = db.related("abc123", limit=5)
 
@@ -361,6 +366,79 @@ vec = db.embed("some text")              # raw 384-dim embedding vector
 # Maintenance
 db.vacuum()
 ```
+
+## Performance
+
+> **Benchmarked on**: Apple M4 Pro (14-core CPU, 48 GB RAM), macOS Sequoia.
+
+Latency benchmarks use in-memory SQLite with deterministic seeding (no disk I/O variance). Measured with [Criterion.rs](https://github.com/bheisler/criterion.rs) on pre-computed 384-dim vectors -- embedding model latency excluded except in dedicated embedding benchmarks.
+
+### Search & CRUD Latency
+
+| Operation | 1,000 | 10,000 | 100,000 | 500,000 |
+|---|---|---|---|---|
+| get (UUID) | 43 µs | 60 µs | 183 µs | 47 µs |
+| get (prefix†) | 65 µs | 257 µs | 2.15 ms | 12.5 ms |
+| insert (no embed) | 83 µs | 95 µs | 177 µs | 45 µs |
+| count | 636 ns | 1.1 µs | 11.1 µs | 71 µs |
+| list (limit 20) | 1.05 ms | 11.5 ms | 123 ms | 621 ms |
+| text search (FTS5) | 65 µs | 171 µs | 1.49 ms | 7.5 ms |
+| vector search | 1.00 ms | 14.7 ms | 172 ms | 904 ms |
+| hybrid search (RRF) | 1.12 ms | 14.0 ms | 162 ms | 913 ms |
+| filtered vector search | 154 µs | 1.54 ms | 22.9 ms | 130 ms |
+
+*†Prefix = 8 chars at ≤100K, 12 chars at 500K (8-char prefixes collide above ~100K UUIDs via birthday paradox).*
+
+### Memory Efficiency
+
+Measured with file-backed SQLite (realistic storage), scaling from 1K to 1M memories.
+
+| Memories | DB Size | Per-Memory | Write Throughput |
+|---|---|---|---|
+| 1,000 | 4.3 MB | 4.4 KB | 8,100/s |
+| 10,000 | 42.5 MB | 4.4 KB | 7,200/s |
+| 100,000 | 424.6 MB | 4.3 KB | 6,400/s |
+| 500,000 | 2.07 GB | 4.3 KB | 5,700/s |
+| 1,000,000 | 4.15 GB | 4.3 KB | 4,200/s |
+
+*Each memory: ~100 words of content + 384-dim embedding vector + JSON metadata. DB file measured after VACUUM. Write throughput = inserts/sec including FTS5 indexing. SQLite reads pages on demand -- the full DB is never loaded into RAM.*
+
+### Single-Op Latency
+
+| Operation | Latency |
+|---|---|
+| cosine_similarity (384-dim) | 213 ns |
+| vec_to_blob / blob_to_vec | <40 ns |
+| embed_text (AllMiniLM-L6-V2) | 9 ms |
+| embed_batch (10 texts) | 133 ms |
+| embed_batch (100 texts) | 963 ms |
+| insert + auto-embed | 18 ms |
+
+<details>
+<summary>Reproduce these benchmarks</summary>
+
+```bash
+# Run all Rust benchmarks (~30 min with 500K scale)
+cargo bench -p memori-core
+
+# Run specific benchmark group
+cargo bench -p memori-core --bench search_bench    # search at 1K/10K/100K/500K
+cargo bench -p memori-core --bench crud_bench      # CRUD at 1K/10K/100K/500K
+cargo bench -p memori-core --bench vector_ops_bench
+cargo bench -p memori-core --bench embed_bench     # requires embeddings feature
+cargo bench -p memori-core --bench memory_bench    # file size + write throughput (1K-1M)
+
+# Generate markdown table from criterion output
+python3 scripts/bench-table.py
+
+# CLI-level timing (requires: brew install hyperfine)
+bash scripts/bench-cli.sh
+
+# Open HTML reports
+open target/criterion/report/index.html
+```
+
+</details>
 
 ## How It Works
 

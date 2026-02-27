@@ -16,3 +16,28 @@ serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
 thiserror = "1"
 fastembed = { version = "4", optional = true }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+rand = "0.8"
+
+[[bench]]
+name = "search_bench"
+harness = false
+
+[[bench]]
+name = "crud_bench"
+harness = false
+
+[[bench]]
+name = "vector_ops_bench"
+harness = false
+
+[[bench]]
+name = "embed_bench"
+harness = false
+required-features = ["embeddings"]
+
+[[bench]]
+name = "memory_bench"
+harness = false
