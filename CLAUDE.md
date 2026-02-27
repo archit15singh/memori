@@ -18,6 +18,16 @@ pytest memori-python/tests/test_memori.py -v
 # Install as CLI tool
 cd memori-python && uv tool install --from . memori
 
+# Benchmarks (criterion + memory)
+cargo bench -p memori-core                          # all benchmarks (~30 min with 500K)
+cargo bench -p memori-core --bench vector_ops_bench  # micro-benchmarks only (~30s)
+cargo bench -p memori-core --bench crud_bench        # CRUD at 1K/10K/100K/500K
+cargo bench -p memori-core --bench search_bench      # search at 1K/10K/100K/500K
+cargo bench -p memori-core --bench embed_bench       # embedding model (slow)
+cargo bench -p memori-core --bench memory_bench      # file size + throughput (1K-1M, ~10 min)
+python3 scripts/bench-table.py                       # criterion JSON -> markdown table
+bash scripts/bench-cli.sh                            # CLI-level timing (needs hyperfine)
+
 # Full verification after changes
 cargo test -p memori-core && cd memori-python && maturin develop && pytest tests/test_memori.py -v
 ```
@@ -60,9 +70,14 @@ Memori struct (lib.rs -- thin facade with prefix ID resolution)
 - **FTS5 triggers fire on rowid, not UUID `id`**: the JOIN in `text_search()` bridges this via `m.rowid = fts.rowid`
 - **FTS5 delete syntax**: `INSERT INTO memories_fts(memories_fts, rowid, content) VALUES('delete', ...)` -- FTS5's documented removal mechanism
 - **Metadata filter is flat equality only**: `build_filter_clause()` in `search.rs` converts JSON to `json_extract()` WHERE clauses -- no nested paths, no operators
-- **Prefix ID resolution**: `LIKE prefix%` on UUID primary key maps to a B-tree range scan. The facade in `lib.rs` wraps get/get_readonly/update/delete/touch/set_access_stats/related with prefix resolution
+- **Prefix ID resolution**: `LIKE prefix%` on UUID primary key maps to a B-tree range scan. The facade in `lib.rs` wraps get/get_readonly/update/delete/touch/set_access_stats/related with prefix resolution. Note: 8-char hex prefixes collide above ~100K UUIDs (birthday paradox on 16^8 space); use longer prefixes at scale
 - **Decay scoring**: logarithmic access boost + exponential time decay (~69 day half-life). `access_count == 0` guard prevents penalizing newly-stored memories
-- **Dedup threshold**: cosine similarity >= 0.92 between same-type memories triggers update instead of insert
+- **Dedup threshold**: cosine similarity > 0.92 between same-type memories triggers update instead of insert (strictly greater-than -- equality does not trigger dedup)
+- **FTS5 vs vector embedding asymmetry**: FTS5 indexes `content || ' ' || COALESCE(metadata, '')` (raw JSON with keys/braces). Vector embedding uses `content + metadata_values_text()` (top-level scalar values only). On initial insert, auto-embed uses content only; on metadata update, re-embeds from `content + scalar metadata values`. FTS5 can match JSON keys, vector search cannot.
+- **Hybrid search over-fetches**: RRF fusion retrieves `3 * limit` candidates from each sub-search before rank fusion and truncation.
+- **List sort is always DESC**: `storage::list()` hardcodes `ORDER BY ... DESC` -- no ASC option.
+- **FTS5 query sanitization**: `sanitize_fts_query()` in `search.rs` wraps each token in double quotes to force literal matching, preventing FTS5 operator injection (hyphens, colons, asterisks).
+- **CLI exit codes**: 0 = success, 1 = not found, 2 = user input error (invalid JSON, bad date, missing args).
 
 ## Common Change Workflows
 
@@ -76,7 +91,7 @@ Memori struct (lib.rs -- thin facade with prefix ID resolution)
 Add a new arm to the `match` in `search.rs::search()`. Follow existing pattern: take `conn`, query params, `filter`, `limit`, return `Result<Vec<Memory>>`.
 
 ### Adding a CLI subcommand
-Add a `cmd_<name>()` function and wire it into the argparse subparser in `memori-python/python/memori_cli/__init__.py`. Entry point is `main()` at line ~870.
+Add a `cmd_<name>()` function and wire it into the argparse subparser in `memori-python/python/memori_cli/__init__.py`. Entry point is `main()` at line ~895.
 
 ## Testing Patterns
 
@@ -101,4 +116,15 @@ When making changes to the codebase, always update `CLAUDE.md` and `README.md` t
 | `memori-python/python/memori_cli/__init__.py` | CLI (argparse, 18 subcommands) |
 | `memori-python/python/memori_cli/data/dashboard.html` | Single-file web dashboard (Chart.js + D3) |
 | `memori-python/pyproject.toml` | Maturin build config, version, CLI entry point |
+| `memori-core/src/embed.rs` | fastembed model init, lazy OnceLock singleton, `embed_text()` / `embed_batch()` |
+| `memori-core/src/util.rs` | `cosine_similarity`, `vec_to_blob`/`blob_to_vec` (unsafe pointer casts) |
+| `memori-core/tests/integration_test.rs` | 57 integration tests, `open_temp()` helper |
+| `memori-core/benches/common/mod.rs` | Benchmark corpus generator, DB seeding helpers |
+| `memori-core/benches/search_bench.rs` | Vector/text/hybrid/filtered search benchmarks (1K/10K/100K) |
+| `memori-core/benches/crud_bench.rs` | Insert/get/delete/list/count benchmarks (1K/10K/100K) |
+| `memori-core/benches/vector_ops_bench.rs` | cosine_similarity, vec/blob conversion, find_duplicate |
+| `memori-core/benches/embed_bench.rs` | Embedding model benchmarks (feature-gated) |
+| `memori-core/benches/memory_bench.rs` | DB file size + write throughput (1K-1M, standalone) |
+| `scripts/bench-table.py` | Parse criterion JSON output into README markdown table |
+| `scripts/bench-cli.sh` | CLI-level timing with hyperfine |
 | `memori_dev.md` | Developer reference (arch decisions, change workflows) |
