@@ -114,27 +114,25 @@ Add a `cmd_<name>()` function and wire it into the argparse subparser in `memori
 
 ### E2E Agent Simulation Testing
 
-Beyond automated tests, memori should be validated by using it as a real Claude Code agent would during a natural work session. This tests the full workflow holistically -- not just individual commands, but the sequence, context, and decision-making the snippet guides.
+Beyond automated tests, memori should be validated by acting as a real Claude Code agent -- using the tool naturally during a work session, not running a test script. The goal is to verify the full workflow holistically: does the snippet guide the agent to the right actions, does the output help the agent self-correct on errors, and do the commands compose well in a realistic sequence?
 
-**Methodology**: Use `memori --db /tmp/memori-e2e.db` (fresh temp DB) and follow the snippet's instructions literally:
+**Approach**: Use a fresh temp DB (`--db /tmp/...`) and simulate a multi-session workflow. Follow the snippet's triggers naturally -- store after fixing bugs, search before investigating, tag to enrich, purge scratch notes.
 
-1. **Session start**: `memori context "<topic>"` -- verify empty DB returns graceful output, populated DB surfaces relevant memories at the top
-2. **Store across all 8 types**: debugging (after fixing a bug), decision (after choosing between approaches), architecture (after mapping code), preference (user stated), pattern (reusable across 2+ cases), fact (stable non-obvious), roadmap (unfinished work), temporary (scratch notes)
-3. **Next session simulation**: Run `context` again with a different topic -- verify past memories are surfaced, top result is semantically relevant
-4. **Tag with typed values**: `tag <id> count=3 verified=true score=0.95 status=reviewed` -- verify int/float/bool/string coercion in output
-5. **Search by typed metadata**: `search --filter '{"count": 3}'` -- verify integer filter matches integer tag value (would fail in v0.5 where all tags were strings)
-6. **Update + access inflation check**: `update <id> --meta '{"status": "shipped"}'`, then `get <id>` -- verify `access_count` was NOT inflated by the update itself
-7. **Dedup behavior**: Store identical content -- should return `"status": "deduplicated"`. Store with `--no-dedup` -- should create new. Store after tagging original -- may create new (vector drift from re-embedding with metadata)
-8. **Related**: `related <id> --limit 3` -- verify results are semantically sensible (same-domain memories rank higher)
-9. **Purge lifecycle**: `purge --type temporary` (dry-run), then `--confirm` -- verify count decreases
-10. **Export/import round-trip**: `export > backup.jsonl`, `import --new-ids < backup.jsonl` into fresh DB -- verify content preserved, IDs differ
-11. **Error paths with --json**: bad JSON, bad date, missing args, not found -- verify structured `{"error": "...", "message": "..."}` on stderr with correct exit codes (1=not found, 2=input error)
-12. **--compact context**: `context "<topic>" --compact` -- verify minimal flat JSON with 8-char IDs, no timestamps
-13. **--help epilogs**: `search --help`, `context --help` -- verify examples shown
+**What to verify (goals, not commands)**:
+- Session start on empty DB is graceful, populated DB surfaces relevant memories by topic
+- All 8 memory types can be stored and retrieved by type filter
+- Simulated "next session" context retrieval ranks semantically relevant memories highest
+- Tag type coercion works end-to-end (values round-trip correctly through store -> tag -> search filter)
+- Mutations (update, tag, delete) do not inflate access_count as a side effect
+- Dedup triggers on identical content, skips on `--no-dedup`, and may miss after heavy tagging (vector drift -- see Non-Obvious Constraints)
+- Related memories are semantically sensible (same-domain ranks higher)
+- Export/import round-trips preserve content and access stats
+- Every error path produces output that lets the agent self-correct without consulting docs (the error message itself is the documentation)
+- `--help` on any subcommand provides enough context to use it correctly
 
-**Known edge cases discovered via E2E testing**:
-- Dedup drift after tagging: tagging re-embeds the vector, so identical content stored later may not dedup against a heavily-tagged original
-- `--raw` output goes to stdout, `--json` errors go to stderr -- piping `get --raw | python3 ...` fails silently if the memory isn't found (empty stdout, error on stderr)
+**Known edge cases**:
+- Tagging re-embeds the vector (content + scalar metadata values), so identical content stored later may not dedup against a heavily-tagged original
+- `--json` errors go to stderr, success output to stdout -- piping can silently swallow errors if not checked
 
 ## Documentation Maintenance
 
