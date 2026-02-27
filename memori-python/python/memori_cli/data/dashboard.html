@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memori Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-tertiary: #1c2128;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --text-dim: #484f58;
+    --accent: #58a6ff;
+    --accent-hover: #79c0ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --pink: #f778ba;
+    --cyan: #39d2c0;
+    --yellow: #e3b341;
+    --mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', ui-monospace, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    overflow-x: hidden;
+  }
+
+  /* Top bar */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 24px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .topbar .logo {
+    font-weight: 700;
+    font-size: 17px;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+    white-space: nowrap;
+  }
+  .topbar .logo span { color: var(--text-dim); font-weight: 400; font-size: 12px; margin-left: 8px; }
+  .search-box {
+    flex: 1;
+    max-width: 480px;
+    position: relative;
+  }
+  .search-box input {
+    width: 100%;
+    padding: 9px 12px 9px 38px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: var(--sans);
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .search-box input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88,166,255,0.1); }
+  .search-box input::placeholder { color: var(--text-dim); }
+  .search-box .icon {
+    position: absolute;
+    left: 11px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-dim);
+    pointer-events: none;
+    display: flex;
+  }
+  .filters {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-left: auto;
+  }
+  select, .date-input {
+    padding: 7px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+    font-family: var(--sans);
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  select:focus, .date-input:focus { border-color: var(--accent); }
+  .date-input { width: 130px; }
+  .date-input::-webkit-datetime-edit-text,
+  .date-input::-webkit-datetime-edit-month-field,
+  .date-input::-webkit-datetime-edit-day-field,
+  .date-input::-webkit-datetime-edit-year-field { color: var(--text-muted); }
+  .date-input::-webkit-calendar-picker-indicator { filter: invert(0.5); cursor: pointer; }
+
+  /* Layout */
+  .layout {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    grid-template-rows: auto 1fr;
+    height: calc(100vh - 53px);
+  }
+
+  /* Sidebar */
+  .sidebar {
+    grid-row: 1 / -1;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border);
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .stat-card {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .stat-block h3 {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  .stat-number {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1;
+    font-family: var(--mono);
+  }
+  .stat-sub {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    font-family: var(--mono);
+  }
+  .chart-container {
+    position: relative;
+    width: 100%;
+    max-height: 160px;
+  }
+  .type-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    margin-top: 10px;
+  }
+  .type-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+  .type-legend-item:hover { color: var(--text); }
+  .type-legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Main area */
+  .main-area {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Memory list */
+  .memory-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px;
+  }
+  .memory-list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .memory-card {
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s, transform 0.15s;
+    background: var(--bg-secondary);
+  }
+  .memory-card:hover { border-color: #3d444d; background: var(--bg-tertiary); transform: translateY(-1px); }
+  .memory-card.active { border-color: var(--accent); background: var(--bg-tertiary); }
+  .memory-card .top-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .type-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+  }
+  .memory-card .id-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .memory-card .score-badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--orange);
+    margin-left: auto;
+  }
+  .memory-card .preview {
+    font-size: 13px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .memory-card .meta-row {
+    display: flex;
+    gap: 12px;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 6px;
+  }
+  .pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .pagination button {
+    padding: 6px 14px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .pagination button:hover:not(:disabled) { border-color: var(--accent); }
+  .pagination button:disabled { opacity: 0.4; cursor: default; }
+  .pagination .page-info { font-size: 12px; color: var(--text-muted); }
+
+  /* Detail panel */
+  .detail-panel {
+    display: none;
+    border-top: 1px solid var(--border);
+    background: var(--bg-secondary);
+    overflow-y: auto;
+    max-height: 50vh;
+    padding: 20px;
+  }
+  .detail-panel.open { display: block; }
+  .detail-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .detail-header .detail-id {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+  }
+  .detail-header .close-btn {
+    margin-left: auto;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-muted);
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .detail-header .close-btn:hover { color: var(--text); border-color: var(--text-muted); }
+  .detail-content {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin-bottom: 16px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .detail-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .detail-meta-item {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+  }
+  .detail-meta-item .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    margin-bottom: 2px;
+  }
+  .detail-meta-item .value {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+  }
+  .explore-btn {
+    padding: 8px 16px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: background 0.15s;
+  }
+  .explore-btn:hover { background: rgba(88, 166, 255, 0.1); }
+  .related-list {
+    margin-top: 16px;
+  }
+  .related-list h4 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+  .related-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 4px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .related-item:hover { border-color: var(--accent); }
+  .related-item .sim { font-family: var(--mono); font-size: 11px; color: var(--green); white-space: nowrap; }
+
+  /* Visualization area */
+  .viz-area {
+    display: none;
+    border-top: 1px solid var(--border);
+    padding: 16px;
+    background: var(--bg);
+  }
+  .viz-area.open { display: block; }
+  .viz-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .viz-header h3 {
+    font-size: 14px;
+    color: var(--text);
+  }
+  .viz-close {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-muted);
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .viz-close:hover { color: var(--text); border-color: var(--text-muted); }
+  #graph-container {
+    width: 100%;
+    height: 400px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--bg-secondary);
+  }
+  #graph-container svg { width: 100%; height: 100%; }
+
+  /* Timeline chart */
+  .timeline-chart-container {
+    height: 160px;
+    position: relative;
+  }
+
+  /* Loading / empty */
+  .loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+  .empty-state {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-dim);
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">memori<span>dashboard</span></div>
+  <div class="search-box">
+    <span class="icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11.5 7a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM10.68 11.39a6 6 0 1 1 .71-.71l3.96 3.96a.5.5 0 0 1-.71.71l-3.96-3.96Z" fill="currentColor"/></svg></span>
+    <input type="text" id="searchInput" placeholder="Search memories..." autocomplete="off">
+  </div>
+  <div class="filters">
+    <select id="typeFilter"><option value="">All types</option></select>
+    <select id="sortFilter">
+      <option value="created">Created</option>
+      <option value="updated">Updated</option>
+      <option value="accessed">Accessed</option>
+      <option value="count">Access count</option>
+    </select>
+    <input type="date" class="date-input" id="afterDate" title="After date">
+    <input type="date" class="date-input" id="beforeDate" title="Before date">
+  </div>
+</div>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="stat-card">
+      <div class="stat-block">
+        <h3>Total Memories</h3>
+        <div class="stat-number" id="totalCount">--</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-block">
+        <h3>Embedding Coverage</h3>
+        <div class="stat-number" id="embedPct">--</div>
+        <div class="stat-sub" id="embedDetail"></div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-block">
+        <h3>Types</h3>
+        <div class="chart-container">
+          <canvas id="typeChart"></canvas>
+        </div>
+        <div class="type-legend" id="typeLegend"></div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-block">
+        <h3>Timeline</h3>
+        <div class="timeline-chart-container">
+          <canvas id="timelineChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="main-area">
+    <div class="memory-list-header">
+      <span id="listLabel">Memories</span>
+      <span id="listCount"></span>
+    </div>
+    <div class="memory-list" id="memoryList">
+      <div class="loading">Loading...</div>
+    </div>
+    <div class="pagination">
+      <button id="prevBtn" disabled>Prev</button>
+      <span class="page-info" id="pageInfo"></span>
+      <button id="nextBtn" disabled>Next</button>
+    </div>
+
+    <div class="detail-panel" id="detailPanel">
+      <div class="detail-header">
+        <span class="detail-id" id="detailId"></span>
+        <button class="close-btn" id="closeDetail">Close</button>
+      </div>
+      <div class="detail-content" id="detailContent"></div>
+      <div class="detail-meta" id="detailMeta"></div>
+      <button class="explore-btn" id="exploreBtn">Explore Connections</button>
+      <div class="related-list" id="relatedList" style="display:none">
+        <h4>Related Memories</h4>
+        <div id="relatedItems"></div>
+      </div>
+    </div>
+
+    <div class="viz-area" id="vizArea">
+      <div class="viz-header">
+        <h3>Connection Graph</h3>
+        <button class="viz-close" id="vizClose">Close</button>
+      </div>
+      <div id="graph-container"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const TYPE_COLORS = {
+  debugging: '#f85149',
+  decision: '#58a6ff',
+  architecture: '#bc8cff',
+  pattern: '#39d2c0',
+  preference: '#d29922',
+  fact: '#3fb950',
+  roadmap: '#f778ba',
+  temporary: '#8b949e',
+};
+const DEFAULT_TYPE_COLOR = '#484f58';
+
+function typeColor(t) {
+  return TYPE_COLORS[t] || DEFAULT_TYPE_COLOR;
+}
+
+function relTime(ts) {
+  if (!ts) return '--';
+  const d = new Date(ts * 1000);
+  const now = Date.now();
+  const diff = (now - d.getTime()) / 1000;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  if (diff < 2592000) return Math.floor(diff / 86400) + 'd ago';
+  return d.toLocaleDateString();
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// State
+let state = {
+  memories: [],
+  offset: 0,
+  limit: 50,
+  searchMode: false,
+  selectedId: null,
+  stats: null,
+};
+
+// API
+async function api(path) {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error(`API error: ${r.status}`);
+  return r.json();
+}
+
+// Stats
+async function loadStats() {
+  const data = await api('/api/stats');
+  state.stats = data;
+  document.getElementById('totalCount').textContent = data.count;
+  const emb = data.embedding;
+  if (emb.total > 0) {
+    const pct = Math.round(emb.embedded * 100 / emb.total);
+    document.getElementById('embedPct').textContent = pct + '%';
+    document.getElementById('embedDetail').textContent = `${emb.embedded} / ${emb.total}`;
+  } else {
+    document.getElementById('embedPct').textContent = '0%';
+    document.getElementById('embedDetail').textContent = '0 / 0';
+  }
+
+  // Populate type filter
+  const sel = document.getElementById('typeFilter');
+  sel.innerHTML = '<option value="">All types</option>';
+  const types = Object.entries(data.types).sort((a, b) => b[1] - a[1]);
+  for (const [t, c] of types) {
+    const opt = document.createElement('option');
+    opt.value = t;
+    opt.textContent = `${t} (${c})`;
+    sel.appendChild(opt);
+  }
+
+  renderTypeChart(data.types);
+  renderTypeLegend(data.types);
+}
+
+// Type legend
+function renderTypeLegend(types) {
+  const legend = document.getElementById('typeLegend');
+  const entries = Object.entries(types).sort((a, b) => b[1] - a[1]);
+  legend.innerHTML = entries.map(([t, c]) =>
+    `<div class="type-legend-item" data-type="${t}">
+      <span class="type-legend-dot" style="background:${typeColor(t)}"></span>
+      <span>${t}</span>
+      <span style="color:var(--text-dim)">${c}</span>
+    </div>`
+  ).join('');
+  legend.querySelectorAll('.type-legend-item').forEach(item => {
+    item.addEventListener('click', () => {
+      document.getElementById('typeFilter').value = item.dataset.type;
+      onFilterChange();
+    });
+  });
+}
+
+// Type donut chart
+let typeChartInstance = null;
+function renderTypeChart(types) {
+  const entries = Object.entries(types).sort((a, b) => b[1] - a[1]);
+  if (!entries.length) return;
+  const labels = entries.map(e => e[0]);
+  const values = entries.map(e => e[1]);
+  const colors = labels.map(l => typeColor(l));
+
+  if (typeChartInstance) typeChartInstance.destroy();
+  typeChartInstance = new Chart(document.getElementById('typeChart'), {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{ data: values, backgroundColor: colors, borderColor: '#0d1117', borderWidth: 2 }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '60%',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1c2128',
+          titleColor: '#e6edf3',
+          bodyColor: '#8b949e',
+          borderColor: '#30363d',
+          borderWidth: 1,
+        },
+      },
+      onClick: (e, elements) => {
+        if (elements.length) {
+          const idx = elements[0].index;
+          const type = labels[idx];
+          document.getElementById('typeFilter').value = type;
+          onFilterChange();
+        }
+      },
+    },
+  });
+}
+
+// Timeline chart
+let timelineChartInstance = null;
+function renderTimelineChart(memories) {
+  if (timelineChartInstance) timelineChartInstance.destroy();
+  if (!memories.length) return;
+
+  const points = memories.map(m => ({
+    x: new Date(m.created_at * 1000),
+    y: m.access_count || 0,
+    type: (m.metadata && m.metadata.type) || 'unknown',
+  }));
+
+  const byType = {};
+  for (const p of points) {
+    if (!byType[p.type]) byType[p.type] = [];
+    byType[p.type].push(p);
+  }
+
+  const datasets = Object.entries(byType).map(([type, pts]) => ({
+    label: type,
+    data: pts.map(p => ({ x: p.x, y: p.y })),
+    backgroundColor: typeColor(type),
+    pointRadius: 4,
+    pointHoverRadius: 6,
+  }));
+
+  timelineChartInstance = new Chart(document.getElementById('timelineChart'), {
+    type: 'scatter',
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          type: 'time',
+          time: { unit: 'day' },
+          grid: { color: '#21262d' },
+          ticks: { color: '#484f58', font: { size: 10 } },
+        },
+        y: {
+          title: { display: true, text: 'access count', color: '#484f58', font: { size: 10 } },
+          grid: { color: '#21262d' },
+          ticks: { color: '#484f58', font: { size: 10 } },
+          beginAtZero: true,
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1c2128',
+          titleColor: '#e6edf3',
+          bodyColor: '#8b949e',
+          borderColor: '#30363d',
+          borderWidth: 1,
+        },
+      },
+    },
+  });
+}
+
+// Load timeline data (all memories for scatter)
+async function loadTimeline() {
+  try {
+    const data = await api('/api/memories?limit=500&sort=created');
+    renderTimelineChart(data);
+  } catch (e) {
+    // Timeline is optional, don't block on error
+  }
+}
+
+// Memory list
+async function loadMemories() {
+  const list = document.getElementById('memoryList');
+  list.innerHTML = '<div class="loading">Loading...</div>';
+
+  const typeF = document.getElementById('typeFilter').value;
+  const sort = document.getElementById('sortFilter').value;
+  const afterDate = document.getElementById('afterDate').value;
+  const beforeDate = document.getElementById('beforeDate').value;
+
+  let url = `/api/memories?limit=${state.limit}&offset=${state.offset}&sort=${sort}`;
+  if (typeF) url += `&type=${encodeURIComponent(typeF)}`;
+  if (afterDate) {
+    const ts = new Date(afterDate + 'T00:00:00Z').getTime() / 1000;
+    url += `&after=${ts}`;
+  }
+  if (beforeDate) {
+    const ts = new Date(beforeDate + 'T23:59:59Z').getTime() / 1000;
+    url += `&before=${ts}`;
+  }
+
+  const data = await api(url);
+  state.memories = data;
+  state.searchMode = false;
+  renderMemoryList(data);
+  updatePagination(data.length);
+  document.getElementById('listLabel').textContent = 'Memories';
+}
+
+async function doSearch(query) {
+  if (!query.trim()) {
+    state.searchMode = false;
+    state.offset = 0;
+    loadMemories();
+    return;
+  }
+  const list = document.getElementById('memoryList');
+  list.innerHTML = '<div class="loading">Searching...</div>';
+
+  const typeF = document.getElementById('typeFilter').value;
+  const afterDate = document.getElementById('afterDate').value;
+  const beforeDate = document.getElementById('beforeDate').value;
+
+  let url = `/api/search?text=${encodeURIComponent(query)}&limit=50`;
+  if (typeF) url += `&filter=${encodeURIComponent(JSON.stringify({type: typeF}))}`;
+  if (afterDate) {
+    const ts = new Date(afterDate + 'T00:00:00Z').getTime() / 1000;
+    url += `&after=${ts}`;
+  }
+  if (beforeDate) {
+    const ts = new Date(beforeDate + 'T23:59:59Z').getTime() / 1000;
+    url += `&before=${ts}`;
+  }
+
+  const data = await api(url);
+  state.memories = data;
+  state.searchMode = true;
+  state.offset = 0;
+  renderMemoryList(data);
+  updatePagination(data.length);
+  document.getElementById('listLabel').textContent = `Search: "${query}"`;
+}
+
+function renderMemoryList(memories) {
+  const list = document.getElementById('memoryList');
+  if (!memories.length) {
+    list.innerHTML = '<div class="empty-state">No memories found.</div>';
+    document.getElementById('listCount').textContent = '';
+    return;
+  }
+  document.getElementById('listCount').textContent = `${memories.length} shown`;
+
+  let html = '';
+  for (const m of memories) {
+    const mtype = (m.metadata && m.metadata.type) || '';
+    const preview = m.content.length > 120 ? m.content.slice(0, 120) + '...' : m.content;
+    const badge = mtype
+      ? `<span class="type-badge" style="background:${typeColor(mtype)}22;color:${typeColor(mtype)}">${escHtml(mtype)}</span>`
+      : '';
+    const score = m.score != null ? `<span class="score-badge">${m.score.toFixed(4)}</span>` : '';
+    const active = m.id === state.selectedId ? ' active' : '';
+    html += `<div class="memory-card${active}" data-id="${m.id}">
+      <div class="top-row">
+        <span class="id-label">${m.id.slice(0, 8)}</span>
+        ${badge}${score}
+      </div>
+      <div class="preview">${escHtml(preview)}</div>
+      <div class="meta-row">
+        <span>${relTime(m.created_at)}</span>
+        <span>${(m.access_count || 0)} accesses</span>
+      </div>
+    </div>`;
+  }
+  list.innerHTML = html;
+
+  list.querySelectorAll('.memory-card').forEach(card => {
+    card.addEventListener('click', () => openDetail(card.dataset.id));
+  });
+}
+
+function updatePagination(count) {
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const info = document.getElementById('pageInfo');
+  prevBtn.disabled = state.offset === 0;
+  nextBtn.disabled = count < state.limit || state.searchMode;
+  const page = Math.floor(state.offset / state.limit) + 1;
+  info.textContent = state.searchMode ? `${count} results` : `Page ${page}`;
+}
+
+// Detail
+async function openDetail(id) {
+  state.selectedId = id;
+  // Highlight active card
+  document.querySelectorAll('.memory-card').forEach(c => c.classList.toggle('active', c.dataset.id === id));
+
+  const panel = document.getElementById('detailPanel');
+  panel.classList.add('open');
+
+  const data = await api(`/api/memories/${id}`);
+  if (!data || data.error) {
+    document.getElementById('detailContent').textContent = 'Memory not found.';
+    return;
+  }
+
+  document.getElementById('detailId').textContent = data.id;
+  document.getElementById('detailContent').textContent = data.content;
+
+  // Metadata
+  const metaDiv = document.getElementById('detailMeta');
+  let metaHtml = '';
+  const addMeta = (label, value) => {
+    metaHtml += `<div class="detail-meta-item"><div class="label">${label}</div><div class="value">${escHtml(String(value))}</div></div>`;
+  };
+  addMeta('Created', new Date(data.created_at * 1000).toLocaleString());
+  addMeta('Updated', new Date(data.updated_at * 1000).toLocaleString());
+  addMeta('Last Accessed', data.last_accessed ? new Date(data.last_accessed * 1000).toLocaleString() : 'Never');
+  addMeta('Access Count', data.access_count || 0);
+  if (data.metadata) {
+    for (const [k, v] of Object.entries(data.metadata)) {
+      addMeta(k, typeof v === 'object' ? JSON.stringify(v) : v);
+    }
+  }
+  metaDiv.innerHTML = metaHtml;
+
+  // Reset related
+  document.getElementById('relatedList').style.display = 'none';
+  document.getElementById('relatedItems').innerHTML = '';
+  document.getElementById('vizArea').classList.remove('open');
+}
+
+function closeDetail() {
+  state.selectedId = null;
+  document.getElementById('detailPanel').classList.remove('open');
+  document.querySelectorAll('.memory-card').forEach(c => c.classList.remove('active'));
+}
+
+// Related
+async function loadRelated(id) {
+  const container = document.getElementById('relatedItems');
+  container.innerHTML = '<div class="loading">Finding related...</div>';
+  document.getElementById('relatedList').style.display = 'block';
+
+  try {
+    const data = await api(`/api/related/${id}?limit=5`);
+    if (!data.length) {
+      container.innerHTML = '<div class="empty-state">No related memories found.</div>';
+      return;
+    }
+    let html = '';
+    for (const r of data) {
+      const mtype = (r.metadata && r.metadata.type) || '';
+      const preview = r.content.length > 80 ? r.content.slice(0, 80) + '...' : r.content;
+      const badge = mtype
+        ? `<span class="type-badge" style="background:${typeColor(mtype)}22;color:${typeColor(mtype)};font-size:10px">${escHtml(mtype)}</span>`
+        : '';
+      const sim = r.score != null ? `<span class="sim">${r.score.toFixed(4)}</span>` : '';
+      html += `<div class="related-item" data-id="${r.id}">
+        <span class="id-label" style="font-family:var(--mono);font-size:11px;color:var(--text-dim)">${r.id.slice(0, 8)}</span>
+        ${badge}${sim}
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(preview)}</span>
+      </div>`;
+    }
+    container.innerHTML = html;
+    container.querySelectorAll('.related-item').forEach(item => {
+      item.addEventListener('click', () => openDetail(item.dataset.id));
+    });
+  } catch (e) {
+    container.innerHTML = '<div class="empty-state">Error loading related memories.</div>';
+  }
+}
+
+// Connection graph (D3 force-directed)
+async function buildGraph(seedId) {
+  const vizArea = document.getElementById('vizArea');
+  vizArea.classList.add('open');
+  const container = document.getElementById('graph-container');
+  container.innerHTML = '';
+
+  const nodes = new Map();
+  const links = [];
+
+  // Fetch seed memory
+  const seed = await api(`/api/memories/${seedId}`);
+  if (!seed || seed.error) return;
+  nodes.set(seed.id, { id: seed.id, type: (seed.metadata && seed.metadata.type) || 'unknown', content: seed.content, seed: true });
+
+  // First hop
+  let hop1;
+  try {
+    hop1 = await api(`/api/related/${seedId}?limit=5`);
+  } catch (e) {
+    hop1 = [];
+  }
+  for (const r of hop1) {
+    nodes.set(r.id, { id: r.id, type: (r.metadata && r.metadata.type) || 'unknown', content: r.content, seed: false });
+    links.push({ source: seed.id, target: r.id, similarity: r.score || 0 });
+  }
+
+  // Second hop (parallel)
+  const hop2Promises = hop1.map(r =>
+    api(`/api/related/${r.id}?limit=3`).catch(() => [])
+  );
+  const hop2Results = await Promise.all(hop2Promises);
+  for (let i = 0; i < hop1.length; i++) {
+    for (const r of hop2Results[i]) {
+      if (!nodes.has(r.id)) {
+        nodes.set(r.id, { id: r.id, type: (r.metadata && r.metadata.type) || 'unknown', content: r.content, seed: false, hop2: true });
+      }
+      const linkKey = [hop1[i].id, r.id].sort().join('-');
+      if (!links.find(l => [l.source, l.target].sort().join('-') === linkKey)) {
+        links.push({ source: hop1[i].id, target: r.id, similarity: r.score || 0 });
+      }
+    }
+  }
+
+  const nodesArr = Array.from(nodes.values());
+  const width = container.clientWidth;
+  const height = container.clientHeight || 400;
+
+  const svg = d3.select(container).append('svg')
+    .attr('viewBox', `0 0 ${width} ${height}`)
+    .attr('preserveAspectRatio', 'xMidYMid meet');
+
+  const simulation = d3.forceSimulation(nodesArr)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(100))
+    .force('charge', d3.forceManyBody().strength(-300))
+    .force('center', d3.forceCenter(width / 2, height / 2))
+    .force('collision', d3.forceCollide().radius(30));
+
+  const link = svg.append('g')
+    .selectAll('line')
+    .data(links)
+    .join('line')
+    .attr('stroke', '#30363d')
+    .attr('stroke-width', d => 1 + (d.similarity || 0) * 3)
+    .attr('stroke-opacity', 0.6);
+
+  const node = svg.append('g')
+    .selectAll('circle')
+    .data(nodesArr)
+    .join('circle')
+    .attr('r', d => d.seed ? 14 : (d.hop2 ? 7 : 10))
+    .attr('fill', d => typeColor(d.type))
+    .attr('stroke', d => d.seed ? '#e6edf3' : 'none')
+    .attr('stroke-width', d => d.seed ? 2 : 0)
+    .attr('cursor', 'pointer')
+    .call(d3.drag()
+      .on('start', (e, d) => { if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
+      .on('end', (e, d) => { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
+    );
+
+  node.on('click', (e, d) => openDetail(d.id));
+
+  // Tooltips
+  const tooltip = svg.append('g').attr('class', 'tooltip').style('pointer-events', 'none');
+  node.on('mouseenter', (e, d) => {
+    const text = d.content.length > 60 ? d.content.slice(0, 60) + '...' : d.content;
+    tooltip.selectAll('*').remove();
+    tooltip.append('rect')
+      .attr('x', d.x + 16).attr('y', d.y - 12)
+      .attr('width', text.length * 6 + 16).attr('height', 24)
+      .attr('rx', 4)
+      .attr('fill', '#1c2128').attr('stroke', '#30363d');
+    tooltip.append('text')
+      .attr('x', d.x + 24).attr('y', d.y + 3)
+      .attr('fill', '#e6edf3').attr('font-size', '11px').attr('font-family', 'var(--mono)')
+      .text(text);
+  });
+  node.on('mouseleave', () => tooltip.selectAll('*').remove());
+
+  // Label for seed
+  svg.append('text')
+    .attr('x', width / 2).attr('y', 20)
+    .attr('text-anchor', 'middle')
+    .attr('fill', '#8b949e').attr('font-size', '11px')
+    .text(`Connections from ${seedId.slice(0, 8)}`);
+
+  simulation.on('tick', () => {
+    link
+      .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    node
+      .attr('cx', d => d.x).attr('cy', d => d.y);
+  });
+}
+
+// Event wiring
+document.addEventListener('DOMContentLoaded', () => {
+  // Search debounce
+  let searchTimer;
+  document.getElementById('searchInput').addEventListener('input', (e) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => doSearch(e.target.value), 300);
+  });
+
+  // Filters
+  const onFilter = () => {
+    state.offset = 0;
+    if (state.searchMode) {
+      doSearch(document.getElementById('searchInput').value);
+    } else {
+      loadMemories();
+    }
+  };
+  window.onFilterChange = onFilter;
+  document.getElementById('typeFilter').addEventListener('change', onFilter);
+  document.getElementById('sortFilter').addEventListener('change', onFilter);
+  document.getElementById('afterDate').addEventListener('change', onFilter);
+  document.getElementById('beforeDate').addEventListener('change', onFilter);
+
+  // Pagination
+  document.getElementById('prevBtn').addEventListener('click', () => {
+    state.offset = Math.max(0, state.offset - state.limit);
+    loadMemories();
+  });
+  document.getElementById('nextBtn').addEventListener('click', () => {
+    state.offset += state.limit;
+    loadMemories();
+  });
+
+  // Detail
+  document.getElementById('closeDetail').addEventListener('click', closeDetail);
+  document.getElementById('exploreBtn').addEventListener('click', () => {
+    if (state.selectedId) {
+      loadRelated(state.selectedId);
+      buildGraph(state.selectedId);
+    }
+  });
+  document.getElementById('vizClose').addEventListener('click', () => {
+    document.getElementById('vizArea').classList.remove('open');
+  });
+
+  // Boot
+  loadStats();
+  loadMemories();
+  loadTimeline();
+});
+</script>
+</body>
+</html>
