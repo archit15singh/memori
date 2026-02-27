@@ -284,7 +284,7 @@ pub fn update(
 }
 
 /// Raw get without touching access count (avoids infinite recursion in update path)
-pub(crate) fn get_raw(conn: &rusqlite::Connection, id: &str) -> Result<Option<Memory>> {
+pub fn get_raw(conn: &rusqlite::Connection, id: &str) -> Result<Option<Memory>> {
     let mut stmt = conn.prepare(
         "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count
          FROM memories WHERE id = ?1",
