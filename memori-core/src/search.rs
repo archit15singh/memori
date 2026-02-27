@@ -1,48 +1,89 @@
 use rusqlite::params;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::storage::row_to_memory;
-use crate::types::{Memory, Result, SearchQuery};
+use crate::storage::{get_raw, row_to_memory};
+use crate::types::{Memory, MemoriError, Result, SearchQuery};
+use crate::util::{blob_to_vec, cosine_similarity};
 
 const RRF_K: f32 = 60.0;
 
+fn now_secs() -> f64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs_f64()
+}
+
 pub fn search(conn: &rusqlite::Connection, query: SearchQuery) -> Result<Vec<Memory>> {
-    let filter_clause = query.filter.as_ref().map(|f| build_filter_clause(f));
+    let now = now_secs();
+
+    // Build combined filter: metadata filter AND date range filters
+    let mut conditions = Vec::new();
+
+    if let Some(ref filter) = query.filter {
+        let meta_clause = build_filter_clause(filter)?;
+        if meta_clause != "1=1" {
+            conditions.push(meta_clause);
+        }
+    }
+    if let Some(before) = query.before {
+        conditions.push(format!("created_at < {}", before));
+    }
+    if let Some(after) = query.after {
+        conditions.push(format!("created_at > {}", after));
+    }
+
+    let combined_filter = if conditions.is_empty() {
+        None
+    } else {
+        Some(conditions.join(" AND "))
+    };
 
     let results = match (&query.vector, &query.text) {
         (Some(vec), Some(text)) => {
-            hybrid_search(conn, vec, text, filter_clause.as_deref(), query.limit)?
+            hybrid_search(conn, vec, text, combined_filter.as_deref(), query.limit, now)?
         }
         (Some(vec), None) => {
-            vector_search(conn, vec, filter_clause.as_deref(), query.limit)?
+            vector_search(conn, vec, combined_filter.as_deref(), query.limit, now)?
         }
         (None, Some(text)) => {
             #[cfg(feature = "embeddings")]
             {
                 if query.text_only {
-                    text_search(conn, text, filter_clause.as_deref(), query.limit)?
+                    text_search(conn, text, combined_filter.as_deref(), query.limit, now)?
                 } else {
                     let query_vec = crate::embed::embed_text(text);
-                    hybrid_search(conn, &query_vec, text, filter_clause.as_deref(), query.limit)?
+                    hybrid_search(conn, &query_vec, text, combined_filter.as_deref(), query.limit, now)?
                 }
             }
             #[cfg(not(feature = "embeddings"))]
             {
-                text_search(conn, text, filter_clause.as_deref(), query.limit)?
+                text_search(conn, text, combined_filter.as_deref(), query.limit, now)?
             }
         }
         (None, None) => {
-            recent_search(conn, filter_clause.as_deref(), query.limit)?
+            recent_search(conn, combined_filter.as_deref(), query.limit)?
         }
     };
 
     Ok(results)
 }
 
-fn apply_access_boost(base_score: f32, access_count: i64) -> f32 {
+/// Apply access frequency boost with recency decay.
+/// - boost: logarithmic amplification of access count (monotonic but sublinear)
+/// - decay: exponential time decay with ~69 day half-life
+/// - access_count==0 guard: never-accessed memories get no decay penalty
+fn apply_access_boost(base_score: f32, access_count: i64, last_accessed: f64, now: f64) -> f32 {
     let boost = 1.0 + 0.1 * (1.0 + access_count as f32).ln();
-    base_score * boost
+    let decay = if access_count == 0 || last_accessed <= 0.0 {
+        1.0f32 // never accessed: no decay penalty
+    } else {
+        let days_since = ((now - last_accessed) / 86400.0) as f32;
+        (-0.01 * days_since.max(0.0)).exp() // half-life ~69 days
+    };
+    base_score * boost * decay
 }
 
 fn vector_search(
@@ -50,6 +91,7 @@ fn vector_search(
     query_vec: &[f32],
     filter: Option<&str>,
     limit: usize,
+    now: f64,
 ) -> Result<Vec<Memory>> {
     let where_clause = filter.map_or(String::new(), |f| format!("WHERE {}", f));
     let sql = format!(
@@ -66,7 +108,7 @@ fn vector_search(
         let mem = row_to_memory(row)?;
         if let Some(ref vec) = mem.vector {
             let sim = cosine_similarity(query_vec, vec);
-            let boosted = apply_access_boost(sim, mem.access_count);
+            let boosted = apply_access_boost(sim, mem.access_count, mem.last_accessed, now);
             scored.push((mem, boosted));
         }
     }
@@ -99,6 +141,7 @@ fn text_search(
     query_text: &str,
     filter: Option<&str>,
     limit: usize,
+    now: f64,
 ) -> Result<Vec<Memory>> {
     let safe_query = sanitize_fts_query(query_text);
 
@@ -133,9 +176,10 @@ fn text_search(
         let vector_blob: Option<Vec<u8>> = row.get(2)?;
         let metadata_str: Option<String> = row.get(3)?;
         let access_count: i64 = row.get(7)?;
+        let last_accessed: f64 = row.get(6)?;
 
         let base_score = -rank as f32;
-        let boosted = apply_access_boost(base_score, access_count);
+        let boosted = apply_access_boost(base_score, access_count, last_accessed, now);
 
         let mem = Memory {
             id: row.get(0)?,
@@ -144,7 +188,7 @@ fn text_search(
             metadata: metadata_str.and_then(|s| serde_json::from_str(&s).ok()),
             created_at: row.get(4)?,
             updated_at: row.get(5)?,
-            last_accessed: row.get(6)?,
+            last_accessed,
             access_count,
             score: Some(boosted),
         };
@@ -160,12 +204,13 @@ fn hybrid_search(
     query_text: &str,
     filter: Option<&str>,
     limit: usize,
+    now: f64,
 ) -> Result<Vec<Memory>> {
     // Get more candidates from each source for better fusion
     let candidate_limit = limit * 3;
 
-    let vec_results = vector_search(conn, query_vec, filter, candidate_limit)?;
-    let text_results = text_search(conn, query_text, filter, candidate_limit)?;
+    let vec_results = vector_search(conn, query_vec, filter, candidate_limit, now)?;
+    let text_results = text_search(conn, query_text, filter, candidate_limit, now)?;
 
     // Build rank maps (1-indexed)
     let mut vec_ranks: HashMap<String, usize> = HashMap::new();
@@ -233,61 +278,62 @@ fn recent_search(
     Ok(results)
 }
 
-fn build_filter_clause(filter: &Value) -> String {
+/// Find memories similar to a given memory by its ID.
+/// Uses the source memory's vector to run a vector search, excluding itself.
+pub fn related(conn: &rusqlite::Connection, id: &str, limit: usize) -> Result<Vec<Memory>> {
+    let source = get_raw(conn, id)?
+        .ok_or_else(|| MemoriError::NotFound(id.to_string()))?;
+
+    let source_vec = source.vector
+        .ok_or_else(|| MemoriError::InvalidVector("memory has no embedding".to_string()))?;
+
+    let now = now_secs();
+    let exclude_filter = format!("id != '{}'", id.replace('\'', "''"));
+    vector_search(conn, &source_vec, Some(&exclude_filter), limit, now)
+}
+
+/// Validate that a metadata filter key is a safe identifier.
+/// Keys must match `[a-zA-Z_][a-zA-Z0-9_]*` to prevent SQL injection
+/// through the json_extract path expression.
+fn is_valid_filter_key(key: &str) -> bool {
+    if key.is_empty() {
+        return false;
+    }
+    let mut chars = key.chars();
+    let first = chars.next().unwrap();
+    if !first.is_ascii_alphabetic() && first != '_' {
+        return false;
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+fn build_filter_clause(filter: &Value) -> Result<String> {
     match filter {
         Value::Object(map) => {
-            let conditions: Vec<String> = map
-                .iter()
-                .map(|(key, val)| {
-                    let json_val = match val {
-                        Value::String(s) => format!("'{}'", s.replace('\'', "''")),
-                        Value::Number(n) => n.to_string(),
-                        Value::Bool(b) => {
-                            if *b {
-                                "1".to_string()
-                            } else {
-                                "0".to_string()
-                            }
+            let mut conditions = Vec::with_capacity(map.len());
+            for (key, val) in map {
+                if !is_valid_filter_key(key) {
+                    return Err(MemoriError::InvalidFilter(format!(
+                        "key '{}' must match [a-zA-Z_][a-zA-Z0-9_]*",
+                        key
+                    )));
+                }
+                let json_val = match val {
+                    Value::String(s) => format!("'{}'", s.replace('\'', "''")),
+                    Value::Number(n) => n.to_string(),
+                    Value::Bool(b) => {
+                        if *b {
+                            "1".to_string()
+                        } else {
+                            "0".to_string()
                         }
-                        _ => format!("'{}'", val.to_string().replace('\'', "''")),
-                    };
-                    format!("json_extract(metadata, '$.{}') = {}", key, json_val)
-                })
-                .collect();
-            conditions.join(" AND ")
+                    }
+                    _ => format!("'{}'", val.to_string().replace('\'', "''")),
+                };
+                conditions.push(format!("json_extract(metadata, '$.{}') = {}", key, json_val));
+            }
+            Ok(conditions.join(" AND "))
         }
-        _ => "1=1".to_string(),
+        _ => Ok("1=1".to_string()),
     }
-}
-
-fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    if a.len() != b.len() || a.is_empty() {
-        return 0.0;
-    }
-
-    let mut dot = 0.0f32;
-    let mut norm_a = 0.0f32;
-    let mut norm_b = 0.0f32;
-
-    for i in 0..a.len() {
-        dot += a[i] * b[i];
-        norm_a += a[i] * a[i];
-        norm_b += b[i] * b[i];
-    }
-
-    let denom = norm_a.sqrt() * norm_b.sqrt();
-    if denom == 0.0 {
-        0.0
-    } else {
-        dot / denom
-    }
-}
-
-fn blob_to_vec(b: &[u8]) -> Vec<f32> {
-    assert!(b.len() % 4 == 0);
-    let mut v = vec![0.0f32; b.len() / 4];
-    unsafe {
-        std::ptr::copy_nonoverlapping(b.as_ptr(), v.as_mut_ptr() as *mut u8, b.len());
-    }
-    v
 }

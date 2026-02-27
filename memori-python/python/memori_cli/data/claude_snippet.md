@@ -4,6 +4,7 @@
 Persistent memory across sessions via `memori` CLI. DB at `~/.claude/memori.db`.
 Search matches both content text and metadata values. Embeddings are auto-generated on store -- no manual `--vector` needed.
 Text searches auto-vectorize into hybrid search (FTS5 + cosine) for best results. Use `--text-only` to force FTS5-only when speed matters. Use `--raw` for compact single-line JSON output (saves tokens in pipes).
+IDs can be shortened to unique prefixes (e.g. `memori get a1b2c3d4` instead of the full UUID).
 
 ### Session Start (always do this)
 
@@ -53,6 +54,8 @@ Embeddings are auto-generated at store time -- just provide the text content and
 
 **When scratch/temporary memories accumulate** -- clean up: `memori purge --type temporary` (previews first), then `--confirm` to delete.
 
+**When context shows stale memories** -- review the "Stale Memories" section and delete or update outdated entries. Use `memori related <id>` to find similar memories that might also need updating.
+
 ### Content Quality
 
 Each memory should be **1-3 sentences**: the insight, the context, and optionally the evidence. If you need more, you're storing a document, not a memory -- use a file instead.
@@ -79,13 +82,17 @@ Bad: (3 paragraphs reproducing an entire investigation) -- store the conclusion,
 
 | Command | Purpose |
 |---------|---------|
-| `memori context "<topic>"` | Load relevant + recent memories + type stats |
+| `memori context "<topic>"` | Load relevant + recent + frequent + stale memories + stats |
 | `memori store "<text>" --meta '{"type": "..."}'` | Store with typed metadata (auto-embeds, auto-dedup) |
 | `memori search --text "<query>"` | Hybrid search (FTS5 + vector, auto-vectorizes) |
 | `memori search --text "<query>" --text-only` | FTS5-only search (faster, no embedding) |
 | `memori search --filter '{"type": "..."}'` | Filter by metadata fields |
+| `memori search --text "<q>" --before/--after <ISO date>` | Date-filtered search |
 | `memori --raw search --text "<query>"` | Compact single-line JSON (saves tokens) |
-| `memori update <id> --content/--meta` | Correct or enrich existing memory |
+| `memori list --type <type> --sort <field>` | Browse with sort, pagination, date filters |
+| `memori list --before/--after <ISO date>` | List filtered by creation date |
+| `memori related <id> --limit 5` | Find memories similar to a given one |
+| `memori update <id> --content/--meta` | Correct or enrich (metadata merged by default, `--replace` for full replacement) |
 | `memori tag <id> key=value ...` | Merge key-value tags into metadata |
 | `memori get <id>` | Read full memory by ID (vectors stripped by default) |
 | `memori delete <id>` | Remove single memory |

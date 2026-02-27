@@ -1401,7 +1401,7 @@ dependencies = [
 
 [[package]]
 name = "memori-core"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "fastembed",
  "rusqlite",
@@ -1413,7 +1413,7 @@ dependencies = [
 
 [[package]]
 name = "memori-python"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "memori-core",
  "pyo3",

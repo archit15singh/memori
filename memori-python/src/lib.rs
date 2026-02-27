@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use memori_core::{InsertResult, Memori, Memory, SearchQuery};
+use memori_core::{InsertResult, Memori, Memory, SearchQuery, SortField};
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
@@ -137,55 +137,11 @@ impl PyMemori {
         no_embed: bool,
     ) -> PyResult<PyObject> {
         let meta = metadata.map(pydict_to_value).transpose()?;
-
-        // If no_embed, pass the explicit vector (or None) -- skip auto-embed by
-        // providing a dummy zero-len vector would be wrong, so we handle it in Rust.
-        // Actually, no_embed is handled by passing a vector that's Some([]) to signal
-        // "don't auto-embed". But that would fail cosine similarity. Instead, we
-        // use a feature: if no_embed is true, we pass vector as-is (even if None).
-        // The Rust auto_embed function checks if vector.is_some() to skip.
-        // So if no_embed=true and vector=None, we need a way to tell Rust "don't embed".
-        // Simplest: pass no_embed down. But the Rust API doesn't have that param.
-        // Alternative: when no_embed=true and no vector, just don't embed by
-        // generating a placeholder. Actually the cleanest approach: if no_embed,
-        // skip the vector entirely and Rust won't auto-embed if we don't have the feature.
-        // But we DO have the feature enabled.
-        //
-        // Solution: When no_embed is requested, we pass a fake zero vector to Rust,
-        // which will see vector.is_some() and skip auto-embed. No -- that corrupts the DB.
-        //
-        // Best solution: If no_embed, call insert_with_id to bypass auto-embed,
-        // or restructure the Rust API. Let's just handle it here: embed in Python
-        // if needed, otherwise pass None.
-        //
-        // Actually, the simplest: just call the Rust insert and if no_embed, we skip
-        // by not enabling the feature. But feature is compile-time.
-        //
-        // Real solution: add no_embed to the Rust insert. Let me refactor.
-        // For now: if no_embed=true, use insert_with_id which doesn't dedup/embed.
-        if no_embed {
-            let id = uuid::Uuid::new_v4().to_string();
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs_f64();
-            let result_id = self
-                .inner
-                .lock()
-                .unwrap()
-                .insert_with_id(&id, content, vector.as_deref(), meta, now, now)
-                .map_err(memori_err)?;
-            let dict = PyDict::new_bound(py);
-            dict.set_item("id", result_id)?;
-            dict.set_item("action", "created")?;
-            return Ok(dict.to_object(py));
-        }
-
         let result = self
             .inner
             .lock()
             .unwrap()
-            .insert(content, vector.as_deref(), meta, dedup_threshold)
+            .insert(content, vector.as_deref(), meta, dedup_threshold, no_embed)
             .map_err(memori_err)?;
 
         insert_result_to_dict(py, &result)
@@ -199,19 +155,20 @@ impl PyMemori {
         }
     }
 
-    #[pyo3(signature = (id, content=None, vector=None, metadata=None))]
+    #[pyo3(signature = (id, content=None, vector=None, metadata=None, merge_metadata=true))]
     fn update(
         &self,
         id: &str,
         content: Option<&str>,
         vector: Option<Vec<f32>>,
         metadata: Option<&Bound<'_, PyDict>>,
+        merge_metadata: bool,
     ) -> PyResult<()> {
         let meta = metadata.map(pydict_to_value).transpose()?;
         self.inner
             .lock()
             .unwrap()
-            .update(id, content, vector.as_deref(), meta)
+            .update(id, content, vector.as_deref(), meta, merge_metadata)
             .map_err(memori_err)
     }
 
@@ -219,7 +176,7 @@ impl PyMemori {
         self.inner.lock().unwrap().delete(id).map_err(memori_err)
     }
 
-    #[pyo3(signature = (vector=None, text=None, filter=None, limit=10, text_only=false))]
+    #[pyo3(signature = (vector=None, text=None, filter=None, limit=10, text_only=false, before=None, after=None))]
     fn search(
         &self,
         py: Python<'_>,
@@ -228,6 +185,8 @@ impl PyMemori {
         filter: Option<&Bound<'_, PyDict>>,
         limit: usize,
         text_only: bool,
+        before: Option<f64>,
+        after: Option<f64>,
     ) -> PyResult<Vec<PyObject>> {
         let filter_val = filter.map(pydict_to_value).transpose()?;
         let query = SearchQuery {
@@ -236,12 +195,36 @@ impl PyMemori {
             filter: filter_val,
             limit,
             text_only,
+            before,
+            after,
         };
 
         let results = py.allow_threads(|| {
             self.inner.lock().unwrap().search(query).map_err(memori_err)
         })?;
 
+        results.iter().map(|m| memory_to_dict(py, m)).collect()
+    }
+
+    #[pyo3(signature = (type_filter=None, sort="created", limit=20, offset=0, before=None, after=None))]
+    fn list(
+        &self,
+        py: Python<'_>,
+        type_filter: Option<&str>,
+        sort: &str,
+        limit: usize,
+        offset: usize,
+        before: Option<f64>,
+        after: Option<f64>,
+    ) -> PyResult<Vec<PyObject>> {
+        let sort_field = SortField::from_str(sort)
+            .map_err(|e| PyRuntimeError::new_err(e))?;
+        let results = self
+            .inner
+            .lock()
+            .unwrap()
+            .list(type_filter, &sort_field, limit, offset, before, after)
+            .map_err(memori_err)?;
         results.iter().map(|m| memory_to_dict(py, m)).collect()
     }
 
@@ -343,6 +326,17 @@ impl PyMemori {
             .unwrap()
             .backfill_embeddings(batch_size)
             .map_err(memori_err)
+    }
+
+    #[pyo3(signature = (id, limit=5))]
+    fn related(&self, py: Python<'_>, id: &str, limit: usize) -> PyResult<Vec<PyObject>> {
+        let results = self
+            .inner
+            .lock()
+            .unwrap()
+            .related(id, limit)
+            .map_err(memori_err)?;
+        results.iter().map(|m| memory_to_dict(py, m)).collect()
     }
 
     fn embedding_stats(&self, py: Python<'_>) -> PyResult<PyObject> {

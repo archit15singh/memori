@@ -78,5 +78,20 @@ pub fn init_db(conn: &Connection) -> rusqlite::Result<()> {
     )?;
   }
 
+  // Re-read version after potential v1->v2 migration
+  let version: i32 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
+
+  if version < 3 {
+    // Expression index on metadata $.type for fast filtered queries.
+    // json_extract expression indexes are supported since SQLite 3.9.0.
+    conn.execute_batch(
+      "
+      CREATE INDEX IF NOT EXISTS idx_memories_type
+          ON memories(json_extract(metadata, '$.type'));
+      PRAGMA user_version = 3;
+      ",
+    )?;
+  }
+
   Ok(())
 }
