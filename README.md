@@ -6,19 +6,15 @@ Memori gives Claude Code (and other AI agents) the ability to remember decisions
 
 ## Install
 
-Requires Rust toolchain and Python 3.9+.
+Requires Rust toolchain, Python 3.9+, and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-# Clone and install
 git clone https://github.com/archit-15dev/memori.git
 cd memori/memori-python
 uv tool install --from . memori
-
-# Or with pip/pipx
-pip install maturin
-cd memori/memori-python
-maturin develop
 ```
+
+For the full installation walkthrough (including Claude Code configuration, verification, and troubleshooting), see **[docs/install.md](docs/install.md)**.
 
 ## Claude Code Setup
 
