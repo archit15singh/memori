@@ -91,8 +91,9 @@ def _parse_date_arg(value, use_json=False):
     if dt.tzinfo is None:
       dt = dt.replace(tzinfo=timezone.utc)
     return dt.timestamp()
-  except ValueError as e:
-    _err("invalid_date", f"Invalid date format: {e}", exit_code=2, use_json=use_json)
+  except ValueError:
+    _err("invalid_date", f"Invalid date: '{value}'. Expected ISO format like 2025-01-01 or 2025-01-01T12:00:00",
+         exit_code=2, use_json=use_json)
 
 
 def _resolve_id(db, prefix):
@@ -195,11 +196,8 @@ def cmd_get(args):
       mem.pop("vector", None)
     print(json.dumps(mem, indent=_json_indent(args), default=str))
   else:
-    if args.json:
-      print(json.dumps({"error": "not_found", "id": args.id}), file=sys.stderr)
-    else:
-      print(f"Not found: {args.id}", file=sys.stderr)
-    sys.exit(1)
+    _err("not_found", f"No memory matching '{args.id}' (try 'memori list' to see available memories)",
+         exit_code=1, use_json=args.json, input_id=args.id)
 
 
 def cmd_update(args):
@@ -220,11 +218,8 @@ def cmd_update(args):
   try:
     db.update(args.id, content=content, vector=vector, metadata=meta, merge_metadata=merge)
   except RuntimeError:
-    if args.json:
-      print(json.dumps({"error": "not_found", "id": args.id}), file=sys.stderr)
-    else:
-      print(f"Not found: {args.id}", file=sys.stderr)
-    sys.exit(1)
+    _err("not_found", f"No memory matching '{args.id}'", exit_code=1,
+         use_json=args.json, input_id=args.id)
 
   if args.json:
     print(json.dumps({"id": full_id, "status": "updated"}))
@@ -267,11 +262,8 @@ def cmd_tag(args):
     # merge_metadata=True handles the read-modify-write in Rust
     db.update(args.id, metadata=tags, merge_metadata=True)
   except RuntimeError:
-    if args.json:
-      print(json.dumps({"error": "not_found", "id": args.id}), file=sys.stderr)
-    else:
-      print(f"Not found: {args.id}", file=sys.stderr)
-    sys.exit(1)
+    _err("not_found", f"No memory matching '{args.id}'", exit_code=1,
+         use_json=args.json, input_id=args.id)
 
   # Fetch merged result for display (readonly to avoid inflating access_count)
   mem = db.get_readonly(args.id)
@@ -661,11 +653,8 @@ def cmd_delete(args):
   try:
     db.delete(args.id)
   except RuntimeError:
-    if args.json:
-      print(json.dumps({"error": "not_found", "id": args.id}), file=sys.stderr)
-    else:
-      print(f"Not found: {args.id}", file=sys.stderr)
-    sys.exit(1)
+    _err("not_found", f"No memory matching '{args.id}'", exit_code=1,
+         use_json=args.json, input_id=args.id)
   if args.json:
     print(json.dumps({"id": full_id, "status": "deleted"}))
   else:
@@ -988,6 +977,15 @@ def main():
   parser = argparse.ArgumentParser(
     prog="memori",
     description="Memori -- embedded AI agent memory (SQLite + vector search + FTS5)",
+    epilog="Quick start:\n"
+           "  memori context \"<topic>\"                          # start of session\n"
+           "  memori store \"<insight>\" --meta '{\"type\": \"debugging\"}'  # after fixing a bug\n"
+           "  memori search --text \"<query>\"                    # before investigating\n"
+           "  memori tag <id> verified=true priority=1           # enrich with typed tags\n"
+           "  memori setup                                       # auto-configure Claude Code\n"
+           "\nRun 'memori <command> --help' for details and examples on any command.\n"
+           "Known memory types: debugging, decision, architecture, pattern, preference, fact, roadmap, temporary",
+    formatter_class=argparse.RawDescriptionHelpFormatter,
   )
   parser.add_argument("--db", help=f"Database path (default: {DEFAULT_DB})")
   parser.add_argument("--json", action="store_true", help="Machine-readable JSON output")
@@ -1004,7 +1002,7 @@ def main():
 
   # store
   p_store = sub.add_parser("store", help="Store a memory", parents=[output_parser],
-      epilog="Examples:\n  memori store \"FTS5 hyphens crash MATCH\" --meta '{\"type\": \"debugging\"}'\n  memori store \"prefer dark mode\" --meta '{\"type\": \"preference\"}' --json",
+      epilog="Examples:\n  memori store \"FTS5 hyphens crash MATCH\" --meta '{\"type\": \"debugging\"}'\n  memori store \"prefer dark mode\" --meta '{\"type\": \"preference\"}' --json\n\nKnown types: debugging, decision, architecture, pattern, preference, fact, roadmap, temporary",
       formatter_class=_F)
   p_store.add_argument("content", help="Text content to store")
   p_store.add_argument("--meta", help="JSON metadata object")
