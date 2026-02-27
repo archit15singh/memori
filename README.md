@@ -10,7 +10,7 @@ Requires Rust toolchain and Python 3.9+.
 
 ```bash
 # Clone and install
-git clone https://github.com/archit-singhh/memori.git
+git clone https://github.com/archit-15dev/memori.git
 cd memori/memori-python
 uv tool install --from . memori
 
@@ -290,7 +290,7 @@ memori ui --port 9000        # custom port
 memori ui --no-open          # don't auto-open browser
 ```
 
-Browse, search, and visualize your memory database in a dark-themed web dashboard. Read-only -- UI browsing does not inflate access counts. Features: search with 300ms debounce, type/sort/date filters, interactive type donut chart, timeline scatter plot, memory detail panel, and D3 force-directed connection graph (2-hop traversal from any memory).
+Browse, search, and visualize your memory database in a dark-themed web dashboard. Read-only -- UI browsing does not inflate access counts. Features: search with 300ms debounce, type/sort/date filters, interactive type donut chart, timeline scatter plot (capped at 500 memories), memory detail panel, and D3 force-directed connection graph (2-hop traversal from any memory). Charts require internet (Chart.js and D3 loaded from CDN); the memory list works offline.
 
 ### Setup
 
@@ -311,7 +311,7 @@ db = PyMemori("memories.db")
 result = db.insert("user prefers dark mode", metadata={"type": "preference"})
 # result = {"id": "abc-123...", "action": "created"}
 
-result = db.insert("similar text", dedup_threshold=0.92)
+result = db.insert("similar text", dedup_threshold=0.92)  # must pass explicitly; default is None (no dedup)
 # result = {"id": "abc-123...", "action": "deduplicated"}
 
 result = db.insert("no vector needed", no_embed=True)
@@ -448,7 +448,7 @@ Single SQLite file with WAL journaling. Memories are stored in one table with 8 
 
 ### Embeddings
 
-Auto-generated on insert via [AllMiniLM-L6-V2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) (384 dimensions, ~50ms per memory). Stored as raw f32 BLOBs (~1.5KB each). Feature-gated behind `embeddings` (default on). Model files cached to `.fastembed_cache/` on first use.
+Auto-generated on insert via [AllMiniLM-L6-V2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) (384 dimensions, ~9ms per memory on Apple M4 Pro). Stored as raw f32 BLOBs (~1.5KB each). Feature-gated behind `embeddings` (default on). Model files cached to `.fastembed_cache/` on first use.
 
 ### Search Algorithm
 
@@ -458,6 +458,7 @@ Four modes based on query parameters:
 |-------|------|-------------|
 | `text + vector` | Hybrid (RRF) | Runs both FTS5 and cosine independently, fuses via Reciprocal Rank Fusion (K=60) |
 | `text` only | Hybrid (auto) | Auto-embeds the query text, then runs hybrid search |
+| `text` + `text_only` | Text (FTS5) | Pure FTS5 search, no vectorization -- faster for exact term matching |
 | `vector` only | Vector | Brute-force cosine similarity against all stored vectors |
 | neither | Recent | Returns most recently updated memories |
 

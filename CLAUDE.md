@@ -62,14 +62,14 @@ Memori struct (lib.rs -- thin facade with prefix ID resolution)
 - RRF hybrid fusion (k=60) -- rank-based, not score-based, because cosine similarity and BM25 ranks are on incompatible scales
 - `Mutex<Memori>` in Python bindings because `rusqlite::Connection` is `!Sync` and `py.allow_threads()` releases the GIL during search
 
-**Schema migrations** are tracked via `PRAGMA user_version` (v0 through v3). Each migration is a match arm in `schema.rs::init_db()`.
+**Schema migrations** are tracked via `PRAGMA user_version` (v0 through v3). Each migration is an `if version < N` block in `schema.rs::init_db()`. v0->1: FTS5 + metadata-aware triggers; v1->2: `last_accessed`/`access_count` columns; v2->3: expression index on `json_extract(metadata, '$.type')`.
 
 ## Non-Obvious Constraints
 
 - **Vector BLOB format**: f32 arrays as raw bytes, platform-native byte order. `unsafe` pointer casts in `util.rs`
 - **FTS5 triggers fire on rowid, not UUID `id`**: the JOIN in `text_search()` bridges this via `m.rowid = fts.rowid`
 - **FTS5 delete syntax**: `INSERT INTO memories_fts(memories_fts, rowid, content) VALUES('delete', ...)` -- FTS5's documented removal mechanism
-- **Metadata filter is flat equality only**: `build_filter_clause()` in `search.rs` converts JSON to `json_extract()` WHERE clauses -- no nested paths, no operators
+- **Metadata filter is flat equality only**: `build_filter_clause()` in `search.rs` converts JSON to `json_extract()` WHERE clauses -- no nested paths, no operators. Filter keys are validated by `is_valid_filter_key()` against `[a-zA-Z_][a-zA-Z0-9_]*` -- rejects nested paths and prevents SQL injection.
 - **Prefix ID resolution**: `LIKE prefix%` on UUID primary key maps to a B-tree range scan. The facade in `lib.rs` wraps get/get_readonly/update/delete/touch/set_access_stats/related with prefix resolution. Note: 8-char hex prefixes collide above ~100K UUIDs (birthday paradox on 16^8 space); use longer prefixes at scale
 - **Decay scoring**: logarithmic access boost + exponential time decay (~69 day half-life). `access_count == 0` guard prevents penalizing newly-stored memories
 - **Dedup threshold**: cosine similarity > 0.92 between same-type memories triggers update instead of insert (strictly greater-than -- equality does not trigger dedup)
@@ -78,6 +78,16 @@ Memori struct (lib.rs -- thin facade with prefix ID resolution)
 - **List sort is always DESC**: `storage::list()` hardcodes `ORDER BY ... DESC` -- no ASC option.
 - **FTS5 query sanitization**: `sanitize_fts_query()` in `search.rs` wraps each token in double quotes to force literal matching, preventing FTS5 operator injection (hyphens, colons, asterisks).
 - **CLI exit codes**: 0 = success, 1 = not found, 2 = user input error (invalid JSON, bad date, missing args).
+- **Python vs CLI dedup defaults**: `PyMemori.insert()` defaults `dedup_threshold=None` (no dedup). The CLI defaults to 0.92 unless `--no-dedup` is passed. Callers of the Python API must pass `dedup_threshold=0.92` explicitly to get CLI-equivalent behavior.
+- **CLI `_resolve_id()` inflates access_count**: The helper calls `db.get()` to resolve prefix to full UUID for display, but `get()` bumps access_count as a side effect. `update`, `delete` get +1 spurious bump; `tag` gets +2 (one in `_resolve_id`, one in the final `db.get()` for display).
+- **Tag values are always strings**: `memori tag <id> count=42` stores `"42"` (string), not `42` (integer). Metadata filter `{"count": 42}` won't match -- use `{"count": "42"}`.
+- **Purge AND/OR mismatch**: When both `--before` and `--type` are specified, the dry-run preview uses AND logic (`db.list()` with both filters), but actual deletion runs `delete_before()` then `delete_by_type()` sequentially (OR logic). Actual deletion will remove more memories than preview shows.
+- **Default limit inconsistencies**: CLI search=5, PyO3 search=10, CLI list=20, dashboard list=50, dashboard search=20.
+- **GIL release**: Only `search()` releases the Python GIL via `py.allow_threads()`. `insert()` with auto-embedding, `backfill_embeddings()`, and `related()` hold the GIL during CPU-intensive work.
+- **Export format**: Always JSONL (one JSON object per line) regardless of `--json`/`--raw` flags.
+- **`get_readonly()`**: Reads a memory without bumping access_count or last_accessed. Used by dashboard API to avoid polluting access stats during browsing.
+- **Dashboard requires internet**: Chart.js, D3, and chartjs-adapter-date-fns are loaded from CDN (jsdelivr). No local fallback -- charts and graph fail offline, but memory list still works.
+- **Timeline scatter cap**: Dashboard timeline chart loads max 500 memories -- larger DBs show only the 500 most recently created.
 
 ## Common Change Workflows
 
@@ -95,10 +105,11 @@ Add a `cmd_<name>()` function and wire it into the argparse subparser in `memori
 
 ## Testing Patterns
 
-- **Rust**: 57 integration tests in `memori-core/tests/integration_test.rs` using in-memory SQLite (`:memory:`) via `open_temp()` helper
+- **Rust**: 57 integration tests in `memori-core/tests/integration_test.rs` using in-memory SQLite (`:memory:`) via `open_temp()` helper, plus 7 unit tests in `util.rs` (cosine similarity, vec/blob roundtrip)
 - **Python**: 37 pytest tests in `memori-python/tests/test_memori.py` using `tmp_path` fixture for DB files
-- Both suites test the same behaviors at their respective layers -- no mocking, all real SQLite
+- **Total: 101 tests** (64 Rust + 37 Python) -- no mocking, all real SQLite
 - No CLI-level tests exist (only underlying `PyMemori` methods)
+- Notable untested paths: `backfill_embeddings()`, `get_readonly()`, `vacuum()`, schema migration upgrades, purge AND/OR behavior, all 18 CLI subcommands at the argparse level
 
 ## Documentation Maintenance
 
@@ -128,3 +139,8 @@ When making changes to the codebase, always update `CLAUDE.md` and `README.md` t
 | `scripts/bench-table.py` | Parse criterion JSON output into README markdown table |
 | `scripts/bench-cli.sh` | CLI-level timing with hyperfine |
 | `memori_dev.md` | Developer reference (arch decisions, change workflows) |
+| `memori-python/Cargo.toml` | PyO3 crate config (cdylib, pyo3 0.22, abi3-py39) |
+| `memori-python/python/memori_cli/data/claude_snippet.md` | Snippet injected by `memori setup` (105 lines, marker-wrapped) |
+| `docs/packaging_dev.md` | Open-source packaging strategy and execution plan |
+| `LICENSE` | MIT license |
+| `.claude/settings.json` | Claude Code project permissions |
