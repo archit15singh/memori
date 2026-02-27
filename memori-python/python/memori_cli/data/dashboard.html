@@ -7,6 +7,14 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script>
+if (typeof Chart === 'undefined' || typeof d3 === 'undefined') {
+  document.addEventListener('DOMContentLoaded', function() {
+    var el = document.getElementById('charts-unavailable');
+    if (el) el.style.display = 'block';
+  });
+}
+</script>
 <style>
   :root {
     --bg: #0d1117;
@@ -453,6 +461,7 @@
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
 </style>
+<noscript><style>#charts-unavailable{display:block!important}</style></noscript>
 </head>
 <body>
 
@@ -477,6 +486,9 @@
 
 <div class="layout">
   <div class="sidebar">
+    <div id="charts-unavailable" style="display:none;background:#1c2128;border:1px solid #d29922;border-radius:10px;padding:14px 16px;color:#d29922;font-size:12px;text-align:center">
+      Charts require internet connection (Chart.js + D3 loaded from CDN)
+    </div>
     <div class="stat-card">
       <div class="stat-block">
         <h3>Total Memories</h3>
@@ -586,7 +598,7 @@ function escHtml(s) {
 let state = {
   memories: [],
   offset: 0,
-  limit: 50,
+  limit: 20,
   searchMode: false,
   selectedId: null,
   stats: null,
@@ -803,7 +815,7 @@ async function doSearch(query) {
   const afterDate = document.getElementById('afterDate').value;
   const beforeDate = document.getElementById('beforeDate').value;
 
-  let url = `/api/search?text=${encodeURIComponent(query)}&limit=50`;
+  let url = `/api/search?text=${encodeURIComponent(query)}&limit=10`;
   if (typeF) url += `&filter=${encodeURIComponent(JSON.stringify({type: typeF}))}`;
   if (afterDate) {
     const ts = new Date(afterDate + 'T00:00:00Z').getTime() / 1000;

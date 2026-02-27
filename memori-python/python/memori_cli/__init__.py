@@ -32,7 +32,7 @@ from urllib.parse import parse_qs, urlparse
 
 from memori import PyMemori
 
-__version__ = "0.5.1"
+__version__ = "0.6.0"
 
 DEFAULT_DB = os.path.expanduser("~/.claude/memori.db")
 DEFAULT_DEDUP_THRESHOLD = 0.92
@@ -42,21 +42,34 @@ KNOWN_TYPES = frozenset([
   "preference", "fact", "roadmap", "temporary",
 ])
 
-SNIPPET_START = "<!-- memori:start -->"
-SNIPPET_END = "<!-- memori:end -->"
+SNIPPET_START_PREFIX = "<!-- memori:start"
+SNIPPET_END_PREFIX = "<!-- memori:end"
+SNIPPET_START = f"<!-- memori:start v{__version__} -->"
+SNIPPET_END = f"<!-- memori:end v{__version__} -->"
 
 
 def _get_db(path=None):
   return PyMemori(path or DEFAULT_DB)
 
 
-def _parse_json(value, flag_name):
+def _err(error_type, message, exit_code=1, use_json=False, input_id=None):
+  """Print an error and exit. When use_json is True, emit structured JSON to stderr."""
+  if use_json:
+    obj = {"error": error_type, "message": message}
+    if input_id is not None:
+      obj["id"] = input_id
+    print(json.dumps(obj), file=sys.stderr)
+  else:
+    print(f"{message}", file=sys.stderr)
+  sys.exit(exit_code)
+
+
+def _parse_json(value, flag_name, use_json=False):
   """Parse a JSON string from a CLI flag, exiting with a clean message on failure."""
   try:
     return json.loads(value)
   except json.JSONDecodeError as e:
-    print(f"Invalid JSON for {flag_name}: {e}", file=sys.stderr)
-    sys.exit(2)
+    _err("invalid_json", f"Invalid JSON for {flag_name}: {e}", exit_code=2, use_json=use_json)
 
 
 def _snippet_text():
@@ -71,7 +84,7 @@ def _json_indent(args):
   return None if getattr(args, "raw", False) else 2
 
 
-def _parse_date_arg(value):
+def _parse_date_arg(value, use_json=False):
   """Parse an ISO date string to a Unix timestamp (float)."""
   try:
     dt = datetime.fromisoformat(value)
@@ -79,13 +92,12 @@ def _parse_date_arg(value):
       dt = dt.replace(tzinfo=timezone.utc)
     return dt.timestamp()
   except ValueError as e:
-    print(f"Invalid date format: {e}", file=sys.stderr)
-    sys.exit(2)
+    _err("invalid_date", f"Invalid date format: {e}", exit_code=2, use_json=use_json)
 
 
 def _resolve_id(db, prefix):
-  """Resolve a prefix to full UUID via get(). Returns the full ID or the prefix if unresolvable."""
-  mem = db.get(prefix)
+  """Resolve a prefix to full UUID via get_readonly(). Returns the full ID or the prefix if unresolvable."""
+  mem = db.get_readonly(prefix)
   return mem["id"] if mem else prefix
 
 
@@ -103,9 +115,9 @@ def _warn_unknown_type(meta):
 
 def cmd_store(args):
   db = _get_db(args.db)
-  meta = _parse_json(args.meta, "--meta") if args.meta else None
+  meta = _parse_json(args.meta, "--meta", use_json=args.json) if args.meta else None
   _warn_unknown_type(meta)
-  vector = _parse_json(args.vector, "--vector") if args.vector else None
+  vector = _parse_json(args.vector, "--vector", use_json=args.json) if args.vector else None
 
   # Determine dedup threshold
   dedup_threshold = None
@@ -134,14 +146,14 @@ def cmd_store(args):
 
 def cmd_search(args):
   db = _get_db(args.db)
-  vector = _parse_json(args.vector, "--vector") if args.vector else None
-  filt = _parse_json(args.filter, "--filter") if args.filter else None
+  vector = _parse_json(args.vector, "--vector", use_json=args.json) if args.vector else None
+  filt = _parse_json(args.filter, "--filter", use_json=args.json) if args.filter else None
   text_only = getattr(args, "text_only", False)
   include_vectors = getattr(args, "include_vectors", False)
 
   # Parse date range filters
-  before_ts = _parse_date_arg(args.before) if getattr(args, "before", None) else None
-  after_ts = _parse_date_arg(args.after) if getattr(args, "after", None) else None
+  before_ts = _parse_date_arg(args.before, use_json=args.json) if getattr(args, "before", None) else None
+  after_ts = _parse_date_arg(args.after, use_json=args.json) if getattr(args, "after", None) else None
 
   results = db.search(
     vector=vector, text=args.text, filter=filt, limit=args.limit,
@@ -193,12 +205,12 @@ def cmd_get(args):
 def cmd_update(args):
   db = _get_db(args.db)
   content = args.content
-  meta = _parse_json(args.meta, "--meta") if args.meta else None
-  vector = _parse_json(args.vector, "--vector") if args.vector else None
+  meta = _parse_json(args.meta, "--meta", use_json=args.json) if args.meta else None
+  vector = _parse_json(args.vector, "--vector", use_json=args.json) if args.vector else None
 
   if content is None and meta is None and vector is None:
-    print("At least one of --content, --meta, or --vector is required.", file=sys.stderr)
-    sys.exit(2)
+    _err("missing_argument", "At least one of --content, --meta, or --vector is required.",
+         exit_code=2, use_json=args.json)
 
   # Default is merge; --replace switches to full replacement
   merge = not getattr(args, "replace", False)
@@ -220,17 +232,34 @@ def cmd_update(args):
     print(f"Updated {full_id}")
 
 
+def _parse_tag_value(v):
+  """Parse a tag value string into its natural type (bool, int, float, or str)."""
+  if v.lower() == "true":
+    return True
+  if v.lower() == "false":
+    return False
+  try:
+    return int(v)
+  except ValueError:
+    pass
+  try:
+    return float(v)
+  except ValueError:
+    pass
+  return v
+
+
 def cmd_tag(args):
   db = _get_db(args.db)
 
-  # Parse key=value pairs
+  # Parse key=value pairs with type coercion
   tags = {}
   for pair in args.tags:
     if "=" not in pair:
-      print(f"Invalid tag format (expected key=value): {pair}", file=sys.stderr)
-      sys.exit(2)
+      _err("invalid_format", f"Invalid tag format (expected key=value): {pair}",
+           exit_code=2, use_json=args.json)
     k, v = pair.split("=", 1)
-    tags[k] = v
+    tags[k] = _parse_tag_value(v)
 
   full_id = _resolve_id(db, args.id)
 
@@ -244,8 +273,8 @@ def cmd_tag(args):
       print(f"Not found: {args.id}", file=sys.stderr)
     sys.exit(1)
 
-  # Fetch merged result for display
-  mem = db.get(args.id)
+  # Fetch merged result for display (readonly to avoid inflating access_count)
+  mem = db.get_readonly(args.id)
   merged = mem.get("metadata") or {} if mem else tags
 
   if args.json:
@@ -259,8 +288,8 @@ def cmd_list(args):
   include_vectors = getattr(args, "include_vectors", False)
 
   # Parse date range filters
-  before_ts = _parse_date_arg(args.before) if getattr(args, "before", None) else None
-  after_ts = _parse_date_arg(args.after) if getattr(args, "after", None) else None
+  before_ts = _parse_date_arg(args.before, use_json=args.json) if getattr(args, "before", None) else None
+  after_ts = _parse_date_arg(args.after, use_json=args.json) if getattr(args, "after", None) else None
 
   results = db.list(
     type_filter=args.type,
@@ -329,7 +358,29 @@ def cmd_context(args):
   # Type distribution
   type_dist = db.type_distribution()
 
-  if args.json:
+  compact = getattr(args, "compact", False)
+
+  if compact or (args.json and compact):
+    # Minimal flat JSON for agent consumption
+    def _compact_entry(r):
+      entry = {"id": r["id"][:8], "content": r["content"]}
+      if r.get("score") is not None:
+        entry["score"] = round(r["score"], 4)
+      meta = r.get("metadata")
+      if meta and isinstance(meta, dict) and "type" in meta:
+        entry["type"] = meta["type"]
+      return entry
+
+    out = {
+      "topic": topic,
+      "total": total,
+      "matches": [_compact_entry(r) for r in matches],
+      "recent": [r["content"][:100] for r in recent],
+      "frequent": [r["content"][:100] for r in frequent],
+      "stale": [r["content"][:100] for r in stale],
+    }
+    print(json.dumps(out, default=str))
+  elif args.json:
     out = {
       "topic": topic,
       "matches": [
@@ -504,8 +555,8 @@ def cmd_purge(args):
   db = _get_db(args.db)
 
   if not args.before and not args.type:
-    print("At least one of --before or --type is required.", file=sys.stderr)
-    sys.exit(2)
+    _err("missing_argument", "At least one of --before or --type is required.",
+         exit_code=2, use_json=args.json)
 
   before_ts = None
   if args.before:
@@ -519,12 +570,18 @@ def cmd_purge(args):
       sys.exit(2)
 
   if args.confirm:
-    # Actually delete
-    total_deleted = 0
-    if before_ts is not None:
-      total_deleted += db.delete_before(before_ts)
-    if args.type:
-      total_deleted += db.delete_by_type(args.type)
+    # Actually delete (AND logic when both flags present, matching preview)
+    if before_ts is not None and args.type:
+      to_delete = db.list(type_filter=args.type, sort="created", limit=1_000_000, before=before_ts)
+      for mem in to_delete:
+        db.delete(mem["id"])
+      total_deleted = len(to_delete)
+    elif before_ts is not None:
+      total_deleted = db.delete_before(before_ts)
+    elif args.type:
+      total_deleted = db.delete_by_type(args.type)
+    else:
+      total_deleted = 0
 
     criteria = {}
     if args.before:
@@ -570,12 +627,7 @@ def cmd_related(args):
   try:
     results = db.related(args.id, limit=args.limit)
   except RuntimeError as e:
-    err_msg = str(e)
-    if args.json:
-      print(json.dumps({"error": err_msg}), file=sys.stderr)
-    else:
-      print(f"Error: {err_msg}", file=sys.stderr)
-    sys.exit(1)
+    _err("not_found", str(e), exit_code=1, use_json=args.json, input_id=args.id)
 
   if args.json:
     out = []
@@ -731,23 +783,54 @@ def cmd_setup(args):
 
   content = target.read_text() if target.exists() else ""
 
+  def _find_markers(text):
+    """Find start/end marker positions and extract version if present."""
+    start_idx = text.find(SNIPPET_START_PREFIX)
+    if start_idx == -1:
+      return None
+    # Find end of start marker line
+    start_line_end = text.index("-->", start_idx) + 3
+    # Extract version from start marker
+    marker_line = text[start_idx:start_line_end]
+    old_version = None
+    if " v" in marker_line:
+      old_version = marker_line.split(" v")[1].rstrip(" ->")
+    # Find end marker
+    end_idx = text.find(SNIPPET_END_PREFIX, start_line_end)
+    if end_idx == -1:
+      return None
+    end_line_end = text.index("-->", end_idx) + 3
+    if end_line_end < len(text) and text[end_line_end] == "\n":
+      end_line_end += 1
+    return start_idx, end_line_end, old_version
+
   if args.undo:
-    if SNIPPET_START not in content:
+    markers = _find_markers(content)
+    if markers is None:
       print("No memori snippet found -- nothing to remove.")
       return
-    # Remove everything between markers (inclusive)
-    start_idx = content.index(SNIPPET_START)
-    end_idx = content.index(SNIPPET_END) + len(SNIPPET_END)
-    # Also remove trailing newline if present
-    if end_idx < len(content) and content[end_idx] == "\n":
-      end_idx += 1
+    start_idx, end_idx, _ = markers
     content = content[:start_idx] + content[end_idx:]
     target.write_text(content)
     print(f"Removed memori snippet from {target}")
     return
 
-  if SNIPPET_START in content:
-    print(f"Memori snippet already present in {target}")
+  markers = _find_markers(content)
+  if markers is not None:
+    _, _, old_version = markers
+    if old_version == __version__:
+      print(f"Memori snippet already present in {target}")
+      return
+    # Stale version -- re-inject
+    start_idx, end_idx, _ = markers
+    old_v = old_version or "unknown"
+    content = content[:start_idx] + content[end_idx:]
+    snippet = _snippet_text()
+    separator = "\n" if content and not content.endswith("\n") else ""
+    separator += "\n" if content else ""
+    content += separator + snippet
+    target.write_text(content)
+    print(f"Updated memori snippet in {target} (v{old_v} -> v{__version__})")
     return
 
   snippet = _snippet_text()
@@ -809,7 +892,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
       db = self.db
       type_filter = qfirst("type")
       sort = qfirst("sort", "created")
-      limit = int(qfirst("limit", "50"))
+      limit = int(qfirst("limit", "20"))
       offset = int(qfirst("offset", "0"))
       before = float(qfirst("before")) if qfirst("before") else None
       after = float(qfirst("after")) if qfirst("after") else None
@@ -840,7 +923,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
       text = qfirst("text")
       filt_str = qfirst("filter")
       filt = json.loads(filt_str) if filt_str else None
-      limit = int(qfirst("limit", "20"))
+      limit = int(qfirst("limit", "10"))
       text_only = qfirst("text_only", "false") == "true"
       before = float(qfirst("before")) if qfirst("before") else None
       after = float(qfirst("after")) if qfirst("after") else None
@@ -917,8 +1000,12 @@ def main():
 
   sub = parser.add_subparsers(dest="command", required=True)
 
+  _F = argparse.RawDescriptionHelpFormatter
+
   # store
-  p_store = sub.add_parser("store", help="Store a memory", parents=[output_parser])
+  p_store = sub.add_parser("store", help="Store a memory", parents=[output_parser],
+      epilog="Examples:\n  memori store \"FTS5 hyphens crash MATCH\" --meta '{\"type\": \"debugging\"}'\n  memori store \"prefer dark mode\" --meta '{\"type\": \"preference\"}' --json",
+      formatter_class=_F)
   p_store.add_argument("content", help="Text content to store")
   p_store.add_argument("--meta", help="JSON metadata object")
   p_store.add_argument("--vector", help="JSON array of floats")
@@ -931,11 +1018,13 @@ def main():
   p_store.set_defaults(func=cmd_store)
 
   # search
-  p_search = sub.add_parser("search", help="Search memories", parents=[output_parser])
+  p_search = sub.add_parser("search", help="Search memories", parents=[output_parser],
+      epilog="Examples:\n  memori search --text 'FTS5 crash' --filter '{\"type\": \"debugging\"}'\n  memori search --text 'dark mode' --limit 3 --json\n  memori search --text 'kafka' --text-only --before 2025-01-01",
+      formatter_class=_F)
   p_search.add_argument("--text", help="Text query (FTS5)")
   p_search.add_argument("--vector", help="Vector query (JSON float array)")
   p_search.add_argument("--filter", help="Metadata filter (JSON object)")
-  p_search.add_argument("--limit", type=int, default=5)
+  p_search.add_argument("--limit", type=int, default=10, help="Max results (default: 10)")
   p_search.add_argument("--text-only", action="store_true",
                          help="Force FTS5-only search (skip auto-vectorization)")
   p_search.add_argument("--include-vectors", action="store_true",
@@ -945,14 +1034,18 @@ def main():
   p_search.set_defaults(func=cmd_search)
 
   # get
-  p_get = sub.add_parser("get", help="Get memory by ID", parents=[output_parser])
+  p_get = sub.add_parser("get", help="Get memory by ID", parents=[output_parser],
+      epilog="Examples:\n  memori get a1b2c3d4\n  memori get a1b2c3d4 --include-vectors --json",
+      formatter_class=_F)
   p_get.add_argument("id")
   p_get.add_argument("--include-vectors", action="store_true",
                       help="Include vector data in output (omitted by default to save tokens)")
   p_get.set_defaults(func=cmd_get)
 
   # update
-  p_update = sub.add_parser("update", help="Update an existing memory", parents=[output_parser])
+  p_update = sub.add_parser("update", help="Update an existing memory", parents=[output_parser],
+      epilog="Examples:\n  memori update a1b2 --content 'corrected text'\n  memori update a1b2 --meta '{\"verified\": true}'\n  memori update a1b2 --meta '{\"type\": \"fact\"}' --replace",
+      formatter_class=_F)
   p_update.add_argument("id", help="Memory ID to update")
   p_update.add_argument("--content", help="New text content")
   p_update.add_argument("--meta", help="New metadata (JSON object, merged by default)")
@@ -962,13 +1055,17 @@ def main():
   p_update.set_defaults(func=cmd_update)
 
   # tag
-  p_tag = sub.add_parser("tag", help="Add key=value tags to memory metadata", parents=[output_parser])
+  p_tag = sub.add_parser("tag", help="Add key=value tags to memory metadata", parents=[output_parser],
+      epilog="Examples:\n  memori tag a1b2 topic=kafka verified=true\n  memori tag a1b2 priority=1 status=active --json",
+      formatter_class=_F)
   p_tag.add_argument("id", help="Memory ID to tag")
   p_tag.add_argument("tags", nargs="+", help="Tags as key=value pairs")
   p_tag.set_defaults(func=cmd_tag)
 
   # list
-  p_list = sub.add_parser("list", help="Browse memories with sort and pagination", parents=[output_parser])
+  p_list = sub.add_parser("list", help="Browse memories with sort and pagination", parents=[output_parser],
+      epilog="Examples:\n  memori list --type debugging --sort count\n  memori list --limit 5 --before 2025-06-01 --json",
+      formatter_class=_F)
   p_list.add_argument("--type", help="Filter by metadata type")
   p_list.add_argument("--sort", default="created",
                        choices=["created", "updated", "accessed", "count"],
@@ -982,7 +1079,9 @@ def main():
   p_list.set_defaults(func=cmd_list)
 
   # related
-  p_related = sub.add_parser("related", help="Find memories similar to a given memory", parents=[output_parser])
+  p_related = sub.add_parser("related", help="Find memories similar to a given memory", parents=[output_parser],
+      epilog="Examples:\n  memori related a1b2c3d4 --limit 3\n  memori related a1b2 --json",
+      formatter_class=_F)
   p_related.add_argument("id", help="Memory ID (or unique prefix)")
   p_related.add_argument("--limit", type=int, default=5, help="Max results (default: 5)")
   p_related.add_argument("--include-vectors", action="store_true",
@@ -990,45 +1089,63 @@ def main():
   p_related.set_defaults(func=cmd_related)
 
   # delete
-  p_del = sub.add_parser("delete", help="Delete memory by ID", parents=[output_parser])
+  p_del = sub.add_parser("delete", help="Delete memory by ID", parents=[output_parser],
+      epilog="Examples:\n  memori delete a1b2c3d4\n  memori delete a1b2 --json",
+      formatter_class=_F)
   p_del.add_argument("id")
   p_del.set_defaults(func=cmd_delete)
 
   # count
-  p_count = sub.add_parser("count", help="Count memories", parents=[output_parser])
+  p_count = sub.add_parser("count", help="Count memories", parents=[output_parser],
+      epilog="Examples:\n  memori count\n  memori count --json",
+      formatter_class=_F)
   p_count.set_defaults(func=cmd_count)
 
   # stats
-  p_stats = sub.add_parser("stats", help="Show database stats", parents=[output_parser])
+  p_stats = sub.add_parser("stats", help="Show database stats", parents=[output_parser],
+      epilog="Examples:\n  memori stats\n  memori stats --json",
+      formatter_class=_F)
   p_stats.set_defaults(func=cmd_stats)
 
   # context
-  p_context = sub.add_parser("context", help="Load relevant context for a topic", parents=[output_parser])
+  p_context = sub.add_parser("context", help="Load relevant context for a topic", parents=[output_parser],
+      epilog="Examples:\n  memori context 'kafka architecture'\n  memori context 'debugging tips' --compact\n  memori context 'auth' --project myapp --json",
+      formatter_class=_F)
   p_context.add_argument("topic", help="Topic to search for")
   p_context.add_argument("--limit", type=int, default=10, help="Max relevant matches")
   p_context.add_argument("--project", help="Scope search to a project (filters by metadata.project)")
+  p_context.add_argument("--compact", action="store_true",
+                          help="Minimal flat JSON for agent consumption (implies --json)")
   p_context.set_defaults(func=cmd_context)
 
   # embed
-  p_embed = sub.add_parser("embed", help="Backfill embeddings for memories without vectors", parents=[output_parser])
+  p_embed = sub.add_parser("embed", help="Backfill embeddings for memories without vectors", parents=[output_parser],
+      epilog="Examples:\n  memori embed\n  memori embed --batch-size 100 --json",
+      formatter_class=_F)
   p_embed.add_argument("--batch-size", type=int, default=50,
                         help="Number of memories to embed per batch (default: 50)")
   p_embed.set_defaults(func=cmd_embed)
 
   # export
-  p_export = sub.add_parser("export", help="Export all memories as JSONL to stdout", parents=[output_parser])
+  p_export = sub.add_parser("export", help="Export all memories as JSONL to stdout", parents=[output_parser],
+      epilog="Examples:\n  memori export > backup.jsonl\n  memori export --include-vectors > full-backup.jsonl",
+      formatter_class=_F)
   p_export.add_argument("--include-vectors", action="store_true",
                          help="Include vectors in export (large, re-derivable)")
   p_export.set_defaults(func=cmd_export)
 
   # import
-  p_import = sub.add_parser("import", help="Import memories from JSONL on stdin", parents=[output_parser])
+  p_import = sub.add_parser("import", help="Import memories from JSONL on stdin", parents=[output_parser],
+      epilog="Examples:\n  memori import < backup.jsonl\n  memori import --new-ids < backup.jsonl",
+      formatter_class=_F)
   p_import.add_argument("--new-ids", action="store_true",
                          help="Generate fresh IDs instead of preserving originals")
   p_import.set_defaults(func=cmd_import)
 
   # purge
-  p_purge = sub.add_parser("purge", help="Bulk delete memories (dry-run by default)", parents=[output_parser])
+  p_purge = sub.add_parser("purge", help="Bulk delete memories (dry-run by default)", parents=[output_parser],
+      epilog="Examples:\n  memori purge --type temporary\n  memori purge --type temporary --confirm\n  memori purge --before 2025-01-01 --type debugging --confirm",
+      formatter_class=_F)
   p_purge.add_argument("--before", help="Delete memories created before this ISO date")
   p_purge.add_argument("--type", help="Delete memories with this metadata type")
   p_purge.add_argument("--confirm", action="store_true",
@@ -1036,17 +1153,23 @@ def main():
   p_purge.set_defaults(func=cmd_purge)
 
   # gc
-  p_gc = sub.add_parser("gc", help="Compact database (SQLite VACUUM)", parents=[output_parser])
+  p_gc = sub.add_parser("gc", help="Compact database (SQLite VACUUM)", parents=[output_parser],
+      epilog="Examples:\n  memori gc\n  memori gc --json",
+      formatter_class=_F)
   p_gc.set_defaults(func=cmd_gc)
 
   # setup
-  p_setup = sub.add_parser("setup", help="Configure Claude Code integration", parents=[output_parser])
+  p_setup = sub.add_parser("setup", help="Configure Claude Code integration", parents=[output_parser],
+      epilog="Examples:\n  memori setup\n  memori setup --show\n  memori setup --undo",
+      formatter_class=_F)
   p_setup.add_argument("--show", action="store_true", help="Print snippet without writing")
   p_setup.add_argument("--undo", action="store_true", help="Remove the snippet")
   p_setup.set_defaults(func=cmd_setup)
 
   # ui
-  p_ui = sub.add_parser("ui", help="Open web dashboard", parents=[output_parser])
+  p_ui = sub.add_parser("ui", help="Open web dashboard", parents=[output_parser],
+      epilog="Examples:\n  memori ui\n  memori ui --port 9000 --no-open",
+      formatter_class=_F)
   p_ui.add_argument("--port", type=int, default=8899, help="Server port (default: 8899)")
   p_ui.add_argument("--no-open", action="store_true", help="Don't auto-open browser")
   p_ui.set_defaults(func=cmd_ui)

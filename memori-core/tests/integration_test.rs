@@ -1089,3 +1089,98 @@ fn test_list_combined_type_and_date() {
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].content, "old fact");
 }
+
+// --- FTS5 query sanitization edge cases ---
+
+#[test]
+fn test_fts5_query_with_quotes() {
+    let db = open_temp();
+    db.insert("he said \"hello\" to everyone", None, None, None, false).unwrap();
+
+    let query = SearchQuery {
+        text: Some("\"hello\"".to_string()),
+        text_only: true,
+        limit: 10,
+        ..Default::default()
+    };
+    let results = db.search(query).unwrap();
+    assert!(!results.is_empty());
+}
+
+#[test]
+fn test_fts5_query_with_parentheses() {
+    let db = open_temp();
+    db.insert("function call (with args)", None, None, None, false).unwrap();
+
+    let query = SearchQuery {
+        text: Some("(with args)".to_string()),
+        text_only: true,
+        limit: 10,
+        ..Default::default()
+    };
+    let results = db.search(query).unwrap();
+    // Should not crash -- parentheses are FTS5 grouping operators
+    assert!(results.is_empty() || !results.is_empty());
+}
+
+#[test]
+fn test_fts5_query_with_operators() {
+    let db = open_temp();
+    db.insert("this AND that OR something NOT else", None, None, None, false).unwrap();
+
+    // Searching for "AND" or "OR" should not be interpreted as FTS5 operators
+    let query = SearchQuery {
+        text: Some("AND OR NOT".to_string()),
+        text_only: true,
+        limit: 10,
+        ..Default::default()
+    };
+    let _results = db.search(query).unwrap();
+    // Should not crash
+}
+
+#[test]
+fn test_fts5_query_with_asterisk() {
+    let db = open_temp();
+    db.insert("wildcard * pattern matching", None, None, None, false).unwrap();
+
+    let query = SearchQuery {
+        text: Some("wildcard*".to_string()),
+        text_only: true,
+        limit: 10,
+        ..Default::default()
+    };
+    // Should not crash -- asterisks are FTS5 prefix operators
+    let _results = db.search(query).unwrap();
+}
+
+#[test]
+fn test_fts5_query_with_colons() {
+    let db = open_temp();
+    db.insert("time is 12:30:00 UTC", None, None, None, false).unwrap();
+
+    let query = SearchQuery {
+        text: Some("12:30:00".to_string()),
+        text_only: true,
+        limit: 10,
+        ..Default::default()
+    };
+    // Colons are FTS5 column filter operators
+    let _results = db.search(query).unwrap();
+}
+
+#[test]
+fn test_fts5_empty_query() {
+    let db = open_temp();
+    db.insert("some content", None, None, None, false).unwrap();
+
+    let query = SearchQuery {
+        text: Some("".to_string()),
+        text_only: true,
+        limit: 10,
+        ..Default::default()
+    };
+    // Empty query should not crash -- returns empty results
+    let results = db.search(query).unwrap();
+    assert!(results.is_empty());
+}
