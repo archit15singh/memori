@@ -138,6 +138,16 @@ impl Memori {
         storage::embedding_stats(&self.conn)
     }
 
+    /// Get a memory by ID or prefix without bumping access_count.
+    pub fn get_readonly(&self, id_or_prefix: &str) -> Result<Option<Memory>> {
+        let full_id = match storage::resolve_prefix(&self.conn, id_or_prefix) {
+            Ok(fid) => fid,
+            Err(MemoriError::NotFound(_)) => return Ok(None),
+            Err(e) => return Err(e),
+        };
+        storage::get_raw(&self.conn, &full_id)
+    }
+
     pub fn related(&self, id: &str, limit: usize) -> Result<Vec<Memory>> {
         let full_id = storage::resolve_prefix(&self.conn, id)?;
         search::related(&self.conn, &full_id, limit)
