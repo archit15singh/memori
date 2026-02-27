@@ -37,6 +37,8 @@ pub struct SearchQuery {
     pub text: Option<String>,
     pub filter: Option<serde_json::Value>,
     pub limit: usize,
+    /// When true, skip auto-vectorization and use FTS5 only for text queries.
+    pub text_only: bool,
 }
 
 impl Default for SearchQuery {
@@ -46,6 +48,7 @@ impl Default for SearchQuery {
             text: None,
             filter: None,
             limit: 10,
+            text_only: false,
         }
     }
 }

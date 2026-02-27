@@ -87,6 +87,19 @@ impl Memori {
         storage::touch(&self.conn, id)
     }
 
+    pub fn vacuum(&self) -> Result<()> {
+        storage::vacuum(&self.conn)
+    }
+
+    pub fn set_access_stats(
+        &self,
+        id: &str,
+        last_accessed: Option<f64>,
+        access_count: i64,
+    ) -> Result<()> {
+        storage::set_access_stats(&self.conn, id, last_accessed, access_count)
+    }
+
     pub fn backfill_embeddings(&self, batch_size: usize) -> Result<usize> {
         storage::backfill_embeddings(&self.conn, batch_size)
     }

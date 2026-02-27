@@ -2,7 +2,7 @@ use rusqlite::params;
 use serde_json::Value;
 use std::collections::HashMap;
 
-use crate::storage::{row_to_memory, touch};
+use crate::storage::row_to_memory;
 use crate::types::{Memory, Result, SearchQuery};
 
 const RRF_K: f32 = 60.0;
@@ -10,7 +10,7 @@ const RRF_K: f32 = 60.0;
 pub fn search(conn: &rusqlite::Connection, query: SearchQuery) -> Result<Vec<Memory>> {
     let filter_clause = query.filter.as_ref().map(|f| build_filter_clause(f));
 
-    let mut results = match (&query.vector, &query.text) {
+    let results = match (&query.vector, &query.text) {
         (Some(vec), Some(text)) => {
             hybrid_search(conn, vec, text, filter_clause.as_deref(), query.limit)?
         }
@@ -18,22 +18,24 @@ pub fn search(conn: &rusqlite::Connection, query: SearchQuery) -> Result<Vec<Mem
             vector_search(conn, vec, filter_clause.as_deref(), query.limit)?
         }
         (None, Some(text)) => {
-            text_search(conn, text, filter_clause.as_deref(), query.limit)?
+            #[cfg(feature = "embeddings")]
+            {
+                if query.text_only {
+                    text_search(conn, text, filter_clause.as_deref(), query.limit)?
+                } else {
+                    let query_vec = crate::embed::embed_text(text);
+                    hybrid_search(conn, &query_vec, text, filter_clause.as_deref(), query.limit)?
+                }
+            }
+            #[cfg(not(feature = "embeddings"))]
+            {
+                text_search(conn, text, filter_clause.as_deref(), query.limit)?
+            }
         }
         (None, None) => {
             recent_search(conn, filter_clause.as_deref(), query.limit)?
         }
     };
-
-    // Batch-touch all search results to track access
-    for mem in &results {
-        let _ = touch(conn, &mem.id);
-    }
-
-    // Re-read access counts after touching (they just got bumped)
-    for mem in &mut results {
-        mem.access_count += 1;
-    }
 
     Ok(results)
 }

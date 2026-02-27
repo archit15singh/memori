@@ -3,6 +3,7 @@
 
 Persistent memory across sessions via `memori` CLI. DB at `~/.claude/memori.db`.
 Search matches both content text and metadata values. Embeddings are auto-generated on store -- no manual `--vector` needed.
+Text searches auto-vectorize into hybrid search (FTS5 + cosine) for best results. Use `--text-only` to force FTS5-only when speed matters. Use `--raw` for compact single-line JSON output (saves tokens in pipes).
 
 ### Session Start (always do this)
 
@@ -80,15 +81,18 @@ Bad: (3 paragraphs reproducing an entire investigation) -- store the conclusion,
 |---------|---------|
 | `memori context "<topic>"` | Load relevant + recent memories + type stats |
 | `memori store "<text>" --meta '{"type": "..."}'` | Store with typed metadata (auto-embeds, auto-dedup) |
-| `memori search --text "<query>"` | Full-text + vector hybrid search |
+| `memori search --text "<query>"` | Hybrid search (FTS5 + vector, auto-vectorizes) |
+| `memori search --text "<query>" --text-only` | FTS5-only search (faster, no embedding) |
 | `memori search --filter '{"type": "..."}'` | Filter by metadata fields |
+| `memori --raw search --text "<query>"` | Compact single-line JSON (saves tokens) |
 | `memori update <id> --content/--meta` | Correct or enrich existing memory |
 | `memori tag <id> key=value ...` | Merge key-value tags into metadata |
-| `memori get <id>` | Read full memory by ID |
+| `memori get <id>` | Read full memory by ID (vectors stripped by default) |
 | `memori delete <id>` | Remove single memory |
 | `memori embed` | Backfill embeddings on old memories |
+| `memori gc` | Compact database (SQLite VACUUM) |
 | `memori purge --type/--before` | Bulk preview (add `--confirm` to delete) |
 | `memori export > backup.jsonl` | JSONL backup to stdout |
-| `memori import < backup.jsonl` | Restore from JSONL stdin |
+| `memori import < backup.jsonl` | Restore from JSONL (preserves access stats) |
 | `memori stats` | DB size, memory count, type distribution, embedding coverage |
 <!-- memori:end -->

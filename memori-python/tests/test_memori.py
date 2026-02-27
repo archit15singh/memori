@@ -9,22 +9,36 @@ def db(tmp_path):
     return PyMemori(path)
 
 
+# -- insert returns dict --
+
+
+def test_insert_returns_dict(db):
+    result = db.insert("hello world", metadata={"tag": "test"})
+    assert isinstance(result, dict)
+    assert "id" in result
+    assert "action" in result
+    assert isinstance(result["id"], str)
+    assert len(result["id"]) == 36  # UUID format
+    assert result["action"] == "created"
+
+
 def test_insert_and_get(db):
-    mid = db.insert("hello world", metadata={"tag": "test"})
-    assert isinstance(mid, str)
-    assert len(mid) == 36  # UUID format
+    result = db.insert("hello world", metadata={"tag": "test"})
+    mid = result["id"]
 
     mem = db.get(mid)
     assert mem is not None
     assert mem["content"] == "hello world"
     assert mem["metadata"] == {"tag": "test"}
-    assert mem["vector"] is None
+    # With embeddings feature enabled, vector is auto-generated
+    assert mem["vector"] is not None
     assert mem["created_at"] > 0
 
 
 def test_insert_with_vector(db):
     vec = [1.0, 2.0, 3.0]
-    mid = db.insert("with vector", vector=vec)
+    result = db.insert("with vector", vector=vec)
+    mid = result["id"]
 
     mem = db.get(mid)
     assert mem["vector"] is not None
@@ -33,7 +47,7 @@ def test_insert_with_vector(db):
 
 
 def test_update_content(db):
-    mid = db.insert("original")
+    mid = db.insert("original")["id"]
     db.update(mid, content="updated")
 
     mem = db.get(mid)
@@ -41,7 +55,7 @@ def test_update_content(db):
 
 
 def test_update_metadata(db):
-    mid = db.insert("test", metadata={"a": 1})
+    mid = db.insert("test", metadata={"a": 1})["id"]
     db.update(mid, metadata={"b": 2})
 
     mem = db.get(mid)
@@ -49,7 +63,7 @@ def test_update_metadata(db):
 
 
 def test_delete(db):
-    mid = db.insert("to delete")
+    mid = db.insert("to delete")["id"]
     assert db.count() == 1
 
     db.delete(mid)
@@ -77,11 +91,12 @@ def test_vector_search(db):
 
 
 def test_text_search(db):
-    db.insert("the quick brown fox jumps over the lazy dog")
-    db.insert("a fast red car drives on the highway")
-    db.insert("the brown bear sleeps in the forest")
+    db.insert("the quick brown fox jumps over the lazy dog", no_embed=True)
+    db.insert("a fast red car drives on the highway", no_embed=True)
+    db.insert("the brown bear sleeps in the forest", no_embed=True)
 
-    results = db.search(text="brown", limit=10)
+    # text_only=True to test pure FTS5 behavior (skip auto-vectorize)
+    results = db.search(text="brown", limit=10, text_only=True)
     assert len(results) == 2
     assert all("brown" in r["content"] for r in results)
 
@@ -135,8 +150,103 @@ def test_search_default_limit(db):
 
 def test_nested_metadata(db):
     meta = {"tags": ["a", "b"], "nested": {"key": "value"}}
-    mid = db.insert("nested metadata test", metadata=meta)
+    mid = db.insert("nested metadata test", metadata=meta)["id"]
 
     mem = db.get(mid)
     assert mem["metadata"]["tags"] == ["a", "b"]
     assert mem["metadata"]["nested"]["key"] == "value"
+
+
+# -- v0.3 dedup tests --
+
+
+def test_dedup_same_type(db):
+    v1 = [1.0, 0.0, 0.0]
+    v2 = [0.99, 0.01, 0.0]
+
+    r1 = db.insert("kafka architecture", vector=v1, metadata={"type": "arch"}, dedup_threshold=0.92)
+    assert r1["action"] == "created"
+
+    r2 = db.insert("kafka arch notes", vector=v2, metadata={"type": "arch"}, dedup_threshold=0.92)
+    assert r2["action"] == "deduplicated"
+    assert r2["id"] == r1["id"]
+    assert db.count() == 1
+
+
+# -- v0.3.1 access tracking tests --
+
+
+def test_access_count_on_get(db):
+    mid = db.insert("access test")["id"]
+
+    # First get: snapshot sees access_count=0
+    mem1 = db.get(mid)
+    assert mem1["access_count"] == 0
+
+    # Second get: sees the touch from first get
+    mem2 = db.get(mid)
+    assert mem2["access_count"] == 1
+
+    # Third get confirms steady increment
+    mem3 = db.get(mid)
+    assert mem3["access_count"] == 2
+
+
+def test_search_does_not_bump_access_count(db):
+    mid = db.insert("searchable item", vector=[1.0, 0.0, 0.0])["id"]
+
+    # Search should NOT bump access count
+    results = db.search(vector=[1.0, 0.0, 0.0], limit=1)
+    assert len(results) == 1
+    assert results[0]["access_count"] == 0
+
+    # Search again -- still 0
+    results2 = db.search(vector=[1.0, 0.0, 0.0], limit=1)
+    assert results2[0]["access_count"] == 0
+
+    # get() DOES bump it
+    mem = db.get(mid)
+    assert mem["access_count"] == 0  # snapshot before touch
+    mem2 = db.get(mid)
+    assert mem2["access_count"] == 1  # now it's bumped
+
+
+# -- v0.3.1 embedding stats --
+
+
+def test_embedding_stats(db):
+    db.insert("with vec", vector=[1.0, 0.0, 0.0])
+    db.insert("another", vector=[0.0, 1.0, 0.0])
+
+    stats = db.embedding_stats()
+    assert isinstance(stats, dict)
+    assert "embedded" in stats
+    assert "total" in stats
+    assert stats["total"] >= 2
+    assert stats["embedded"] >= 2
+
+
+# -- v0.3.1 auto-vectorize search --
+
+
+def test_auto_vectorize_search(db):
+    """Text-only search with embeddings enabled returns hybrid results with scores."""
+    db.insert("kafka architecture uses partitioned topics", metadata={"type": "architecture"})
+    db.insert("redis caching layer for sessions", metadata={"type": "architecture"})
+
+    # text_only=False (default) -- auto-vectorizes the query and does hybrid search
+    results = db.search(text="message queue partitioning", limit=5)
+    assert len(results) > 0
+    # Hybrid search produces RRF scores
+    assert all(r.get("score") is not None for r in results)
+
+
+def test_text_only_flag(db):
+    """--text-only forces pure FTS5 search even with embeddings enabled."""
+    db.insert("kafka partitioned topics", no_embed=True)
+    db.insert("redis caching layer", no_embed=True)
+
+    # text_only=True -- pure FTS5, only exact text matches
+    results = db.search(text="kafka", limit=5, text_only=True)
+    assert len(results) == 1
+    assert "kafka" in results[0]["content"]

@@ -28,7 +28,7 @@ from pathlib import Path
 
 from memori import PyMemori
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 DEFAULT_DB = os.path.expanduser("~/.claude/memori.db")
 DEFAULT_DEDUP_THRESHOLD = 0.92
@@ -55,6 +55,11 @@ def _snippet_text():
   data_dir = Path(__file__).parent / "data"
   snippet_file = data_dir / "claude_snippet.md"
   return snippet_file.read_text()
+
+
+def _json_indent(args):
+  """Return indent level for JSON output: None for --raw, 2 otherwise."""
+  return None if getattr(args, "raw", False) else 2
 
 
 # -- Commands --
@@ -94,7 +99,9 @@ def cmd_search(args):
   db = _get_db(args.db)
   vector = _parse_json(args.vector, "--vector") if args.vector else None
   filt = _parse_json(args.filter, "--filter") if args.filter else None
-  results = db.search(vector=vector, text=args.text, filter=filt, limit=args.limit)
+  text_only = getattr(args, "text_only", False)
+  include_vectors = getattr(args, "include_vectors", False)
+  results = db.search(vector=vector, text=args.text, filter=filt, limit=args.limit, text_only=text_only)
 
   if args.json:
     out = []
@@ -107,8 +114,10 @@ def cmd_search(args):
         "created_at": r.get("created_at"),
         "access_count": r.get("access_count", 0),
       }
+      if include_vectors:
+        entry["vector"] = r.get("vector")
       out.append(entry)
-    print(json.dumps(out, indent=2, default=str))
+    print(json.dumps(out, indent=_json_indent(args), default=str))
   else:
     if not results:
       print("No results.")
@@ -125,7 +134,9 @@ def cmd_get(args):
   db = _get_db(args.db)
   mem = db.get(args.id)
   if mem:
-    print(json.dumps(mem, indent=2, default=str))
+    if not getattr(args, "include_vectors", False):
+      mem.pop("vector", None)
+    print(json.dumps(mem, indent=_json_indent(args), default=str))
   else:
     if args.json:
       print(json.dumps({"error": "not_found", "id": args.id}), file=sys.stderr)
@@ -184,7 +195,7 @@ def cmd_tag(args):
   db.update(args.id, metadata=merged)
 
   if args.json:
-    print(json.dumps(merged, indent=2))
+    print(json.dumps(merged, indent=_json_indent(args)))
   else:
     print(f"Tagged {args.id}: {merged}")
 
@@ -194,13 +205,15 @@ def cmd_context(args):
   topic = args.topic
   limit = args.limit
 
+  # For small DBs, skip embedding overhead -- FTS5 is sufficient
+  total = db.count()
+  use_text_only = total < 50
   # Relevant matches
-  matches = db.search(text=topic, limit=limit)
+  matches = db.search(text=topic, limit=limit, text_only=use_text_only)
   # Recent memories (no query = returns by recency)
   recent = db.search(limit=5)
   # Type distribution
   type_dist = db.type_distribution()
-  total = db.count()
 
   if args.json:
     out = {
@@ -218,7 +231,7 @@ def cmd_context(args):
       "types": type_dist,
       "total": total,
     }
-    print(json.dumps(out, indent=2, default=str))
+    print(json.dumps(out, indent=_json_indent(args), default=str))
   else:
     # Human-readable markdown sections
     print(f"## Relevant Memories: \"{topic}\"\n")
@@ -290,6 +303,8 @@ def cmd_export(args):
       "metadata": r.get("metadata"),
       "created_at": r.get("created_at"),
       "updated_at": r.get("updated_at"),
+      "last_accessed": r.get("last_accessed"),
+      "access_count": r.get("access_count", 0),
       "vector": r.get("vector") if include_vectors else None,
     }
     print(json.dumps(entry, default=str))
@@ -313,14 +328,23 @@ def cmd_import(args):
       created_at = entry.get("created_at")
       updated_at = entry.get("updated_at")
 
+      last_accessed = entry.get("last_accessed")
+      access_count = entry.get("access_count", 0)
+
       if new_ids:
-        db.insert(content, vector=vector, metadata=metadata, no_embed=False)
+        result = db.insert(content, vector=vector, metadata=metadata, no_embed=False)
+        mem_id = result["id"]
       else:
-        db.insert_with_id(
+        mem_id = db.insert_with_id(
           entry["id"], content,
           vector=vector, metadata=metadata,
           created_at=created_at, updated_at=updated_at,
         )
+
+      # Restore access stats if present in export
+      if last_accessed is not None or access_count > 0:
+        db.set_access_stats(mem_id, last_accessed=last_accessed, access_count=access_count)
+
       imported += 1
     except Exception as e:
       errors += 1
@@ -465,7 +489,7 @@ def cmd_stats(args):
       "types": type_counts,
       "embedded": embedded,
       "embedding_coverage": f"{embedded}/{total}" if total > 0 else "0/0",
-    }, indent=2))
+    }, indent=_json_indent(args)))
   else:
     print(f"Database:  {db_path}")
     print(f"Memories:  {count}")
@@ -477,6 +501,38 @@ def cmd_stats(args):
       print("Types:")
       for t, c in sorted(type_counts.items(), key=lambda x: -x[1]):
         print(f"  {t}: {c}")
+
+
+def cmd_gc(args):
+  db_path = args.db or DEFAULT_DB
+  try:
+    size_before = os.path.getsize(db_path)
+  except OSError:
+    size_before = 0
+
+  db = _get_db(db_path)
+  db.vacuum()
+
+  try:
+    size_after = os.path.getsize(db_path)
+  except OSError:
+    size_after = 0
+
+  saved = size_before - size_after
+  if args.json:
+    print(json.dumps({
+      "before_bytes": size_before,
+      "after_bytes": size_after,
+      "saved_bytes": saved,
+    }, indent=_json_indent(args)))
+  else:
+    def fmt(b):
+      if b < 1024:
+        return f"{b} B"
+      elif b < 1024 * 1024:
+        return f"{b / 1024:.1f} KB"
+      return f"{b / (1024 * 1024):.1f} MB"
+    print(f"Compacted: {fmt(size_before)} -> {fmt(size_after)} (saved {fmt(saved)})")
 
 
 def cmd_setup(args):
@@ -540,6 +596,8 @@ def main():
   )
   parser.add_argument("--db", help=f"Database path (default: {DEFAULT_DB})")
   parser.add_argument("--json", action="store_true", help="Machine-readable JSON output")
+  parser.add_argument("--raw", action="store_true",
+                       help="Compact single-line JSON (no indent). Implies --json")
   parser.add_argument(
     "--version", action="version",
     version=f"memori {__version__}",
@@ -566,11 +624,17 @@ def main():
   p_search.add_argument("--vector", help="Vector query (JSON float array)")
   p_search.add_argument("--filter", help="Metadata filter (JSON object)")
   p_search.add_argument("--limit", type=int, default=5)
+  p_search.add_argument("--text-only", action="store_true",
+                         help="Force FTS5-only search (skip auto-vectorization)")
+  p_search.add_argument("--include-vectors", action="store_true",
+                         help="Include vector data in JSON output (omitted by default)")
   p_search.set_defaults(func=cmd_search)
 
   # get
   p_get = sub.add_parser("get", help="Get memory by ID")
   p_get.add_argument("id")
+  p_get.add_argument("--include-vectors", action="store_true",
+                      help="Include vector data in output (omitted by default to save tokens)")
   p_get.set_defaults(func=cmd_get)
 
   # update
@@ -632,6 +696,10 @@ def main():
                         help="Actually delete (default is dry-run preview)")
   p_purge.set_defaults(func=cmd_purge)
 
+  # gc
+  p_gc = sub.add_parser("gc", help="Compact database (SQLite VACUUM)")
+  p_gc.set_defaults(func=cmd_gc)
+
   # setup
   p_setup = sub.add_parser("setup", help="Configure Claude Code integration")
   p_setup.add_argument("--show", action="store_true", help="Print snippet without writing")
@@ -639,6 +707,8 @@ def main():
   p_setup.set_defaults(func=cmd_setup)
 
   args = parser.parse_args()
+  if args.raw:
+    args.json = True
   args.func(args)
 
 
