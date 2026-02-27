@@ -145,6 +145,12 @@ fn text_search(
 ) -> Result<Vec<Memory>> {
     let safe_query = sanitize_fts_query(query_text);
 
+    // Empty query (whitespace-only or blank input) produces no tokens -- return
+    // early instead of passing an empty string to FTS5 MATCH which would error.
+    if safe_query.is_empty() {
+        return Ok(Vec::new());
+    }
+
     let sql = if let Some(f) = filter {
         format!(
             "SELECT m.id, m.content, m.vector, m.metadata, m.created_at, m.updated_at,
