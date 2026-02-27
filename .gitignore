@@ -7,7 +7,8 @@ __pycache__/
 *.egg-info/
 *.whl
 dist/
+.fastembed_cache/
+
+# Private working drafts (superseded by CLAUDE.md and README.md)
 memori_dev.md
 memori_usage.md
-tests/
-.fastembed_cache/
