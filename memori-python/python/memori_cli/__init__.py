@@ -218,8 +218,8 @@ def cmd_update(args):
   try:
     db.update(args.id, content=content, vector=vector, metadata=meta, merge_metadata=merge)
   except RuntimeError:
-    _err("not_found", f"No memory matching '{args.id}'", exit_code=1,
-         use_json=args.json, input_id=args.id)
+    _err("not_found", f"No memory matching '{args.id}' (try 'memori list' to see available memories)",
+         exit_code=1, use_json=args.json, input_id=args.id)
 
   if args.json:
     print(json.dumps({"id": full_id, "status": "updated"}))
@@ -262,8 +262,8 @@ def cmd_tag(args):
     # merge_metadata=True handles the read-modify-write in Rust
     db.update(args.id, metadata=tags, merge_metadata=True)
   except RuntimeError:
-    _err("not_found", f"No memory matching '{args.id}'", exit_code=1,
-         use_json=args.json, input_id=args.id)
+    _err("not_found", f"No memory matching '{args.id}' (try 'memori list' to see available memories)",
+         exit_code=1, use_json=args.json, input_id=args.id)
 
   # Fetch merged result for display (readonly to avoid inflating access_count)
   mem = db.get_readonly(args.id)
@@ -550,16 +550,7 @@ def cmd_purge(args):
     _err("missing_argument", "At least one of --before or --type is required.",
          exit_code=2, use_json=args.json)
 
-  before_ts = None
-  if args.before:
-    try:
-      dt = datetime.fromisoformat(args.before)
-      if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-      before_ts = dt.timestamp()
-    except ValueError as e:
-      print(f"Invalid date format for --before: {e}", file=sys.stderr)
-      sys.exit(2)
+  before_ts = _parse_date_arg(args.before, use_json=args.json) if args.before else None
 
   if args.confirm:
     # Actually delete (AND logic when both flags present, matching preview)
@@ -619,7 +610,17 @@ def cmd_related(args):
   try:
     results = db.related(args.id, limit=args.limit)
   except RuntimeError as e:
-    _err("not_found", str(e), exit_code=1, use_json=args.json, input_id=args.id)
+    err_msg = str(e)
+    if "no embedding" in err_msg:
+      error_type = "no_embedding"
+      hint = " (run 'memori embed' to generate embeddings)"
+    elif "ambiguous" in err_msg:
+      error_type = "ambiguous_prefix"
+      hint = " (use a longer prefix to disambiguate)"
+    else:
+      error_type = "not_found"
+      hint = " (try 'memori list' to see available memories)"
+    _err(error_type, err_msg + hint, exit_code=1, use_json=args.json, input_id=args.id)
 
   if args.json:
     out = []
@@ -653,8 +654,8 @@ def cmd_delete(args):
   try:
     db.delete(args.id)
   except RuntimeError:
-    _err("not_found", f"No memory matching '{args.id}'", exit_code=1,
-         use_json=args.json, input_id=args.id)
+    _err("not_found", f"No memory matching '{args.id}' (try 'memori list' to see available memories)",
+         exit_code=1, use_json=args.json, input_id=args.id)
   if args.json:
     print(json.dumps({"id": full_id, "status": "deleted"}))
   else:
@@ -1033,7 +1034,7 @@ def main():
 
   # get
   p_get = sub.add_parser("get", help="Get memory by ID", parents=[output_parser],
-      epilog="Examples:\n  memori get a1b2c3d4\n  memori get a1b2c3d4 --include-vectors --json",
+      epilog="Examples:\n  memori get a1b2c3d4\n  memori get a1b2 --json\n  memori get a1b2c3d4 --include-vectors --json",
       formatter_class=_F)
   p_get.add_argument("id")
   p_get.add_argument("--include-vectors", action="store_true",
@@ -1042,7 +1043,7 @@ def main():
 
   # update
   p_update = sub.add_parser("update", help="Update an existing memory", parents=[output_parser],
-      epilog="Examples:\n  memori update a1b2 --content 'corrected text'\n  memori update a1b2 --meta '{\"verified\": true}'\n  memori update a1b2 --meta '{\"type\": \"fact\"}' --replace",
+      epilog="Examples:\n  memori update a1b2 --content 'corrected text'\n  memori update a1b2 --content 'corrected text' --json\n  memori update a1b2 --meta '{\"verified\": true}'\n  memori update a1b2 --meta '{\"type\": \"fact\"}' --replace",
       formatter_class=_F)
   p_update.add_argument("id", help="Memory ID to update")
   p_update.add_argument("--content", help="New text content")
@@ -1126,7 +1127,7 @@ def main():
 
   # export
   p_export = sub.add_parser("export", help="Export all memories as JSONL to stdout", parents=[output_parser],
-      epilog="Examples:\n  memori export > backup.jsonl\n  memori export --include-vectors > full-backup.jsonl",
+      epilog="Examples:\n  memori export > backup.jsonl\n  memori export --include-vectors > full-backup.jsonl\n\nOutput is always JSONL (one JSON object per line), regardless of --json flag.",
       formatter_class=_F)
   p_export.add_argument("--include-vectors", action="store_true",
                          help="Include vectors in export (large, re-derivable)")
@@ -1134,7 +1135,7 @@ def main():
 
   # import
   p_import = sub.add_parser("import", help="Import memories from JSONL on stdin", parents=[output_parser],
-      epilog="Examples:\n  memori import < backup.jsonl\n  memori import --new-ids < backup.jsonl",
+      epilog="Examples:\n  memori import < backup.jsonl\n  memori import --new-ids < backup.jsonl\n  memori import --json < backup.jsonl",
       formatter_class=_F)
   p_import.add_argument("--new-ids", action="store_true",
                          help="Generate fresh IDs instead of preserving originals")
@@ -1142,7 +1143,7 @@ def main():
 
   # purge
   p_purge = sub.add_parser("purge", help="Bulk delete memories (dry-run by default)", parents=[output_parser],
-      epilog="Examples:\n  memori purge --type temporary\n  memori purge --type temporary --confirm\n  memori purge --before 2025-01-01 --type debugging --confirm",
+      epilog="Examples:\n  memori purge --type temporary\n  memori purge --type scratch --json\n  memori purge --type temporary --confirm\n  memori purge --before 2025-01-01 --type debugging --confirm",
       formatter_class=_F)
   p_purge.add_argument("--before", help="Delete memories created before this ISO date")
   p_purge.add_argument("--type", help="Delete memories with this metadata type")
