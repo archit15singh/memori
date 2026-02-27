@@ -17,7 +17,7 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = "https://github.com/archit-singhh/memori"
+Repository = "https://github.com/archit-15dev/memori"
 
 [project.scripts]
 memori = "memori_cli:main"
