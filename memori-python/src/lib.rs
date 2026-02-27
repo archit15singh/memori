@@ -137,12 +137,14 @@ impl PyMemori {
         no_embed: bool,
     ) -> PyResult<PyObject> {
         let meta = metadata.map(pydict_to_value).transpose()?;
-        let result = self
-            .inner
-            .lock()
-            .unwrap()
-            .insert(content, vector.as_deref(), meta, dedup_threshold, no_embed)
-            .map_err(memori_err)?;
+        let content_owned = content.to_string();
+        let result = py.allow_threads(|| {
+            self.inner
+                .lock()
+                .unwrap()
+                .insert(&content_owned, vector.as_deref(), meta, dedup_threshold, no_embed)
+                .map_err(memori_err)
+        })?;
 
         insert_result_to_dict(py, &result)
     }
@@ -328,22 +330,26 @@ impl PyMemori {
     }
 
     #[pyo3(signature = (batch_size=50))]
-    fn backfill_embeddings(&self, batch_size: usize) -> PyResult<usize> {
-        self.inner
-            .lock()
-            .unwrap()
-            .backfill_embeddings(batch_size)
-            .map_err(memori_err)
+    fn backfill_embeddings(&self, py: Python<'_>, batch_size: usize) -> PyResult<usize> {
+        py.allow_threads(|| {
+            self.inner
+                .lock()
+                .unwrap()
+                .backfill_embeddings(batch_size)
+                .map_err(memori_err)
+        })
     }
 
     #[pyo3(signature = (id, limit=5))]
     fn related(&self, py: Python<'_>, id: &str, limit: usize) -> PyResult<Vec<PyObject>> {
-        let results = self
-            .inner
-            .lock()
-            .unwrap()
-            .related(id, limit)
-            .map_err(memori_err)?;
+        let id_owned = id.to_string();
+        let results = py.allow_threads(|| {
+            self.inner
+                .lock()
+                .unwrap()
+                .related(&id_owned, limit)
+                .map_err(memori_err)
+        })?;
         results.iter().map(|m| memory_to_dict(py, m)).collect()
     }
 
