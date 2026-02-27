@@ -219,7 +219,7 @@ impl PyMemori {
         self.inner.lock().unwrap().delete(id).map_err(memori_err)
     }
 
-    #[pyo3(signature = (vector=None, text=None, filter=None, limit=10))]
+    #[pyo3(signature = (vector=None, text=None, filter=None, limit=10, text_only=false))]
     fn search(
         &self,
         py: Python<'_>,
@@ -227,6 +227,7 @@ impl PyMemori {
         text: Option<String>,
         filter: Option<&Bound<'_, PyDict>>,
         limit: usize,
+        text_only: bool,
     ) -> PyResult<Vec<PyObject>> {
         let filter_val = filter.map(pydict_to_value).transpose()?;
         let query = SearchQuery {
@@ -234,6 +235,7 @@ impl PyMemori {
             text,
             filter: filter_val,
             limit,
+            text_only,
         };
 
         let results = py.allow_threads(|| {
@@ -268,6 +270,24 @@ impl PyMemori {
             .lock()
             .unwrap()
             .insert_with_id(id, content, vector.as_deref(), meta, ca, ua)
+            .map_err(memori_err)
+    }
+
+    fn vacuum(&self) -> PyResult<()> {
+        self.inner.lock().unwrap().vacuum().map_err(memori_err)
+    }
+
+    #[pyo3(signature = (id, last_accessed=None, access_count=0))]
+    fn set_access_stats(
+        &self,
+        id: &str,
+        last_accessed: Option<f64>,
+        access_count: i64,
+    ) -> PyResult<()> {
+        self.inner
+            .lock()
+            .unwrap()
+            .set_access_stats(id, last_accessed, access_count)
             .map_err(memori_err)
     }
 

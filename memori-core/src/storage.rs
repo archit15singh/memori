@@ -314,6 +314,30 @@ pub fn delete_by_type(conn: &rusqlite::Connection, type_value: &str) -> Result<u
     Ok(affected)
 }
 
+/// Run SQLite VACUUM to compact the database file.
+pub fn vacuum(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute_batch("VACUUM")?;
+    Ok(())
+}
+
+/// Set access stats (last_accessed, access_count) for a memory by ID.
+/// Used to restore access stats during import.
+pub fn set_access_stats(
+    conn: &rusqlite::Connection,
+    id: &str,
+    last_accessed: Option<f64>,
+    access_count: i64,
+) -> Result<()> {
+    let affected = conn.execute(
+        "UPDATE memories SET last_accessed = ?1, access_count = ?2 WHERE id = ?3",
+        params![last_accessed, access_count, id],
+    )?;
+    if affected == 0 {
+        return Err(MemoriError::NotFound(id.to_string()));
+    }
+    Ok(())
+}
+
 /// Return (embedded_count, total_count) for embedding coverage stats
 pub fn embedding_stats(conn: &rusqlite::Connection) -> Result<(usize, usize)> {
     let total: i64 = conn.query_row("SELECT COUNT(*) FROM memories", [], |row| row.get(0))?;

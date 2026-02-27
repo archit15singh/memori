@@ -144,6 +144,7 @@ fn test_text_search_fts5() {
 
     let query = SearchQuery {
         text: Some("brown".to_string()),
+        text_only: true,
         limit: 10,
         ..Default::default()
     };
@@ -398,8 +399,10 @@ fn test_fts5_metadata_search() {
         .unwrap();
 
     // Search for "kafka" which only appears in metadata, not content
+    // Use text_only to test pure FTS5 behavior
     let query = SearchQuery {
         text: Some("kafka".to_string()),
+        text_only: true,
         limit: 10,
         ..Default::default()
     };
@@ -431,12 +434,12 @@ fn test_access_count_increments_on_get() {
 }
 
 #[test]
-fn test_access_count_in_search_results() {
+fn test_search_does_not_bump_access_count() {
     let db = open_temp();
     let v = vec![1.0, 0.0, 0.0];
     db.insert("searchable", Some(&v), None, None).unwrap();
 
-    // Search should touch the result
+    // Search should NOT touch results (access tracking is only on get())
     let query = SearchQuery {
         vector: Some(vec![1.0, 0.0, 0.0]),
         limit: 1,
@@ -444,7 +447,16 @@ fn test_access_count_in_search_results() {
     };
     let results = db.search(query).unwrap();
     assert_eq!(results.len(), 1);
-    assert!(results[0].access_count >= 1);
+    assert_eq!(results[0].access_count, 0);
+
+    // Search again -- still 0
+    let query2 = SearchQuery {
+        vector: Some(vec![1.0, 0.0, 0.0]),
+        limit: 1,
+        ..Default::default()
+    };
+    let results2 = db.search(query2).unwrap();
+    assert_eq!(results2[0].access_count, 0);
 }
 
 #[test]
@@ -557,6 +569,26 @@ fn test_dedup_disabled_with_none_threshold() {
         .unwrap();
     assert!(matches!(r2, InsertResult::Created(_)));
     assert_eq!(db.count().unwrap(), 2);
+}
+
+// -- v0.3.1 tests: text_only flag --
+
+#[test]
+fn test_text_only_search_skips_vectorization() {
+    let db = open_temp();
+    db.insert("kafka uses partitioned topics", None, None, None)
+        .unwrap();
+
+    // text_only=true should use FTS5 only (still works, just no vector fusion)
+    let query = SearchQuery {
+        text: Some("kafka".to_string()),
+        text_only: true,
+        limit: 10,
+        ..Default::default()
+    };
+    let results = db.search(query).unwrap();
+    assert_eq!(results.len(), 1);
+    assert!(results[0].content.contains("kafka"));
 }
 
 // -- v0.3 tests: embedding stats --

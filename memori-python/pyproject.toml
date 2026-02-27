@@ -26,3 +26,8 @@ memori = "memori_cli:main"
 features = ["pyo3/abi3-py39", "embeddings"]
 python-source = "python"
 python-packages = ["memori", "memori_cli"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+]
