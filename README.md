@@ -280,6 +280,16 @@ memori import < backup.jsonl
 memori import --new-ids < backup.jsonl
 ```
 
+### Dashboard
+
+```bash
+memori ui                    # open web dashboard on port 8899
+memori ui --port 9000        # custom port
+memori ui --no-open          # don't auto-open browser
+```
+
+Browse, search, and visualize your memory database in a dark-themed web dashboard. Read-only -- UI browsing does not inflate access counts. Features: search with 300ms debounce, type/sort/date filters, interactive type donut chart, timeline scatter plot, memory detail panel, and D3 force-directed connection graph (2-hop traversal from any memory).
+
 ### Setup
 
 ```bash
@@ -415,8 +425,8 @@ memori-python/  (PyO3 bindings + CLI, v0.5.1)
   src/lib.rs    PyMemori class (Mutex<Memori>, GIL release on search)
   python/
     memori/     Re-exports PyMemori from native .so (stable ABI, py39+)
-    memori_cli/ Argparse CLI (17 subcommands, --json/--raw on all)
-      data/     claude_snippet.md (CLAUDE.md behavioral snippet)
+    memori_cli/ Argparse CLI (18 subcommands, --json/--raw on all)
+      data/     claude_snippet.md, dashboard.html (web UI)
 ```
 
 ### Key design decisions

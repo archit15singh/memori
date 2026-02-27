@@ -23,8 +23,12 @@ import argparse
 import json
 import os
 import sys
+import threading
+import webbrowser
 from datetime import datetime, timezone
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 from memori import PyMemori
 
@@ -755,6 +759,136 @@ def cmd_setup(args):
   print(f"Added memori snippet to {target}")
 
 
+class DashboardHandler(BaseHTTPRequestHandler):
+  db = None
+
+  def log_message(self, format, *args):
+    pass  # silence request logs
+
+  def _json_response(self, data, status=200):
+    body = json.dumps(data, default=str).encode()
+    self.send_response(status)
+    self.send_header("Content-Type", "application/json")
+    self.send_header("Content-Length", str(len(body)))
+    self.end_headers()
+    self.wfile.write(body)
+
+  def _html_response(self, html):
+    body = html.encode()
+    self.send_response(200)
+    self.send_header("Content-Type", "text/html; charset=utf-8")
+    self.send_header("Content-Length", str(len(body)))
+    self.end_headers()
+    self.wfile.write(body)
+
+  def do_GET(self):
+    parsed = urlparse(self.path)
+    path = parsed.path
+    qs = parse_qs(parsed.query)
+
+    def qfirst(key, default=None):
+      return qs.get(key, [default])[0]
+
+    if path == "/":
+      data_dir = Path(__file__).parent / "data"
+      html = (data_dir / "dashboard.html").read_text()
+      self._html_response(html)
+
+    elif path == "/api/stats":
+      db = self.db
+      count = db.count()
+      types = db.type_distribution()
+      embed = db.embedding_stats()
+      self._json_response({
+        "count": count,
+        "types": types,
+        "embedding": embed,
+      })
+
+    elif path == "/api/memories" and not path.startswith("/api/memories/"):
+      db = self.db
+      type_filter = qfirst("type")
+      sort = qfirst("sort", "created")
+      limit = int(qfirst("limit", "50"))
+      offset = int(qfirst("offset", "0"))
+      before = float(qfirst("before")) if qfirst("before") else None
+      after = float(qfirst("after")) if qfirst("after") else None
+      results = db.list(
+        type_filter=type_filter, sort=sort,
+        limit=limit, offset=offset, before=before, after=after,
+      )
+      out = []
+      for r in results:
+        r.pop("vector", None)
+        out.append(r)
+      self._json_response(out)
+
+    elif path.startswith("/api/memories/"):
+      mem_id = path[len("/api/memories/"):]
+      if not mem_id:
+        self._json_response({"error": "missing id"}, 400)
+        return
+      mem = self.db.get_readonly(mem_id)
+      if mem:
+        mem.pop("vector", None)
+        self._json_response(mem)
+      else:
+        self._json_response({"error": "not_found"}, 404)
+
+    elif path == "/api/search":
+      db = self.db
+      text = qfirst("text")
+      filt_str = qfirst("filter")
+      filt = json.loads(filt_str) if filt_str else None
+      limit = int(qfirst("limit", "20"))
+      text_only = qfirst("text_only", "false") == "true"
+      before = float(qfirst("before")) if qfirst("before") else None
+      after = float(qfirst("after")) if qfirst("after") else None
+      results = db.search(
+        text=text, filter=filt, limit=limit,
+        text_only=text_only, before=before, after=after,
+      )
+      out = []
+      for r in results:
+        r.pop("vector", None)
+        out.append(r)
+      self._json_response(out)
+
+    elif path.startswith("/api/related/"):
+      mem_id = path[len("/api/related/"):]
+      limit = int(qfirst("limit", "5"))
+      try:
+        results = self.db.related(mem_id, limit=limit)
+        out = []
+        for r in results:
+          r.pop("vector", None)
+          out.append(r)
+        self._json_response(out)
+      except RuntimeError as e:
+        self._json_response({"error": str(e)}, 404)
+
+    else:
+      self.send_response(404)
+      self.end_headers()
+
+
+def cmd_ui(args):
+  db = _get_db(args.db)
+  DashboardHandler.db = db
+  port = args.port
+  server = HTTPServer(("127.0.0.1", port), DashboardHandler)
+  url = f"http://127.0.0.1:{port}"
+  print(f"Memori dashboard: {url}")
+  print("Press Ctrl+C to stop")
+  if not args.no_open:
+    threading.Timer(0.5, lambda: webbrowser.open(url)).start()
+  try:
+    server.serve_forever()
+  except KeyboardInterrupt:
+    print("\nStopped.")
+    server.server_close()
+
+
 # -- Main --
 
 
@@ -910,6 +1044,12 @@ def main():
   p_setup.add_argument("--show", action="store_true", help="Print snippet without writing")
   p_setup.add_argument("--undo", action="store_true", help="Remove the snippet")
   p_setup.set_defaults(func=cmd_setup)
+
+  # ui
+  p_ui = sub.add_parser("ui", help="Open web dashboard", parents=[output_parser])
+  p_ui.add_argument("--port", type=int, default=8899, help="Server port (default: 8899)")
+  p_ui.add_argument("--no-open", action="store_true", help="Don't auto-open browser")
+  p_ui.set_defaults(func=cmd_ui)
 
   args = parser.parse_args()
   if args.raw:

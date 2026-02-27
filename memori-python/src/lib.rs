@@ -155,6 +155,14 @@ impl PyMemori {
         }
     }
 
+    fn get_readonly(&self, py: Python<'_>, id: &str) -> PyResult<Option<PyObject>> {
+        let mem = self.inner.lock().unwrap().get_readonly(id).map_err(memori_err)?;
+        match mem {
+            Some(m) => Ok(Some(memory_to_dict(py, &m)?)),
+            None => Ok(None),
+        }
+    }
+
     #[pyo3(signature = (id, content=None, vector=None, metadata=None, merge_metadata=true))]
     fn update(
         &self,
