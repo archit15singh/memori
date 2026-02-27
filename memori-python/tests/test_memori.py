@@ -54,9 +54,19 @@ def test_update_content(db):
     assert mem["content"] == "updated"
 
 
-def test_update_metadata(db):
+def test_update_metadata_merge_default(db):
+    """Default behavior: metadata is merged, not replaced."""
     mid = db.insert("test", metadata={"a": 1})["id"]
     db.update(mid, metadata={"b": 2})
+
+    mem = db.get(mid)
+    assert mem["metadata"] == {"a": 1, "b": 2}
+
+
+def test_update_metadata_replace(db):
+    """Explicit merge_metadata=False replaces all metadata."""
+    mid = db.insert("test", metadata={"a": 1, "c": 3})["id"]
+    db.update(mid, metadata={"b": 2}, merge_metadata=False)
 
     mem = db.get(mid)
     assert mem["metadata"] == {"b": 2}
@@ -241,6 +251,40 @@ def test_auto_vectorize_search(db):
     assert all(r.get("score") is not None for r in results)
 
 
+def test_list_basic(db):
+    for i in range(5):
+        db.insert(f"memory {i}", metadata={"type": "fact"})
+    db.insert("preference", metadata={"type": "preference"})
+
+    # List all
+    results = db.list(limit=10)
+    assert len(results) == 6
+
+    # Filter by type
+    facts = db.list(type_filter="fact", limit=10)
+    assert len(facts) == 5
+
+    # Pagination
+    page1 = db.list(limit=3, offset=0)
+    page2 = db.list(limit=3, offset=3)
+    assert len(page1) == 3
+    assert len(page2) == 3
+    ids1 = {r["id"] for r in page1}
+    ids2 = {r["id"] for r in page2}
+    assert ids1.isdisjoint(ids2)
+
+
+def test_list_sort(db):
+    r1 = db.insert("rarely accessed")
+    r2 = db.insert("frequently accessed")
+    # Access r2 multiple times
+    for _ in range(5):
+        db.get(r2["id"])
+
+    results = db.list(sort="count", limit=10)
+    assert results[0]["id"] == r2["id"]
+
+
 def test_text_only_flag(db):
     """--text-only forces pure FTS5 search even with embeddings enabled."""
     db.insert("kafka partitioned topics", no_embed=True)
@@ -250,3 +294,130 @@ def test_text_only_flag(db):
     results = db.search(text="kafka", limit=5, text_only=True)
     assert len(results) == 1
     assert "kafka" in results[0]["content"]
+
+
+# -- v0.5 tests: prefix resolution --
+
+
+def test_prefix_get(db):
+    mid = db.insert("prefix test")["id"]
+    prefix = mid[:8]
+    mem = db.get(prefix)
+    assert mem is not None
+    assert mem["content"] == "prefix test"
+
+
+def test_prefix_update(db):
+    mid = db.insert("original")["id"]
+    prefix = mid[:8]
+    db.update(prefix, content="updated via prefix")
+    mem = db.get(mid)
+    assert mem["content"] == "updated via prefix"
+
+
+def test_prefix_delete(db):
+    mid = db.insert("to delete")["id"]
+    prefix = mid[:8]
+    db.delete(prefix)
+    assert db.count() == 0
+
+
+def test_prefix_ambiguous(db):
+    import time
+    ts = time.time()
+    db.insert_with_id("aaa11111-1111-1111-1111-111111111111", "first", created_at=ts, updated_at=ts)
+    db.insert_with_id("aaa22222-2222-2222-2222-222222222222", "second", created_at=ts, updated_at=ts)
+
+    with pytest.raises(RuntimeError, match="ambiguous"):
+        db.update("aaa", content="fail")
+
+    # But 8-char prefix works
+    mem = db.get("aaa11111")
+    assert mem is not None
+    assert mem["content"] == "first"
+
+
+# -- v0.5 tests: related --
+
+
+def test_related(db):
+    v1 = [1.0, 0.0, 0.0]
+    v2 = [0.9, 0.1, 0.0]
+    v3 = [0.0, 1.0, 0.0]
+
+    r1 = db.insert("source", vector=v1)
+    db.insert("similar", vector=v2)
+    db.insert("different", vector=v3)
+
+    results = db.related(r1["id"], limit=5)
+    assert len(results) > 0
+    assert results[0]["content"] == "similar"
+    # Self excluded
+    assert all(r["id"] != r1["id"] for r in results)
+
+
+def test_related_prefix(db):
+    r1 = db.insert("source", vector=[1.0, 0.0, 0.0])
+    db.insert("similar", vector=[0.9, 0.1, 0.0])
+
+    results = db.related(r1["id"][:8], limit=5)
+    assert len(results) > 0
+    assert results[0]["content"] == "similar"
+
+
+def test_related_no_vector(db):
+    r = db.insert("no vector", no_embed=True)
+    with pytest.raises(RuntimeError, match="no embedding"):
+        db.related(r["id"], limit=5)
+
+
+# -- v0.5 tests: list date filters --
+
+
+def test_list_before(db):
+    import time
+    ts = time.time()
+    db.insert_with_id("old-1", "old memory", created_at=ts - 7200, updated_at=ts - 7200)
+    db.insert("recent memory")
+
+    results = db.list(before=ts - 3600, limit=10)
+    assert len(results) == 1
+    assert results[0]["content"] == "old memory"
+
+
+def test_list_after(db):
+    import time
+    ts = time.time()
+    db.insert_with_id("old-1", "old memory", created_at=ts - 7200, updated_at=ts - 7200)
+    db.insert("recent memory")
+
+    results = db.list(after=ts - 3600, limit=10)
+    assert len(results) == 1
+    assert results[0]["content"] == "recent memory"
+
+
+# -- v0.5.1 tests: CLI prefix resolution in mutation output --
+
+
+def test_resolve_id_delete(db):
+    """_resolve_id returns full UUID from a prefix, used by cmd_delete."""
+    from memori_cli import _resolve_id
+    mid = db.insert("will be deleted")["id"]
+    prefix = mid[:8]
+    full_id = _resolve_id(db, prefix)
+    assert full_id == mid
+    assert len(full_id) == 36  # full UUID
+
+
+def test_cli_update_resolves_prefix(db):
+    """_resolve_id returns the full UUID from a short prefix."""
+    from memori_cli import _resolve_id
+    mid = db.insert("to update")["id"]
+    prefix = mid[:6]
+    assert _resolve_id(db, prefix) == mid
+
+
+def test_cli_resolve_id_not_found(db):
+    """_resolve_id returns the original prefix when no match."""
+    from memori_cli import _resolve_id
+    assert _resolve_id(db, "nonexistent") == "nonexistent"

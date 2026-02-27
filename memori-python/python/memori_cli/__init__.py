@@ -28,10 +28,15 @@ from pathlib import Path
 
 from memori import PyMemori
 
-__version__ = "0.3.1"
+__version__ = "0.5.1"
 
 DEFAULT_DB = os.path.expanduser("~/.claude/memori.db")
 DEFAULT_DEDUP_THRESHOLD = 0.92
+
+KNOWN_TYPES = frozenset([
+  "debugging", "decision", "architecture", "pattern",
+  "preference", "fact", "roadmap", "temporary",
+])
 
 SNIPPET_START = "<!-- memori:start -->"
 SNIPPET_END = "<!-- memori:end -->"
@@ -62,12 +67,40 @@ def _json_indent(args):
   return None if getattr(args, "raw", False) else 2
 
 
+def _parse_date_arg(value):
+  """Parse an ISO date string to a Unix timestamp (float)."""
+  try:
+    dt = datetime.fromisoformat(value)
+    if dt.tzinfo is None:
+      dt = dt.replace(tzinfo=timezone.utc)
+    return dt.timestamp()
+  except ValueError as e:
+    print(f"Invalid date format: {e}", file=sys.stderr)
+    sys.exit(2)
+
+
+def _resolve_id(db, prefix):
+  """Resolve a prefix to full UUID via get(). Returns the full ID or the prefix if unresolvable."""
+  mem = db.get(prefix)
+  return mem["id"] if mem else prefix
+
+
 # -- Commands --
+
+
+def _warn_unknown_type(meta):
+  """Warn if metadata has an unrecognized type value (never reject)."""
+  if meta and isinstance(meta, dict) and "type" in meta:
+    t = meta["type"]
+    if isinstance(t, str) and t not in KNOWN_TYPES:
+      known = ", ".join(sorted(KNOWN_TYPES))
+      print(f"Warning: unknown type '{t}'. Known types: {known}", file=sys.stderr)
 
 
 def cmd_store(args):
   db = _get_db(args.db)
   meta = _parse_json(args.meta, "--meta") if args.meta else None
+  _warn_unknown_type(meta)
   vector = _parse_json(args.vector, "--vector") if args.vector else None
 
   # Determine dedup threshold
@@ -101,7 +134,15 @@ def cmd_search(args):
   filt = _parse_json(args.filter, "--filter") if args.filter else None
   text_only = getattr(args, "text_only", False)
   include_vectors = getattr(args, "include_vectors", False)
-  results = db.search(vector=vector, text=args.text, filter=filt, limit=args.limit, text_only=text_only)
+
+  # Parse date range filters
+  before_ts = _parse_date_arg(args.before) if getattr(args, "before", None) else None
+  after_ts = _parse_date_arg(args.after) if getattr(args, "after", None) else None
+
+  results = db.search(
+    vector=vector, text=args.text, filter=filt, limit=args.limit,
+    text_only=text_only, before=before_ts, after=after_ts,
+  )
 
   if args.json:
     out = []
@@ -155,8 +196,13 @@ def cmd_update(args):
     print("At least one of --content, --meta, or --vector is required.", file=sys.stderr)
     sys.exit(2)
 
+  # Default is merge; --replace switches to full replacement
+  merge = not getattr(args, "replace", False)
+
+  full_id = _resolve_id(db, args.id)
+
   try:
-    db.update(args.id, content=content, vector=vector, metadata=meta)
+    db.update(args.id, content=content, vector=vector, metadata=meta, merge_metadata=merge)
   except RuntimeError:
     if args.json:
       print(json.dumps({"error": "not_found", "id": args.id}), file=sys.stderr)
@@ -165,9 +211,9 @@ def cmd_update(args):
     sys.exit(1)
 
   if args.json:
-    print(json.dumps({"id": args.id, "status": "updated"}))
+    print(json.dumps({"id": full_id, "status": "updated"}))
   else:
-    print(f"Updated {args.id}")
+    print(f"Updated {full_id}")
 
 
 def cmd_tag(args):
@@ -182,36 +228,100 @@ def cmd_tag(args):
     k, v = pair.split("=", 1)
     tags[k] = v
 
-  mem = db.get(args.id)
-  if not mem:
+  full_id = _resolve_id(db, args.id)
+
+  try:
+    # merge_metadata=True handles the read-modify-write in Rust
+    db.update(args.id, metadata=tags, merge_metadata=True)
+  except RuntimeError:
     if args.json:
       print(json.dumps({"error": "not_found", "id": args.id}), file=sys.stderr)
     else:
       print(f"Not found: {args.id}", file=sys.stderr)
     sys.exit(1)
 
-  existing = mem.get("metadata") or {}
-  merged = {**existing, **tags}
-  db.update(args.id, metadata=merged)
+  # Fetch merged result for display
+  mem = db.get(args.id)
+  merged = mem.get("metadata") or {} if mem else tags
 
   if args.json:
     print(json.dumps(merged, indent=_json_indent(args)))
   else:
-    print(f"Tagged {args.id}: {merged}")
+    print(f"Tagged {full_id}: {merged}")
+
+
+def cmd_list(args):
+  db = _get_db(args.db)
+  include_vectors = getattr(args, "include_vectors", False)
+
+  # Parse date range filters
+  before_ts = _parse_date_arg(args.before) if getattr(args, "before", None) else None
+  after_ts = _parse_date_arg(args.after) if getattr(args, "after", None) else None
+
+  results = db.list(
+    type_filter=args.type,
+    sort=args.sort,
+    limit=args.limit,
+    offset=args.offset,
+    before=before_ts,
+    after=after_ts,
+  )
+
+  if args.json:
+    out = []
+    for r in results:
+      entry = {
+        "id": r["id"],
+        "content": r["content"],
+        "metadata": r.get("metadata"),
+        "created_at": r.get("created_at"),
+        "updated_at": r.get("updated_at"),
+        "last_accessed": r.get("last_accessed"),
+        "access_count": r.get("access_count", 0),
+      }
+      if include_vectors:
+        entry["vector"] = r.get("vector")
+      out.append(entry)
+    print(json.dumps(out, indent=_json_indent(args), default=str))
+  else:
+    if not results:
+      print("No memories found.")
+      return
+    for r in results:
+      meta_type = ""
+      meta = r.get("metadata")
+      if meta and isinstance(meta, dict) and "type" in meta:
+        meta_type = f" [{meta['type']}]"
+      access = r.get("access_count", 0)
+      access_str = f" ({access} hits)" if access > 0 else ""
+      content = r["content"][:100] + ("..." if len(r["content"]) > 100 else "")
+      print(f"{r['id'][:8]}{meta_type}{access_str} {content}")
 
 
 def cmd_context(args):
+  import time
   db = _get_db(args.db)
   topic = args.topic
   limit = args.limit
 
-  # For small DBs, skip embedding overhead -- FTS5 is sufficient
   total = db.count()
-  use_text_only = total < 50
-  # Relevant matches
-  matches = db.search(text=topic, limit=limit, text_only=use_text_only)
-  # Recent memories (no query = returns by recency)
-  recent = db.search(limit=5)
+
+  # Build search filter (optionally scoped to project)
+  search_filter = None
+  if getattr(args, "project", None):
+    search_filter = {"project": args.project}
+
+  # Relevant matches (always hybrid search -- let Rust handle efficiency)
+  matches = db.search(text=topic, filter=search_filter, limit=limit)
+  # Recent memories (by last update, not creation)
+  recent = db.list(sort="updated", limit=5)
+  # Frequently accessed (only show if any have been accessed)
+  frequent = db.list(sort="count", limit=3)
+  frequent = [r for r in frequent if r.get("access_count", 0) > 0]
+  # Stale memories (created 30+ days ago, never accessed)
+  thirty_days_ago = time.time() - 30 * 86400
+  stale_candidates = db.list(sort="created", limit=20, before=thirty_days_ago)
+  stale = [r for r in stale_candidates if r.get("access_count", 0) == 0][:5]
   # Type distribution
   type_dist = db.type_distribution()
 
@@ -225,8 +335,16 @@ def cmd_context(args):
       ],
       "recent": [
         {"id": r["id"], "content": r["content"], "metadata": r.get("metadata"),
-         "created_at": r.get("created_at")}
+         "updated_at": r.get("updated_at")}
         for r in recent
+      ],
+      "frequent": [
+        {"id": r["id"], "content": r["content"], "access_count": r.get("access_count", 0)}
+        for r in frequent
+      ],
+      "stale": [
+        {"id": r["id"], "content": r["content"], "created_at": r.get("created_at")}
+        for r in stale
       ],
       "types": type_dist,
       "total": total,
@@ -243,7 +361,7 @@ def cmd_context(args):
     else:
       print("  (no matches)")
 
-    print(f"\n## Recent Memories\n")
+    print(f"\n## Recent Memories (by last update)\n")
     if recent:
       for r in recent:
         content = r["content"][:100] + ("..." if len(r["content"]) > 100 else "")
@@ -254,6 +372,19 @@ def cmd_context(args):
         print(f"- {r['id'][:8]}{meta_type} {content}")
     else:
       print("  (empty)")
+
+    if frequent:
+      print(f"\n## Frequently Accessed\n")
+      for r in frequent:
+        content = r["content"][:100] + ("..." if len(r["content"]) > 100 else "")
+        hits = r.get("access_count", 0)
+        print(f"- {r['id'][:8]} ({hits} hits) {content}")
+
+    if stale:
+      print(f"\n## Stale Memories (30+ days, never accessed)\n")
+      for r in stale:
+        content = r["content"][:100] + ("..." if len(r["content"]) > 100 else "")
+        print(f"- {r['id'][:8]} {content}")
 
     print(f"\n## Stats\n")
     print(f"Total: {total} memories")
@@ -294,20 +425,28 @@ def cmd_embed(args):
 def cmd_export(args):
   db = _get_db(args.db)
   include_vectors = args.include_vectors
-  results = db.search(limit=1_000_000)
+  batch_size = 100
+  offset = 0
 
-  for r in results:
-    entry = {
-      "id": r["id"],
-      "content": r["content"],
-      "metadata": r.get("metadata"),
-      "created_at": r.get("created_at"),
-      "updated_at": r.get("updated_at"),
-      "last_accessed": r.get("last_accessed"),
-      "access_count": r.get("access_count", 0),
-      "vector": r.get("vector") if include_vectors else None,
-    }
-    print(json.dumps(entry, default=str))
+  while True:
+    batch = db.list(sort="created", limit=batch_size, offset=offset)
+    if not batch:
+      break
+    for r in batch:
+      entry = {
+        "id": r["id"],
+        "content": r["content"],
+        "metadata": r.get("metadata"),
+        "created_at": r.get("created_at"),
+        "updated_at": r.get("updated_at"),
+        "last_accessed": r.get("last_accessed"),
+        "access_count": r.get("access_count", 0),
+        "vector": r.get("vector") if include_vectors else None,
+      }
+      print(json.dumps(entry, default=str))
+    offset += len(batch)
+    if len(batch) < batch_size:
+      break
 
 
 def cmd_import(args):
@@ -394,24 +533,14 @@ def cmd_purge(args):
     else:
       print(f"Deleted {total_deleted} memories")
   else:
-    # Dry-run: preview what would be deleted
-    # Count matches for each criterion
-    preview_count = 0
-    preview_items = []
-
-    all_results = db.search(limit=1_000_000)
-    for r in all_results:
-      match = False
-      if before_ts is not None and r.get("created_at", float("inf")) < before_ts:
-        match = True
-      if args.type:
-        meta = r.get("metadata")
-        if meta and isinstance(meta, dict) and meta.get("type") == args.type:
-          match = True
-      if match:
-        preview_count += 1
-        if len(preview_items) < 10:
-          preview_items.append(r)
+    # Dry-run: preview what would be deleted (uses list, not search -- no vector overhead)
+    preview_items = db.list(
+      type_filter=args.type,
+      sort="created",
+      limit=1_000_000,
+      before=before_ts,
+    )
+    preview_count = len(preview_items)
 
     criteria = {}
     if args.before:
@@ -425,14 +554,54 @@ def cmd_purge(args):
       print(f"Would delete {preview_count} memories (dry-run)")
       if preview_items:
         print("Preview (first 10):")
-        for r in preview_items:
+        for r in preview_items[:10]:
           content = r["content"][:80] + ("..." if len(r["content"]) > 80 else "")
           print(f"  {r['id'][:8]} {content}")
       print("\nRe-run with --confirm to delete.")
 
 
+def cmd_related(args):
+  db = _get_db(args.db)
+  include_vectors = getattr(args, "include_vectors", False)
+  try:
+    results = db.related(args.id, limit=args.limit)
+  except RuntimeError as e:
+    err_msg = str(e)
+    if args.json:
+      print(json.dumps({"error": err_msg}), file=sys.stderr)
+    else:
+      print(f"Error: {err_msg}", file=sys.stderr)
+    sys.exit(1)
+
+  if args.json:
+    out = []
+    for r in results:
+      entry = {
+        "id": r["id"],
+        "content": r["content"],
+        "score": r.get("score"),
+        "metadata": r.get("metadata"),
+        "created_at": r.get("created_at"),
+        "access_count": r.get("access_count", 0),
+      }
+      if include_vectors:
+        entry["vector"] = r.get("vector")
+      out.append(entry)
+    print(json.dumps(out, indent=_json_indent(args), default=str))
+  else:
+    if not results:
+      print("No related memories found.")
+      return
+    for r in results:
+      score = f"[{r['score']:.4f}]" if r.get("score") is not None else ""
+      meta = json.dumps(r.get("metadata") or {})
+      content = r["content"][:100] + ("..." if len(r["content"]) > 100 else "")
+      print(f"{r['id'][:8]} {score} {content}  meta={meta}")
+
+
 def cmd_delete(args):
   db = _get_db(args.db)
+  full_id = _resolve_id(db, args.id)
   try:
     db.delete(args.id)
   except RuntimeError:
@@ -442,9 +611,9 @@ def cmd_delete(args):
       print(f"Not found: {args.id}", file=sys.stderr)
     sys.exit(1)
   if args.json:
-    print(json.dumps({"id": args.id, "status": "deleted"}))
+    print(json.dumps({"id": full_id, "status": "deleted"}))
   else:
-    print(f"Deleted {args.id}")
+    print(f"Deleted {full_id}")
 
 
 def cmd_count(args):
@@ -590,6 +759,15 @@ def cmd_setup(args):
 
 
 def main():
+  # Shared parent parser for output format flags (accepted on every subcommand).
+  # SUPPRESS prevents subparser defaults from overriding main parser values,
+  # so both `memori --json search` and `memori search --json` work.
+  output_parser = argparse.ArgumentParser(add_help=False)
+  output_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                              help="Machine-readable JSON output")
+  output_parser.add_argument("--raw", action="store_true", default=argparse.SUPPRESS,
+                              help="Compact single-line JSON (no indent). Implies --json")
+
   parser = argparse.ArgumentParser(
     prog="memori",
     description="Memori -- embedded AI agent memory (SQLite + vector search + FTS5)",
@@ -606,7 +784,7 @@ def main():
   sub = parser.add_subparsers(dest="command", required=True)
 
   # store
-  p_store = sub.add_parser("store", help="Store a memory")
+  p_store = sub.add_parser("store", help="Store a memory", parents=[output_parser])
   p_store.add_argument("content", help="Text content to store")
   p_store.add_argument("--meta", help="JSON metadata object")
   p_store.add_argument("--vector", help="JSON array of floats")
@@ -619,7 +797,7 @@ def main():
   p_store.set_defaults(func=cmd_store)
 
   # search
-  p_search = sub.add_parser("search", help="Search memories")
+  p_search = sub.add_parser("search", help="Search memories", parents=[output_parser])
   p_search.add_argument("--text", help="Text query (FTS5)")
   p_search.add_argument("--vector", help="Vector query (JSON float array)")
   p_search.add_argument("--filter", help="Metadata filter (JSON object)")
@@ -628,68 +806,95 @@ def main():
                          help="Force FTS5-only search (skip auto-vectorization)")
   p_search.add_argument("--include-vectors", action="store_true",
                          help="Include vector data in JSON output (omitted by default)")
+  p_search.add_argument("--before", help="Only memories created before this ISO date")
+  p_search.add_argument("--after", help="Only memories created after this ISO date")
   p_search.set_defaults(func=cmd_search)
 
   # get
-  p_get = sub.add_parser("get", help="Get memory by ID")
+  p_get = sub.add_parser("get", help="Get memory by ID", parents=[output_parser])
   p_get.add_argument("id")
   p_get.add_argument("--include-vectors", action="store_true",
                       help="Include vector data in output (omitted by default to save tokens)")
   p_get.set_defaults(func=cmd_get)
 
   # update
-  p_update = sub.add_parser("update", help="Update an existing memory")
+  p_update = sub.add_parser("update", help="Update an existing memory", parents=[output_parser])
   p_update.add_argument("id", help="Memory ID to update")
   p_update.add_argument("--content", help="New text content")
-  p_update.add_argument("--meta", help="New metadata (JSON object, replaces existing)")
+  p_update.add_argument("--meta", help="New metadata (JSON object, merged by default)")
   p_update.add_argument("--vector", help="New vector (JSON float array)")
+  p_update.add_argument("--replace", action="store_true",
+                         help="Replace metadata entirely instead of merging")
   p_update.set_defaults(func=cmd_update)
 
   # tag
-  p_tag = sub.add_parser("tag", help="Add key=value tags to memory metadata")
+  p_tag = sub.add_parser("tag", help="Add key=value tags to memory metadata", parents=[output_parser])
   p_tag.add_argument("id", help="Memory ID to tag")
   p_tag.add_argument("tags", nargs="+", help="Tags as key=value pairs")
   p_tag.set_defaults(func=cmd_tag)
 
+  # list
+  p_list = sub.add_parser("list", help="Browse memories with sort and pagination", parents=[output_parser])
+  p_list.add_argument("--type", help="Filter by metadata type")
+  p_list.add_argument("--sort", default="created",
+                       choices=["created", "updated", "accessed", "count"],
+                       help="Sort field (default: created)")
+  p_list.add_argument("--limit", type=int, default=20, help="Max results (default: 20)")
+  p_list.add_argument("--offset", type=int, default=0, help="Pagination offset (default: 0)")
+  p_list.add_argument("--include-vectors", action="store_true",
+                       help="Include vector data in JSON output")
+  p_list.add_argument("--before", help="Only memories created before this ISO date")
+  p_list.add_argument("--after", help="Only memories created after this ISO date")
+  p_list.set_defaults(func=cmd_list)
+
+  # related
+  p_related = sub.add_parser("related", help="Find memories similar to a given memory", parents=[output_parser])
+  p_related.add_argument("id", help="Memory ID (or unique prefix)")
+  p_related.add_argument("--limit", type=int, default=5, help="Max results (default: 5)")
+  p_related.add_argument("--include-vectors", action="store_true",
+                          help="Include vector data in JSON output")
+  p_related.set_defaults(func=cmd_related)
+
   # delete
-  p_del = sub.add_parser("delete", help="Delete memory by ID")
+  p_del = sub.add_parser("delete", help="Delete memory by ID", parents=[output_parser])
   p_del.add_argument("id")
   p_del.set_defaults(func=cmd_delete)
 
   # count
-  p_count = sub.add_parser("count", help="Count memories")
+  p_count = sub.add_parser("count", help="Count memories", parents=[output_parser])
   p_count.set_defaults(func=cmd_count)
 
   # stats
-  p_stats = sub.add_parser("stats", help="Show database stats")
+  p_stats = sub.add_parser("stats", help="Show database stats", parents=[output_parser])
   p_stats.set_defaults(func=cmd_stats)
 
   # context
-  p_context = sub.add_parser("context", help="Load relevant context for a topic")
+  p_context = sub.add_parser("context", help="Load relevant context for a topic", parents=[output_parser])
   p_context.add_argument("topic", help="Topic to search for")
   p_context.add_argument("--limit", type=int, default=10, help="Max relevant matches")
+  p_context.add_argument("--project", help="Scope search to a project (filters by metadata.project)")
   p_context.set_defaults(func=cmd_context)
 
   # embed
-  p_embed = sub.add_parser("embed", help="Backfill embeddings for memories without vectors")
+  p_embed = sub.add_parser("embed", help="Backfill embeddings for memories without vectors", parents=[output_parser])
   p_embed.add_argument("--batch-size", type=int, default=50,
                         help="Number of memories to embed per batch (default: 50)")
   p_embed.set_defaults(func=cmd_embed)
 
   # export
-  p_export = sub.add_parser("export", help="Export all memories as JSONL to stdout")
+  p_export = sub.add_parser("export", help="Export all memories as JSONL to stdout", parents=[output_parser])
   p_export.add_argument("--include-vectors", action="store_true",
                          help="Include vectors in export (large, re-derivable)")
   p_export.set_defaults(func=cmd_export)
 
   # import
-  p_import = sub.add_parser("import", help="Import memories from JSONL on stdin")
+  p_import = sub.add_parser("import", help="Import memories from JSONL on stdin", parents=[output_parser])
   p_import.add_argument("--new-ids", action="store_true",
                          help="Generate fresh IDs instead of preserving originals")
   p_import.set_defaults(func=cmd_import)
 
   # purge
-  p_purge = sub.add_parser("purge", help="Bulk delete memories (dry-run by default)")
+  p_purge = sub.add_parser("purge", help="Bulk delete memories (dry-run by default)", parents=[output_parser])
   p_purge.add_argument("--before", help="Delete memories created before this ISO date")
   p_purge.add_argument("--type", help="Delete memories with this metadata type")
   p_purge.add_argument("--confirm", action="store_true",
@@ -697,11 +902,11 @@ def main():
   p_purge.set_defaults(func=cmd_purge)
 
   # gc
-  p_gc = sub.add_parser("gc", help="Compact database (SQLite VACUUM)")
+  p_gc = sub.add_parser("gc", help="Compact database (SQLite VACUUM)", parents=[output_parser])
   p_gc.set_defaults(func=cmd_gc)
 
   # setup
-  p_setup = sub.add_parser("setup", help="Configure Claude Code integration")
+  p_setup = sub.add_parser("setup", help="Configure Claude Code integration", parents=[output_parser])
   p_setup.add_argument("--show", action="store_true", help="Print snippet without writing")
   p_setup.add_argument("--undo", action="store_true", help="Remove the snippet")
   p_setup.set_defaults(func=cmd_setup)

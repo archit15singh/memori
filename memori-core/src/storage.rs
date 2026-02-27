@@ -3,49 +3,14 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::types::{InsertResult, Memory, MemoriError, Result};
+use crate::types::{InsertResult, Memory, MemoriError, Result, SortField};
+use crate::util::{blob_to_vec, cosine_similarity, vec_to_blob};
 
 fn now() -> f64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs_f64()
-}
-
-pub fn vec_to_blob(v: &[f32]) -> &[u8] {
-    unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, v.len() * 4) }
-}
-
-fn blob_to_vec(b: &[u8]) -> Vec<f32> {
-    assert!(b.len() % 4 == 0);
-    let mut v = vec![0.0f32; b.len() / 4];
-    unsafe {
-        std::ptr::copy_nonoverlapping(b.as_ptr(), v.as_mut_ptr() as *mut u8, b.len());
-    }
-    v
-}
-
-fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    if a.len() != b.len() || a.is_empty() {
-        return 0.0;
-    }
-
-    let mut dot = 0.0f32;
-    let mut norm_a = 0.0f32;
-    let mut norm_b = 0.0f32;
-
-    for i in 0..a.len() {
-        dot += a[i] * b[i];
-        norm_a += a[i] * a[i];
-        norm_b += b[i] * b[i];
-    }
-
-    let denom = norm_a.sqrt() * norm_b.sqrt();
-    if denom == 0.0 {
-        0.0
-    } else {
-        dot / denom
-    }
 }
 
 /// Auto-generate an embedding for content if no explicit vector is provided.
@@ -116,12 +81,17 @@ pub fn insert(
     vector: Option<&[f32]>,
     metadata: Option<Value>,
     dedup_threshold: Option<f32>,
+    no_embed: bool,
 ) -> Result<InsertResult> {
     let id = uuid::Uuid::new_v4().to_string();
     let ts = now();
 
-    // Auto-embed if no explicit vector
-    let auto_vec = auto_embed(content, vector);
+    // Auto-embed if no explicit vector and not suppressed
+    let auto_vec = if no_embed {
+        None
+    } else {
+        auto_embed(content, vector)
+    };
     let effective_vec = vector.or(auto_vec.as_deref());
 
     // Dedup check: if we have a vector and dedup is enabled, look for duplicates
@@ -133,7 +103,7 @@ pub fn insert(
 
         if let Some(dup_id) = find_duplicate(conn, vec, type_filter, threshold)? {
             // Update the existing memory instead of creating a new one
-            update(conn, &dup_id, Some(content), Some(vec), metadata)?;
+            update(conn, &dup_id, Some(content), Some(vec), metadata, false)?;
             return Ok(InsertResult::Deduplicated(dup_id));
         }
     }
@@ -193,17 +163,54 @@ pub fn get(conn: &rusqlite::Connection, id: &str) -> Result<Option<Memory>> {
     }
 }
 
+/// Deep-merge two JSON values. For objects, recursively merge keys.
+/// For other types, `overlay` replaces `base`.
+fn merge_json(base: &Value, overlay: &Value) -> Value {
+    match (base, overlay) {
+        (Value::Object(base_map), Value::Object(overlay_map)) => {
+            let mut merged = base_map.clone();
+            for (key, val) in overlay_map {
+                let merged_val = match merged.get(key) {
+                    Some(existing) => merge_json(existing, val),
+                    None => val.clone(),
+                };
+                merged.insert(key.clone(), merged_val);
+            }
+            Value::Object(merged)
+        }
+        _ => overlay.clone(),
+    }
+}
+
+/// Extract metadata values as a space-joined string for embedding.
+/// Only values are included (no JSON syntax or keys) to produce
+/// a natural-language-like string for the embedding model.
+fn metadata_values_text(metadata: &Value) -> String {
+    match metadata {
+        Value::Object(map) => map
+            .values()
+            .filter_map(|v| match v {
+                Value::String(s) => Some(s.clone()),
+                Value::Number(n) => Some(n.to_string()),
+                Value::Bool(b) => Some(b.to_string()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+        _ => String::new(),
+    }
+}
+
 pub fn update(
     conn: &rusqlite::Connection,
     id: &str,
     content: Option<&str>,
     vector: Option<&[f32]>,
     metadata: Option<Value>,
+    merge_metadata: bool,
 ) -> Result<()> {
     let existing = get_raw(conn, id)?;
-    if existing.is_none() {
-        return Err(MemoriError::NotFound(id.to_string()));
-    }
+    let existing = existing.ok_or_else(|| MemoriError::NotFound(id.to_string()))?;
 
     let ts = now();
 
@@ -234,19 +241,50 @@ pub fn update(
         )?;
     }
 
-    if let Some(m) = metadata {
-        let json_str = m.to_string();
+    if let Some(new_meta) = metadata {
+        let final_meta = if merge_metadata {
+            match &existing.metadata {
+                Some(existing_meta) => merge_json(existing_meta, &new_meta),
+                None => new_meta,
+            }
+        } else {
+            new_meta
+        };
+
+        let json_str = final_meta.to_string();
         conn.execute(
             "UPDATE memories SET metadata = ?1, updated_at = ?2 WHERE id = ?3",
             params![json_str, ts, id],
         )?;
+
+        // Re-embed when metadata changes so vector search finds tagged content.
+        // FTS5 triggers already handle text search via the update trigger, but
+        // the vector embedding needs explicit regeneration.
+        if vector.is_none() {
+            // Use current content (possibly just updated above)
+            let current_content = content.map(|s| s.to_string()).unwrap_or(existing.content);
+            let meta_text = metadata_values_text(&final_meta);
+            let embed_text = if meta_text.is_empty() {
+                current_content
+            } else {
+                format!("{} {}", current_content, meta_text)
+            };
+            let auto_vec = auto_embed(&embed_text, None);
+            if let Some(v) = auto_vec {
+                let blob = vec_to_blob(&v);
+                conn.execute(
+                    "UPDATE memories SET vector = ?1 WHERE id = ?2",
+                    params![blob, id],
+                )?;
+            }
+        }
     }
 
     Ok(())
 }
 
 /// Raw get without touching access count (avoids infinite recursion in update path)
-fn get_raw(conn: &rusqlite::Connection, id: &str) -> Result<Option<Memory>> {
+pub(crate) fn get_raw(conn: &rusqlite::Connection, id: &str) -> Result<Option<Memory>> {
     let mut stmt = conn.prepare(
         "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count
          FROM memories WHERE id = ?1",
@@ -279,6 +317,59 @@ pub fn delete(conn: &rusqlite::Connection, id: &str) -> Result<()> {
 pub fn count(conn: &rusqlite::Connection) -> Result<usize> {
     let c: i64 = conn.query_row("SELECT COUNT(*) FROM memories", [], |row| row.get(0))?;
     Ok(c as usize)
+}
+
+pub fn list(
+    conn: &rusqlite::Connection,
+    type_filter: Option<&str>,
+    sort: &SortField,
+    limit: usize,
+    offset: usize,
+    before: Option<f64>,
+    after: Option<f64>,
+) -> Result<Vec<Memory>> {
+    // Build WHERE conditions dynamically
+    let mut conditions: Vec<String> = Vec::new();
+    let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+    if let Some(tf) = type_filter {
+        param_values.push(Box::new(tf.to_string()));
+        conditions.push(format!("json_extract(metadata, '$.type') = ?{}", param_values.len()));
+    }
+    if let Some(b) = before {
+        conditions.push(format!("created_at < {}", b));
+    }
+    if let Some(a) = after {
+        conditions.push(format!("created_at > {}", a));
+    }
+
+    let where_clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", conditions.join(" AND "))
+    };
+
+    // Limit and offset are the next positional params
+    let limit_idx = param_values.len() + 1;
+    let offset_idx = param_values.len() + 2;
+    param_values.push(Box::new(limit as i64));
+    param_values.push(Box::new(offset as i64));
+
+    let sql = format!(
+        "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count
+         FROM memories {} ORDER BY {} DESC LIMIT ?{} OFFSET ?{}",
+        where_clause, sort.sql_column(), limit_idx, offset_idx
+    );
+
+    let mut stmt = conn.prepare(&sql)?;
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+    let mut rows = stmt.query(param_refs.as_slice())?;
+
+    let mut results = Vec::new();
+    while let Some(row) = rows.next()? {
+        results.push(row_to_memory(row)?);
+    }
+    Ok(results)
 }
 
 pub fn type_distribution(conn: &rusqlite::Connection) -> Result<HashMap<String, usize>> {
@@ -395,6 +486,42 @@ pub fn backfill_embeddings(conn: &rusqlite::Connection, batch_size: usize) -> Re
 
         Ok(total_processed)
     }
+}
+
+/// Resolve a short ID prefix to the full 36-char UUID.
+/// If the prefix is already 36+ chars, returns it as-is (full UUID passthrough).
+/// Returns NotFound if no match, AmbiguousPrefix if 2+ matches.
+pub fn resolve_prefix(conn: &rusqlite::Connection, prefix: &str) -> Result<String> {
+    if prefix.len() >= 36 {
+        return Ok(prefix.to_string());
+    }
+
+    let mut stmt = conn.prepare("SELECT id FROM memories WHERE id LIKE ?1 || '%' LIMIT 2")?;
+    let mut rows = stmt.query(params![prefix])?;
+
+    let first = match rows.next()? {
+        Some(row) => {
+            let id: String = row.get(0)?;
+            id
+        }
+        None => return Err(MemoriError::NotFound(prefix.to_string())),
+    };
+
+    // Check if there's a second match
+    if rows.next()?.is_some() {
+        // Count total matches for the error message
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM memories WHERE id LIKE ?1 || '%'",
+            params![prefix],
+            |row| row.get(0),
+        )?;
+        return Err(MemoriError::AmbiguousPrefix(
+            prefix.to_string(),
+            count as usize,
+        ));
+    }
+
+    Ok(first)
 }
 
 pub fn row_to_memory(row: &rusqlite::Row) -> rusqlite::Result<Memory> {

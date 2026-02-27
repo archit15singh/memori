@@ -3,10 +3,11 @@ pub mod schema;
 pub mod search;
 pub mod storage;
 pub mod types;
+pub mod util;
 
 use std::collections::HashMap;
 
-pub use types::{InsertResult, Memory, MemoriError, Result, SearchQuery};
+pub use types::{InsertResult, Memory, MemoriError, Result, SearchQuery, SortField};
 
 pub struct Memori {
     conn: rusqlite::Connection,
@@ -23,14 +24,20 @@ impl Memori {
         Ok(Self { conn })
     }
 
+    /// Resolve a short ID prefix to the full UUID.
+    pub fn resolve_id(&self, id: &str) -> Result<String> {
+        storage::resolve_prefix(&self.conn, id)
+    }
+
     pub fn insert(
         &self,
         content: &str,
         vector: Option<&[f32]>,
         metadata: Option<serde_json::Value>,
         dedup_threshold: Option<f32>,
+        no_embed: bool,
     ) -> Result<InsertResult> {
-        storage::insert(&self.conn, content, vector, metadata, dedup_threshold)
+        storage::insert(&self.conn, content, vector, metadata, dedup_threshold, no_embed)
     }
 
     pub fn insert_with_id(
@@ -46,7 +53,13 @@ impl Memori {
     }
 
     pub fn get(&self, id: &str) -> Result<Option<Memory>> {
-        storage::get(&self.conn, id)
+        // Resolve prefix; if not found, return None (backwards compat)
+        let full_id = match storage::resolve_prefix(&self.conn, id) {
+            Ok(fid) => fid,
+            Err(MemoriError::NotFound(_)) => return Ok(None),
+            Err(e) => return Err(e),
+        };
+        storage::get(&self.conn, &full_id)
     }
 
     pub fn update(
@@ -55,12 +68,15 @@ impl Memori {
         content: Option<&str>,
         vector: Option<&[f32]>,
         metadata: Option<serde_json::Value>,
+        merge_metadata: bool,
     ) -> Result<()> {
-        storage::update(&self.conn, id, content, vector, metadata)
+        let full_id = storage::resolve_prefix(&self.conn, id)?;
+        storage::update(&self.conn, &full_id, content, vector, metadata, merge_metadata)
     }
 
     pub fn delete(&self, id: &str) -> Result<()> {
-        storage::delete(&self.conn, id)
+        let full_id = storage::resolve_prefix(&self.conn, id)?;
+        storage::delete(&self.conn, &full_id)
     }
 
     pub fn search(&self, query: SearchQuery) -> Result<Vec<Memory>> {
@@ -84,7 +100,8 @@ impl Memori {
     }
 
     pub fn touch(&self, id: &str) -> Result<()> {
-        storage::touch(&self.conn, id)
+        let full_id = storage::resolve_prefix(&self.conn, id)?;
+        storage::touch(&self.conn, &full_id)
     }
 
     pub fn vacuum(&self) -> Result<()> {
@@ -97,14 +114,32 @@ impl Memori {
         last_accessed: Option<f64>,
         access_count: i64,
     ) -> Result<()> {
-        storage::set_access_stats(&self.conn, id, last_accessed, access_count)
+        let full_id = storage::resolve_prefix(&self.conn, id)?;
+        storage::set_access_stats(&self.conn, &full_id, last_accessed, access_count)
     }
 
     pub fn backfill_embeddings(&self, batch_size: usize) -> Result<usize> {
         storage::backfill_embeddings(&self.conn, batch_size)
     }
 
+    pub fn list(
+        &self,
+        type_filter: Option<&str>,
+        sort: &SortField,
+        limit: usize,
+        offset: usize,
+        before: Option<f64>,
+        after: Option<f64>,
+    ) -> Result<Vec<Memory>> {
+        storage::list(&self.conn, type_filter, sort, limit, offset, before, after)
+    }
+
     pub fn embedding_stats(&self) -> Result<(usize, usize)> {
         storage::embedding_stats(&self.conn)
+    }
+
+    pub fn related(&self, id: &str, limit: usize) -> Result<Vec<Memory>> {
+        let full_id = storage::resolve_prefix(&self.conn, id)?;
+        search::related(&self.conn, &full_id, limit)
     }
 }
