@@ -322,7 +322,7 @@ class TestGet:
         store_memory(db, "seed", no_embed=True)
         r = run_memori("get", "nonexistent-id", db_path=db)
         assert r.returncode == 1
-        assert "Not found" in r.stderr
+        assert "No memory matching" in r.stderr
 
     def test_get_not_found_json(self, db):
         store_memory(db, "seed", no_embed=True)
@@ -615,7 +615,7 @@ class TestDelete:
         store_memory(db, "seed", no_embed=True)
         r = run_memori("delete", "nonexistent-id", db_path=db)
         assert r.returncode == 1
-        assert "Not found" in r.stderr
+        assert "No memory matching" in r.stderr
 
 
 # ---------------------------------------------------------------------------
