@@ -59,7 +59,7 @@ Expected output: `uv` followed by version `0.4` or higher
 
 ## Phase 2: Build and Install CLI
 
-From the project root (the directory containing this CLAUDE.md file):
+From the memori repository root (the top-level directory where you cloned memori):
 
 ```bash
 cd memori-python && uv tool install --from . memori
@@ -84,7 +84,7 @@ Expected: `memori 0.6.0`
      ```bash
      export PATH="$HOME/.local/bin:$PATH"
      ```
-     Then run `source ~/.zshrc` (or `~/.bashrc`), restart your shell, and try `memori --version` again.
+     Then close and reopen your terminal, and try `memori --version` again.
 
 2. If the binary doesn't exist, the build failed silently. Re-run the Phase 2 commands above and look for error messages in the output.
 
@@ -103,7 +103,7 @@ Expected output (one of the following):
 - `Updated memori snippet in /Users/<your-username>/.claude/CLAUDE.md (...)`
 - `Memori snippet already present in /Users/<your-username>/.claude/CLAUDE.md`
 
-**STOP if the output path is inside the project directory** (e.g., contains `memori/CLAUDE.md`):
+**STOP if the output path does NOT contain `/.claude/CLAUDE.md`** (e.g., if it says `/path/to/memori/CLAUDE.md` instead of `~/.claude/CLAUDE.md`):
 
 ```bash
 cd ~ && memori setup --undo      # undo the wrong injection
@@ -115,7 +115,7 @@ cd ~ && memori setup             # re-inject into global file
 ## Phase 4: Verify Global CLAUDE.md Was Updated
 
 ```bash
-grep -c "memori:start" ~/.claude/CLAUDE.md
+test -f ~/.claude/CLAUDE.md && grep -c "memori:start" ~/.claude/CLAUDE.md || echo "0"
 ```
 
 Expected: `1`
@@ -139,7 +139,11 @@ The first `store` command downloads the embedding model (~90MB to `~/.fastembed_
 memori store "Memori installed and configured for Claude Code" --meta '{"type": "fact"}'
 ```
 
-Expected output: contains `stored` or `deduplicated` (if re-installing)
+Expected output: one of these lines:
+- `[ID] stored`
+- `[ID] deduplicated` (if re-installing)
+
+Where `[ID]` is a UUID.
 
 **Verify embedding coverage**:
 
@@ -184,18 +188,23 @@ memori --db $DB store "FTS5 hyphens crash MATCH because - is the NOT operator" -
 # Verify export/import round-trip
 memori --db $DB export > /tmp/memori_verify.jsonl
 memori --db /tmp/memori_verify2.db import < /tmp/memori_verify.jsonl
-memori --db /tmp/memori_verify2.db count
-# Expected: 3 (same as original DB)
+IMPORT_COUNT=$(memori --db /tmp/memori_verify2.db count)
+if [ "$IMPORT_COUNT" != "3" ]; then
+  echo "STOP: Import count is $IMPORT_COUNT, expected 3. Export/import failed."
+  exit 1
+fi
 
-# Cleanup
-rm /tmp/memori_verify.db /tmp/memori_verify2.db /tmp/memori_verify.jsonl 2>/dev/null
+# Cleanup (preserve error visibility)
+rm -f /tmp/memori_verify.db /tmp/memori_verify2.db /tmp/memori_verify.jsonl
 ```
 
 **Expected behaviors**:
 - `search` returns results ranked by relevance
 - `context` groups memories by type/topic
 - Dedup detects identical debugging memory and reports "deduplicated"
-- Import count matches export count (3)
+- Import count is exactly 3 (verified, with STOP if not)
+
+If all commands above completed without error, **Phase 6 PASSED** ✓
 
 ---
 
