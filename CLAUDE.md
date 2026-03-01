@@ -169,6 +169,7 @@ When making changes to the codebase, always update `CLAUDE.md` and `README.md` t
 | `LICENSE` | MIT license |
 | `.claude/settings.json` | Claude Code project permissions |
 | `docs/install.md` | Full installation and verification guide |
+| `.claude/skills/install/SKILL.md` | Claude Code skill: auto-triggered on "install", runs full automated install with verifications |
 
 ## Multi-Account Sync
 
