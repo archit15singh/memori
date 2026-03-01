@@ -114,6 +114,14 @@ cd ~ && memori setup             # re-inject into global file
 
 ## Phase 4: Verify Global CLAUDE.md Was Updated
 
+First, ensure the `~/.claude/` directory exists:
+
+```bash
+mkdir -p ~/.claude
+```
+
+Then verify the snippet:
+
 ```bash
 test -f ~/.claude/CLAUDE.md && grep -c "memori:start" ~/.claude/CLAUDE.md || echo "0"
 ```
@@ -121,8 +129,11 @@ test -f ~/.claude/CLAUDE.md && grep -c "memori:start" ~/.claude/CLAUDE.md || ech
 Expected: `1`
 
 **If result is 0**:
-- File doesn't exist: Run `mkdir -p ~/.claude && touch ~/.claude/CLAUDE.md && cd ~ && memori setup`
-- File exists but no snippet: Setup ran from the wrong directory or failed; re-run Phase 3
+- File doesn't exist: Create it and re-run Phase 3:
+  ```bash
+  touch ~/.claude/CLAUDE.md && cd ~ && memori setup
+  ```
+- File exists but no snippet: Setup ran from the wrong directory or failed; re-run Phase 3 (ensure you're in `~`, not the project)
 
 **If result is 2 or more** (duplicate injections):
 - Open `~/.claude/CLAUDE.md` in your editor
