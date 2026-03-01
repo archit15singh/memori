@@ -13,17 +13,37 @@ Then open Claude Code in this directory and ask it to install memori. It will re
 
 ## Prerequisites
 
-- **Rust toolchain** (`rustc` + `cargo`) -- [rustup.rs](https://rustup.rs/)
-- **Python 3.9+**
-- **uv** (recommended) -- `curl -LsSf https://astral.sh/uv/install.sh | sh`
+Check each prerequisite individually:
 
-Verify:
+### Rust toolchain
 
 ```bash
-cargo --version   # any recent stable
-python3 --version # 3.9+
-uv --version      # 0.4+
+cargo --version
 ```
+
+Expected: any string starting with `cargo`
+
+**Fix** if not found: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh` then restart shell. If Rust is installed but `cargo` is not in PATH, try `source ~/.cargo/env && cargo --version`.
+
+### Python 3.9+
+
+```bash
+python3 --version
+```
+
+Expected: `Python 3.9` or higher
+
+**Fix** if too old or not found: On macOS, `brew install python@3.12`. On Linux, `apt-get install python3.12` (or similar). Restart shell after installing.
+
+### uv (0.4+)
+
+```bash
+uv --version
+```
+
+Expected: `uv` followed by version `0.4` or higher
+
+**Fix** if not found: `curl -LsSf https://astral.sh/uv/install.sh | sh` then restart shell.
 
 ## Step 1: Install the CLI
 
@@ -51,7 +71,9 @@ export PATH="$HOME/.local/bin:$PATH"
 
 ## Step 2: Configure for Claude Code
 
-Run from your home directory (not the project directory) so the snippet targets your global `~/.claude/CLAUDE.md`:
+> **CRITICAL WARNING**: Run from your home directory (`~`), NOT from the project directory.
+>
+> `memori setup` searches for CLAUDE.md starting from the current working directory. If you run from inside the project, it injects into the project's local CLAUDE.md instead of your global `~/.claude/CLAUDE.md`.
 
 ```bash
 cd ~ && memori setup
@@ -59,61 +81,89 @@ cd ~ && memori setup
 
 This injects a behavioral snippet that teaches Claude Code when and how to use memori -- what to store, when to search, how to self-maintain.
 
-**Verify:**
+Expected output (one of):
+- `Added memori snippet to /Users/<your-username>/.claude/CLAUDE.md`
+- `Updated memori snippet in /Users/<your-username>/.claude/CLAUDE.md (...)`
+- `Memori snippet already present in /Users/<your-username>/.claude/CLAUDE.md`
+
+**STOP if the output path is inside the project directory** (e.g., contains `memori/CLAUDE.md`):
 
 ```bash
-memori setup --show              # preview the snippet
-grep "memori:start" ~/.claude/CLAUDE.md  # confirm injection
+cd ~ && memori setup --undo   # undo the wrong injection
+cd ~ && memori setup          # re-inject into global file
 ```
+
+**Verify injection:**
+
+```bash
+grep -c "memori:start" ~/.claude/CLAUDE.md
+# Expected: 1
+```
+
+If `0`, the file may not exist yet: `mkdir -p ~/.claude && touch ~/.claude/CLAUDE.md && cd ~ && memori setup`
 
 ## Step 3: Verify Claude Code Can Use It
 
-Store a test memory. The first `store` command downloads the embedding model (~90MB, cached at `~/.fastembed_cache/`). Subsequent calls are fast.
+Store a test memory. **The first `store` command downloads the embedding model (~90MB) to `~/.fastembed_cache/`**. This takes **1–2 minutes** the first time. Subsequent calls use the cached model and are instant.
 
 ```bash
 memori store "Memori installed and configured for Claude Code" --meta '{"type": "fact"}'
 ```
 
+Expected: output contains `stored` or `deduplicated`
+
 **Verify the full chain:**
 
 ```bash
-memori count     # Expected: 1
-memori stats     # Expected: 1 memory, 100% embedded
+memori stats
+# Expected: 1 memory, 100% embedding coverage
 ```
+
+**STOP if embedding coverage is 0%**: Run `memori embed` to backfill embeddings.
 
 ## Step 4: Test It Out
 
 Run through the core workflow to confirm everything works end-to-end. Use a temp DB to avoid polluting your real memory store:
 
 ```bash
-# Store a few test memories
-memori --db /tmp/memori_verify.db store "FTS5 hyphens crash MATCH because - is the NOT operator" --meta '{"type": "debugging", "topic": "sqlite"}'
-memori --db /tmp/memori_verify.db store "Chose SQLite over Postgres for zero-config portability" --meta '{"type": "decision", "topic": "database"}'
-memori --db /tmp/memori_verify.db store "User prefers uv over pip for Python tooling" --meta '{"type": "preference"}'
+DB=/tmp/memori_verify.db
 
-# Search (should return ranked results)
-memori --db /tmp/memori_verify.db search --text "SQLite"
+# Store a few test memories
+memori --db $DB store "FTS5 hyphens crash MATCH because - is the NOT operator" --meta '{"type": "debugging", "topic": "sqlite"}'
+memori --db $DB store "Chose SQLite over Postgres for zero-config portability" --meta '{"type": "decision", "topic": "database"}'
+memori --db $DB store "User prefers uv over pip for Python tooling" --meta '{"type": "preference"}'
+
+# Verify count
+memori --db $DB count
+# Expected: 3
+
+# Search (should return ranked results, SQLite memories at top)
+memori --db $DB search --text "SQLite"
+# Expected: SQLite-related memories ranked at top
 
 # Context retrieval (simulates session start)
-memori --db /tmp/memori_verify.db context "database choices"
+memori --db $DB context "database choices"
+# Expected: memories grouped by section, relevant ones ranked higher
 
-# Dedup test (should say "deduplicated" since content matches first store)
-memori --db /tmp/memori_verify.db store "FTS5 hyphens crash MATCH because - is the NOT operator" --meta '{"type": "debugging"}'
+# Dedup test (identical content + same type = update, not insert)
+memori --db $DB store "FTS5 hyphens crash MATCH because - is the NOT operator" --meta '{"type": "debugging"}'
+# Expected: output contains "deduplicated"
 
 # Export/import round-trip
-memori --db /tmp/memori_verify.db export > /tmp/memori_verify.jsonl
+memori --db $DB export > /tmp/memori_verify.jsonl
 memori --db /tmp/memori_verify2.db import < /tmp/memori_verify.jsonl
 memori --db /tmp/memori_verify2.db count
-# Should match: 3
+# Expected: 3 (should match original DB count)
 
 # Cleanup
 rm /tmp/memori_verify.db /tmp/memori_verify2.db /tmp/memori_verify.jsonl 2>/dev/null
 ```
 
 **Expected results:**
-- `search` returns ranked results with the SQLite-related memories at top
+- `count` returns `3`
+- `search` returns ranked results with SQLite-related memories at top
 - `context` shows relevant memories grouped by section
-- Second store of identical debugging content reports "deduplicated"
+- Dedup detects identical debugging memory and reports "deduplicated"
 - Import count matches export count (3)
 
 ## Step 5: Verify and Fix
@@ -125,9 +175,10 @@ If something didn't work:
 | `memori: command not found` | Add uv's bin dir to PATH: `export PATH="$HOME/.local/bin:$PATH"` and restart shell |
 | Build fails with "cargo not found" | Install Rust: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
 | Build fails with Python errors | Ensure Python 3.9+: `python3 --version`. On macOS: `brew install python@3.12` |
-| `memori setup` writes to project CLAUDE.md | Run from `~`, not from inside a project: `cd ~ && memori setup` |
-| Snippet missing from `~/.claude/CLAUDE.md` | File may not exist yet. Create it: `touch ~/.claude/CLAUDE.md && memori setup` |
-| First `store` hangs or is slow | Normal -- downloading the embedding model (~90MB). Wait ~1 min. Cached after first run. |
+| `memori setup` writes to project CLAUDE.md | Undo: `cd ~ && memori setup --undo`. Then: `cd ~ && memori setup` from home directory |
+| Snippet missing from `~/.claude/CLAUDE.md` | File may not exist yet. Create it: `mkdir -p ~/.claude && touch ~/.claude/CLAUDE.md && cd ~ && memori setup` |
+| Snippet is 2+ (duplicate injections) | Open `~/.claude/CLAUDE.md`, delete extra `<!-- memori:start...memori:end -->` blocks, keep exactly one |
+| First `store` hangs or is slow | Normal -- downloading the embedding model (~90MB). Wait 1–2 min. Cached after first run. |
 | Search returns no results | Check `memori stats` -- if embedding coverage is <100%, run `memori embed` to backfill |
 | Dedup didn't trigger | Content must be nearly identical AND same `type` in metadata. Check both match. |
 
