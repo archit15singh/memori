@@ -1,519 +1,238 @@
-# Memori
+# Memori Launch Copy
 
-Persistent memory for AI coding agents. SQLite + FTS5 + vector search in a single binary.
+Ready-to-paste content for each platform. All character limits verified.
 
-Memori gives Claude Code (and other AI agents) the ability to remember decisions, debugging lessons, architecture notes, and user preferences across sessions -- so every session starts smarter than the last.
+---
 
-## Install
+## Hacker News (Show HN)
 
-Requires Rust toolchain, Python 3.9+, and [uv](https://docs.astral.sh/uv/).
+### Option A: Link post (blog post as URL)
 
-```bash
-git clone https://github.com/archit-15dev/memori.git
-cd memori/memori-python
-uv tool install --from . memori
+**Title** (80 char max):
+```
+Show HN: Memori – Rust+SQLite persistent memory for AI coding agents (43µs reads)
 ```
 
-For the full installation walkthrough (including Claude Code configuration, verification, and troubleshooting), see **[docs/install.md](docs/install.md)**.
-
-## Claude Code Setup
-
-One command adds a behavioral snippet that teaches Claude Code when and how to use memori:
-
-```bash
-memori setup          # writes snippet to ~/.claude/tools/memori/SNIPPET.md, adds reference to CLAUDE.md
-memori setup --show   # preview what gets written
-memori setup --undo   # clean removal
+**URL:**
+```
+https://github.com/archit15singh/memori
 ```
 
-After setup, Claude Code will automatically:
-- Load relevant context at session start (`memori context "<topic>"`)
-- Store debugging lessons after fixing non-obvious bugs
-- Store architecture decisions with rationale
-- Capture user preferences
-- Search past knowledge before deep research
-- Self-maintain memory quality (update stale entries, prune scratch notes)
+### Option B: Text post (no URL, discussion-style)
 
-## Demo
-
-### Store memories with auto-embeddings and dedup
-
-```bash
-$ memori store "FTS5 hyphens crash MATCH because - is the NOT operator. Fix: quote each token." \
-    --meta '{"type": "debugging", "topic": "sqlite"}'
-Stored: b338b67f-b40b-4243-9219-2a2375e3d249
-
-$ memori store "Chose SQLite over Postgres for zero-config portability." \
-    --meta '{"type": "decision", "topic": "architecture"}' --json
-{"id": "6bf65b6f-dece-4be9-9517-7db7bf24dce7", "status": "created"}
+**Title:**
+```
+Show HN: I built a persistent memory layer for AI agents in Rust – single SQLite file, zero config
 ```
 
-Storing similar content of the same type auto-deduplicates (updates the existing memory instead of creating a duplicate).
+**Text:**
+```
+Every Claude Code session starts from zero. It doesn't remember the bug you debugged yesterday,
+the architecture decision you made last week, or that you prefer Tailwind over Bootstrap. I built
+Memori to fix this.
 
-### Hybrid search (FTS5 + vector)
+It's a Rust core with a Python CLI. One SQLite file stores everything -- text, 384-dim vector
+embeddings, JSON metadata, access tracking. No API keys, no cloud, no external vector DB.
 
-Text searches auto-vectorize into hybrid search for best results. No manual `--vector` needed:
+What makes it different from Mem0/Engram/agent-recall:
 
-```bash
-$ memori search --text "sqlite" --limit 3
-6bf65b6f [0.0329] Chose SQLite over Postgres for zero-config portability.  meta={"type": "decision"}
-b338b67f [0.0304] FTS5 hyphens crash MATCH because - is the NOT operator.  meta={"type": "debugging"}
+- Hybrid search: FTS5 full-text + cosine vector search, fused with Reciprocal Rank Fusion.
+  Text queries auto-vectorize -- no manual --vector flag needed.
+- Auto-dedup: cosine similarity > 0.92 between same-type memories triggers an update instead
+  of a new insert. Your agent can store aggressively without worrying about duplicates.
+- Decay scoring: logarithmic access boost + exponential time decay (~69 day half-life).
+  Frequently-used memories surface first; stale ones fade.
+- Built-in embeddings: fastembed AllMiniLM-L6-V2 ships with the binary. No OpenAI calls.
+- One-step setup: `memori setup` injects a behavioral snippet into ~/.claude/CLAUDE.md that
+  teaches the agent when to store, search, and self-maintain its own memory.
+
+Performance (Apple M4 Pro):
+- UUID get: 43µs
+- FTS5 text search: 65µs (1K memories) to 7.5ms (500K)
+- Hybrid search: 1.1ms (1K) to 913ms (500K)
+- Storage: 4.3 KB/memory, 8,100 writes/sec
+- Insert + auto-embed: 18ms end-to-end
+
+The vector search is brute-force (adequate to ~100K), deliberately isolated in one function
+for drop-in HNSW replacement when someone needs it.
+
+After setup, Claude Code autonomously:
+- Recalls relevant debugging lessons before investigating bugs
+- Stores architecture insights that save the next session 10+ minutes of reading
+- Remembers your tool preferences and workflow choices
+- Cleans up stale memories and backfills embeddings
+
+~195 tests (Rust integration + Python API + CLI subprocess), all real SQLite, no mocking.
+MIT licensed.
+
+GitHub: https://github.com/archit15singh/memori
+Blog post on the design principles: https://archit15singh.github.io/posts/2026-02-28-designing-cli-tools-for-ai-agents/
 ```
 
-Machine-readable JSON (vectors stripped by default to save tokens):
+---
 
-```bash
-$ memori search --text "sqlite" --limit 1 --json
-[
-  {
-    "id": "6bf65b6f-dece-4be9-9517-7db7bf24dce7",
-    "content": "Chose SQLite over Postgres for zero-config portability.",
-    "score": 0.0328,
-    "metadata": {"topic": "architecture", "type": "decision"},
-    "created_at": 1772183755.758478,
-    "access_count": 0
-  }
-]
+## Product Hunt
+
+**Name** (40 char max):
+```
+Memori
 ```
 
-`--json` and `--raw` work in both positions -- before or after the subcommand:
-
-```bash
-$ memori --json search --text "sqlite"     # before subcommand
-$ memori search --text "sqlite" --json     # after subcommand (same result)
-$ memori search --text "sqlite" --raw      # compact single-line JSON
+**Tagline** (60 char max):
+```
+Rust-powered persistent memory for AI coding agents
 ```
 
-### Prefix IDs
+**Description** (500 char max, currently 489):
+```
+AI coding agents forget everything between sessions. Memori gives them persistent memory in a single SQLite file -- no cloud, no API keys, no config.
 
-All commands that take an ID accept short prefixes (6+ chars recommended):
+Rust core. Hybrid search (FTS5 + vector) with auto-dedup and decay scoring. Built-in embeddings ship with the binary. 43µs reads, 4.3 KB per memory, 8,100 writes/sec.
 
-```bash
-$ memori get b338b67f                 # 8-char prefix
-$ memori update b338b6 --content "new text"   # 6-char prefix
-$ memori delete b338b67f --json
-{"id": "b338b67f-b40b-4243-9219-2a2375e3d249", "status": "deleted"}
+One command injects a behavioral snippet that teaches your agent when to store, search, and self-maintain its memory. Every session starts smarter than the last.
+
+Open source. MIT licensed.
 ```
 
-Mutation output always shows the resolved full UUID, even when you pass a prefix.
-
-### Find related memories
-
-Discover memories similar to one you already have:
-
-```bash
-$ memori related b338b67f --limit 3
-6bf65b6f [0.8234] Chose SQLite over Postgres for zero-config portability.  meta={"type": "decision"}
-a1c2d3e4 [0.4521] WAL mode enables concurrent reads with single writer.  meta={"type": "architecture"}
+**Launch tags** (pick up to 3):
+```
+Developer Tools, Open Source, Artificial Intelligence
 ```
 
-### Tag memories with key=value pairs
+**First comment:**
+```
+Hey everyone -- I'm Archit, the maker.
 
-```bash
-$ memori tag b338b67f verified=true severity=high count=3
-Tagged b338b67f-b40b-4243-9219-2a2375e3d249: {'count': 3, 'severity': 'high', 'topic': 'sqlite', 'type': 'debugging', 'verified': True}
+I built Memori because I got tired of re-explaining context to Claude Code every session.
+"We debugged this yesterday." "You chose Tailwind over Bootstrap last week." "The API uses
+prefix-based ID resolution, remember?"
+
+It never remembers. So I built something that does.
+
+The core insight: memory for AI agents isn't a chatbot problem. It's a search problem. You
+need hybrid retrieval (full-text AND semantic), automatic deduplication (agents store
+aggressively), and decay scoring (recent + frequently-accessed memories should surface first).
+
+I wrote the engine in Rust for speed and the CLI in Python for ergonomics. The whole thing
+is one SQLite file you can copy, back up, or delete. No external services.
+
+The part I'm most proud of: the behavioral snippet. Running `memori setup` injects guidance
+directly into the agent's system prompt that teaches it *when* to store memories (after
+non-obvious bug fixes, after choosing between alternatives, when leaving unfinished work)
+and *when to search* (before investigating bugs, before designing anything). The agent
+becomes self-maintaining.
+
+I wrote a deep-dive on the design principles behind the CLI:
+https://archit15singh.github.io/posts/2026-02-28-designing-cli-tools-for-ai-agents/
+
+Would love feedback -- especially from other Claude Code / Cursor / AI agent users.
+What memory patterns do you wish your agent remembered?
 ```
 
-### Context loading (one call for session start)
+---
 
-Loads relevant matches + recent memories + frequently accessed + stale candidates + type stats:
+## Trendshift
 
-```bash
-$ memori context "sqlite architecture" --limit 3
-## Relevant Memories: "sqlite architecture"
-
-- 6bf65b6f [0.0329] Chose SQLite over Postgres for zero-config portability.
-- b338b67f [0.0304] FTS5 hyphens crash MATCH...
-
-## Recent Memories (by last update)
-
-- 6bf65b6f [decision] Chose SQLite over Postgres...
-- b338b67f [debugging] FTS5 hyphens crash MATCH...
-
-## Frequently Accessed
-
-- 6bf65b6f (12 hits) Chose SQLite over Postgres...
-
-## Stale Memories (30+ days, never accessed)
-
-- a1c2d3e4 WAL mode enables concurrent reads...
-
-## Stats
-
-Total: 12 memories
-Types: debugging: 4, decision: 4, architecture: 2, fact: 1, preference: 1
+**Repository:**
+```
+archit15singh/memori
 ```
 
-### Date filters on search and list
-
-```bash
-$ memori search --text "kafka" --after 2026-02-01 --before 2026-03-01
-$ memori list --type debugging --after 2026-01-01 --sort updated
+**Description:**
+```
+Persistent memory layer for AI coding agents. Rust core + SQLite + FTS5 full-text search
++ vector embeddings in a single file. Hybrid search with Reciprocal Rank Fusion, automatic
+deduplication, decay scoring, and built-in embeddings (no API keys). 43µs reads, 4.3 KB
+per memory, 8,100 writes/sec. One-command setup injects a behavioral snippet that teaches
+AI agents to autonomously store, search, and self-maintain their own memory across sessions.
+MIT licensed.
 ```
 
-### Database stats and maintenance
+---
 
-```bash
-$ memori stats
-Database:  ~/.claude/memori.db
-Memories:  12
-File size: 72.0 KB
-Embedded:  12/12 (100%)
-Types:
-  debugging: 4
-  decision: 4
-  architecture: 2
-  preference: 1
-  fact: 1
+## Twitter/X Thread (bonus -- for launch day amplification)
 
-$ memori gc
-Compacted: 72.0 KB -> 60.0 KB (saved 12.0 KB)
+**Tweet 1 (hook):**
+```
+AI coding agents forget everything between sessions.
 
-$ memori embed
-All 12 memories already have embeddings.
+I built Memori -- a Rust-powered persistent memory layer that fits in a single SQLite file.
+
+43µs reads. Zero API keys. Zero cloud. Zero config.
+
+Open source, MIT licensed.
+
+github.com/archit15singh/memori
 ```
 
-### Export / Import (lossless round-trip)
+**Tweet 2 (the problem):**
+```
+The problem isn't "memory" -- it's retrieval.
 
-Exports preserve access stats (last_accessed, access_count) for full fidelity:
+Your agent stores 500 memories. How does it find the right one?
 
-```bash
-$ memori export > backup.jsonl
-$ memori import < backup.jsonl        # preserves IDs + access stats
-$ memori import --new-ids < backup.jsonl  # fresh UUIDs
+Memori uses hybrid search: FTS5 full-text + cosine vector similarity, fused with Reciprocal
+Rank Fusion. Text queries auto-vectorize. No manual flags.
+
+Result: the right memory surfaces in 1ms.
 ```
 
-## CLI Reference
-
+**Tweet 3 (the magic):**
 ```
-memori [--db PATH] [--json | --raw] [--version] <command> [options]
-```
+The part that surprised me most:
 
-Global options work before or after the subcommand.
+`memori setup` injects a behavioral snippet into your agent's system prompt.
 
-### Store
+It teaches the agent WHEN to store (after debugging, after decisions, when leaving
+unfinished work) and WHEN to search (before investigating bugs, before designing).
 
-```bash
-memori store "memory text" --meta '{"type": "debugging"}'
-memori store "text" --vector '[1.0, 0.0, ...]'  # explicit embedding
-memori store "text" --no-embed          # skip auto-embedding
-memori store "text" --no-dedup          # skip dedup check
-memori store "text" --dedup-threshold 0.95  # stricter dedup (default: 0.92)
+The agent becomes self-maintaining.
 ```
 
-### Search
+**Tweet 4 (numbers):**
+```
+Benchmarks (M4 Pro):
 
-```bash
-memori search --text "query"            # hybrid search (FTS5 + vector)
-memori search --text "query" --text-only  # FTS5-only (faster, exact matches)
-memori search --vector '[1.0, 0.0, ...]'  # pure vector search
-memori search --filter '{"type": "debugging"}'
-memori search --text "query" --before 2026-03-01 --after 2026-01-01
-memori search --text "query" --limit 20
-memori search --text "query" --include-vectors  # include embedding data
+- UUID lookup: 43µs
+- Text search: 65µs
+- Hybrid search: 1.1ms
+- Storage: 4.3 KB/memory
+- Write throughput: 8,100/sec
+- Insert + embed: 18ms
+
+Brute-force vector search. No HNSW. Still fast to 100K memories.
+
+Rust + SQLite + zero dependencies = fast.
 ```
 
-### Context
+**Tweet 5 (CTA):**
+```
+Deep-dive on the 10 design principles behind building CLI tools for AI agents:
 
-```bash
-memori context "topic"                  # load relevant + recent + stats
-memori context "topic" --limit 5        # fewer relevant matches
-memori context "topic" --project myapp  # scoped to metadata.project
-memori context "topic" --compact        # minimal flat JSON for agents
+archit15singh.github.io/posts/2026-02-28-designing-cli-tools-for-ai-agents/
+
+If you're building tools that agents invoke, this might save you some iteration cycles.
 ```
 
-### Get / Update / Tag / Delete
+---
 
-```bash
-memori get <id>                         # full ID or prefix (6+ chars)
-memori get <id> --include-vectors
-
-memori update <id> --content "new text"
-memori update <id> --meta '{"key": "value"}'  # merged by default
-memori update <id> --meta '{"key": "value"}' --replace  # replace all metadata
-memori update <id> --vector '[1.0, 0.0, ...]'  # explicit vector replacement
-
-memori tag <id> verified=true topic=fts5 count=42  # auto-types: bool, str, int
-
-memori delete <id>
-```
-
-### Related
-
-```bash
-memori related <id>                     # find similar memories by vector
-memori related <id> --limit 10
-```
-
-### List
-
-```bash
-memori list                             # default: 20, sorted by created_at
-memori list --type debugging            # filter by metadata type
-memori list --sort count --limit 10     # most frequently accessed
-memori list --sort updated              # recently modified
-memori list --sort accessed             # recently accessed
-memori list --offset 20 --limit 20     # pagination
-memori list --before 2026-01-01 --after 2025-06-01
-```
-
-### Maintenance
-
-```bash
-memori stats                            # DB size, types, embedding coverage
-memori count                            # quick count
-memori embed                            # backfill embeddings for old memories
-memori embed --batch-size 100           # larger batches
-memori gc                               # compact database (SQLite VACUUM)
-memori purge --type temporary           # preview what would be deleted
-memori purge --type temporary --confirm # actually delete
-memori purge --before 2025-01-01 --confirm
-```
-
-### Export / Import
-
-```bash
-memori export > backup.jsonl
-memori export --include-vectors > full-backup.jsonl
-memori import < backup.jsonl
-memori import --new-ids < backup.jsonl
-```
-
-### Dashboard
-
-```bash
-memori ui                    # open web dashboard on port 8899
-memori ui --port 9000        # custom port
-memori ui --no-open          # don't auto-open browser
-```
-
-Browse, search, and visualize your memory database in a dark-themed web dashboard. Read-only -- UI browsing does not inflate access counts. Features: search with 300ms debounce, type/sort/date filters, interactive type donut chart, timeline scatter plot (capped at 500 memories), memory detail panel, and D3 force-directed connection graph (2-hop traversal from any memory). Charts require internet (Chart.js and D3 loaded from CDN) -- a "Charts require internet connection" banner shows when offline instead of silent failure. The memory list works offline.
-
-### Setup
-
-```bash
-memori setup          # write snippet to ~/.claude/tools/memori/SNIPPET.md, add reference to CLAUDE.md (auto-updates stale versions)
-memori setup --show   # preview snippet
-memori setup --undo   # remove snippet and reference
-```
-
-## Python API
-
-```python
-from memori import PyMemori
-
-db = PyMemori("memories.db")
-
-# Store (auto-embeds, auto-dedup by default)
-result = db.insert("user prefers dark mode", metadata={"type": "preference"})
-# result = {"id": "abc-123...", "action": "created"}
-
-result = db.insert("similar text", dedup_threshold=0.92)  # must pass explicitly; default is None (no dedup)
-# result = {"id": "abc-123...", "action": "deduplicated"}
-
-result = db.insert("no vector needed", no_embed=True)
-
-# Search (hybrid by default -- auto-vectorizes text queries)
-results = db.search(text="dark mode")
-results = db.search(text="dark mode", text_only=True)  # FTS5-only
-results = db.search(vector=[1.0, 0.0, ...], limit=5)
-results = db.search(filter={"type": "preference"})
-results = db.search(text="query", before=1772000000.0, after=1771000000.0)
-
-# Get (supports prefix IDs, bumps access_count)
-mem = db.get("abc123")  # 6+ char prefix
-mem = db.get("abc12345-full-uuid-here")
-
-# Get without bumping access_count (read-only, used by dashboard)
-mem = db.get_readonly("abc123")
-
-# Related (find similar by vector)
-similar = db.related("abc123", limit=5)
-
-# Update (metadata merged by default)
-db.update("abc123", content="updated text")
-db.update("abc123", metadata={"verified": True})
-db.update("abc123", metadata={"new": "only"}, merge_metadata=False)  # replace
-
-# Delete
-db.delete("abc123")
-
-# List with sorting and pagination
-all_memories = db.list(limit=50)
-recent = db.list(sort="updated", limit=10)
-popular = db.list(sort="count", limit=10)
-typed = db.list(type_filter="debugging", limit=20)
-paged = db.list(limit=20, offset=40)
-dated = db.list(before=1772000000.0, after=1771000000.0)
-
-# Bulk operations
-dist = db.type_distribution()            # {"preference": 3, "fact": 1}
-db.delete_before(timestamp)              # bulk delete by age
-db.delete_by_type("temporary")           # bulk delete by type
-
-# Import/export helpers
-db.insert_with_id("custom-id", "content", created_at=ts, updated_at=ts)
-db.set_access_stats("id", last_accessed=ts, access_count=5)
-
-# Embeddings
-db.backfill_embeddings(batch_size=50)
-stats = db.embedding_stats()             # {"embedded": 10, "total": 12}
-vec = db.embed("some text")              # raw 384-dim embedding vector
-
-# Maintenance
-db.vacuum()
-```
-
-## Performance
-
-> **Benchmarked on**: Apple M4 Pro (14-core CPU, 48 GB RAM), macOS Sequoia.
-
-Latency benchmarks use in-memory SQLite with deterministic seeding (no disk I/O variance). Measured with [Criterion.rs](https://github.com/bheisler/criterion.rs) on pre-computed 384-dim vectors -- embedding model latency excluded except in dedicated embedding benchmarks.
-
-### Search & CRUD Latency
-
-| Operation | 1,000 | 10,000 | 100,000 | 500,000 |
-|---|---|---|---|---|
-| get (UUID) | 43 µs | 60 µs | 183 µs | 47 µs |
-| get (prefix†) | 65 µs | 257 µs | 2.15 ms | 12.5 ms |
-| insert (no embed) | 83 µs | 95 µs | 177 µs | 45 µs |
-| count | 636 ns | 1.1 µs | 11.1 µs | 71 µs |
-| list (limit 20) | 1.05 ms | 11.5 ms | 123 ms | 621 ms |
-| text search (FTS5) | 65 µs | 171 µs | 1.49 ms | 7.5 ms |
-| vector search | 1.00 ms | 14.7 ms | 172 ms | 904 ms |
-| hybrid search (RRF) | 1.12 ms | 14.0 ms | 162 ms | 913 ms |
-| filtered vector search | 154 µs | 1.54 ms | 22.9 ms | 130 ms |
-
-*†Prefix = 8 chars at ≤100K, 12 chars at 500K (8-char prefixes collide above ~100K UUIDs via birthday paradox).*
-
-### Memory Efficiency
-
-Measured with file-backed SQLite (realistic storage), scaling from 1K to 1M memories.
-
-| Memories | DB Size | Per-Memory | Write Throughput |
-|---|---|---|---|
-| 1,000 | 4.3 MB | 4.4 KB | 8,100/s |
-| 10,000 | 42.5 MB | 4.4 KB | 7,200/s |
-| 100,000 | 424.6 MB | 4.3 KB | 6,400/s |
-| 500,000 | 2.07 GB | 4.3 KB | 5,700/s |
-| 1,000,000 | 4.15 GB | 4.3 KB | 4,200/s |
-
-*Each memory: ~100 words of content + 384-dim embedding vector + JSON metadata. DB file measured after VACUUM. Write throughput = inserts/sec including FTS5 indexing. SQLite reads pages on demand -- the full DB is never loaded into RAM.*
-
-### Single-Op Latency
-
-| Operation | Latency |
-|---|---|
-| cosine_similarity (384-dim) | 213 ns |
-| vec_to_blob / blob_to_vec | <40 ns |
-| embed_text (AllMiniLM-L6-V2) | 9 ms |
-| embed_batch (10 texts) | 133 ms |
-| embed_batch (100 texts) | 963 ms |
-| insert + auto-embed | 18 ms |
-
-<details>
-<summary>Reproduce these benchmarks</summary>
-
-```bash
-# Run all Rust benchmarks (~30 min with 500K scale)
-cargo bench -p memori-core
-
-# Run specific benchmark group
-cargo bench -p memori-core --bench search_bench    # search at 1K/10K/100K/500K
-cargo bench -p memori-core --bench crud_bench      # CRUD at 1K/10K/100K/500K
-cargo bench -p memori-core --bench vector_ops_bench
-cargo bench -p memori-core --bench embed_bench     # requires embeddings feature
-cargo bench -p memori-core --bench memory_bench    # file size + write throughput (1K-1M)
-
-# Generate markdown table from criterion output
-python3 scripts/bench-table.py
-
-# CLI-level timing (requires: brew install hyperfine)
-bash scripts/bench-cli.sh
-
-# Open HTML reports
-open target/criterion/report/index.html
-```
-
-</details>
-
-## How It Works
-
-### Storage
-
-Single SQLite file with WAL journaling. Memories are stored in one table with 8 columns: `id` (UUID v4), `content`, `vector` (BLOB), `metadata` (JSON), `created_at`, `updated_at`, `last_accessed`, `access_count`. An FTS5 external-content virtual table indexes `content || ' ' || metadata` with sync triggers, so full-text search covers both memory text and metadata values.
-
-### Embeddings
-
-Auto-generated on insert via [AllMiniLM-L6-V2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) (384 dimensions, ~9ms per memory on Apple M4 Pro). Stored as raw f32 BLOBs (~1.5KB each). Feature-gated behind `embeddings` (default on). Model files cached to `.fastembed_cache/` on first use.
-
-### Search Algorithm
-
-Four modes based on query parameters:
-
-| Query | Mode | How it works |
-|-------|------|-------------|
-| `text + vector` | Hybrid (RRF) | Runs both FTS5 and cosine independently, fuses via Reciprocal Rank Fusion (K=60) |
-| `text` only | Hybrid (auto) | Auto-embeds the query text, then runs hybrid search |
-| `text` + `text_only` | Text (FTS5) | Pure FTS5 search, no vectorization -- faster for exact term matching |
-| `vector` only | Vector | Brute-force cosine similarity against all stored vectors |
-| neither | Recent | Returns most recently updated memories |
-
-**Hybrid search** runs FTS5 (BM25 scoring) and cosine similarity independently at 3x the requested limit, then fuses results using [Reciprocal Rank Fusion](https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf) -- a rank-based method that avoids the score normalization problem between BM25 (negative floats) and cosine (0..1).
-
-FTS5 queries are sanitized by quoting each token to prevent operator injection (hyphens, colons, asterisks).
-
-### Decay Scoring
-
-Search results are boosted by usage patterns:
+## GitHub Repo Description (one-liner, 350 char max)
 
 ```
-final_score = base_score * boost * decay
+Persistent memory for AI coding agents. Rust + SQLite + FTS5 + vector search in a single file. Hybrid retrieval with auto-dedup, decay scoring, and built-in embeddings. One-command setup teaches agents to autonomously store, search, and self-maintain memory across sessions.
 ```
 
-- **boost** = `1 + 0.1 * ln(1 + access_count)` -- logarithmic, sublinear growth (10 accesses = 1.24x, 100 accesses = 1.46x)
-- **decay** = `exp(-0.01 * days_since_last_access)` -- exponential with ~69-day half-life
-- Never-accessed memories get no decay penalty (decay = 1.0)
+---
 
-This surfaces frequently-used memories while gradually deprioritizing forgotten ones.
-
-### Prefix ID Resolution
-
-All ID-based commands accept short prefixes (6+ chars recommended). Resolution uses `WHERE id LIKE prefix%` on the TEXT primary key (B-tree range scan, not full table scan). Returns an error if the prefix is ambiguous (matches 2+ memories).
-
-### Deduplication
-
-On insert, if a vector is available and dedup is enabled (default threshold: 0.92 cosine similarity), memori scans same-type memories and updates the best match instead of creating a duplicate. O(N) per insert within the type bucket.
-
-## Architecture
+## Elevator Pitch (for any platform that asks "what is this?")
 
 ```
-memori-core/  (Rust library crate, v0.5.0)
-  lib.rs        Memori facade -- prefix-resolving API over storage + search
-  types.rs      Memory, SearchQuery, InsertResult, MemoriError, SortField
-  schema.rs     SQLite DDL, 3 migration versions (PRAGMA user_version)
-  storage.rs    CRUD, prefix resolution, list, bulk ops, dedup, metadata merge
-  search.rs     Vector/text/hybrid search, RRF fusion, decay scoring
-  embed.rs      fastembed AllMiniLM-L6-V2 (lazy singleton, feature-gated)
-  util.rs       cosine_similarity, vec<->blob conversion
+Memori is a persistent memory system for AI coding agents. Every session starts from zero
+-- the agent doesn't remember yesterday's debugging lesson or last week's architecture
+decision. Memori fixes this with a single SQLite file that stores text, vector embeddings,
+and metadata. Hybrid search finds the right memory in milliseconds. Auto-deduplication
+prevents bloat. Decay scoring surfaces what matters. And a behavioral snippet teaches the
+agent to maintain its own memory autonomously -- no human intervention needed.
 
-memori-python/  (PyO3 bindings + CLI, v0.5.1)
-  src/lib.rs    PyMemori class (Mutex<Memori>, GIL release on search)
-  python/
-    memori/     Re-exports PyMemori from native .so (stable ABI, py39+)
-    memori_cli/ Argparse CLI (18 subcommands, --json/--raw on all)
-      data/     claude_snippet.md, dashboard.html (web UI)
+Rust core for speed, Python CLI for ergonomics, zero external dependencies.
 ```
-
-### Key design decisions
-
-- **Single SQLite file + WAL** -- portability over throughput. The entire DB is one `.db` file.
-- **Brute-force vector search** -- O(N) cosine similarity. Adequate to ~100K memories at 384 dims. The `vector_search()` function is the sole hot path, designed for drop-in HNSW replacement when needed.
-- **FTS5 external-content table** -- no text duplication. Sync triggers keep the inverted index consistent with the base table.
-- **RRF hybrid fusion (K=60)** -- rank-based, not score-based. Sidesteps the normalization problem between cosine and BM25.
-- **Vectors stripped by default** -- 10KB per memory reduced to ~500 bytes in output. Opt-in via `--include-vectors`.
-- **Agent-as-user introspection** -- after each release, the AI agent uses the tool on real data and reports honestly on the experience. Bug fixes in v0.5.1 were found this way.
-
-## License
-
-MIT

@@ -1,0 +1,29 @@
+%%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#1f6feb', 'primaryTextColor': '#e6edf3', 'primaryBorderColor': '#388bfd', 'lineColor': '#8b949e', 'secondaryColor': '#161b22', 'tertiaryColor': '#0d1117', 'background': '#0d1117', 'mainBkg': '#161b22', 'nodeBorder': '#388bfd', 'clusterBkg': '#161b2299', 'clusterBorder': '#30363d', 'titleColor': '#e6edf3', 'edgeLabelBackground': '#161b22', 'fontSize': '16px'}}}%%
+
+flowchart TB
+    CLI["Python CLI\n18 subcommands\n--json · --raw · --compact"]
+    PYO3["PyO3 Bindings\nMutex‹Memori› + GIL release"]
+
+    subgraph CORE["memori-core  (Rust)"]
+        direction TB
+        SEARCH["search.rs\n4 search modes\nRRF hybrid fusion\nDecay scoring\n~69 day half-life"]
+        STORAGE["storage.rs\nCRUD · Auto-dedup (0.92)\nMetadata merge\nPrefix ID resolution"]
+        EMBED["embed.rs\nAllMiniLM-L6-V2\nAuto-embed on store\n384-dim vectors"]
+        SCHEMA["schema.rs\nDDL · FTS5 triggers\n3 migration versions"]
+    end
+
+    DB[("SQLite + WAL\n─────────────\nFTS5 virtual table\n384-dim vector BLOBs\nJSON metadata\nAccess tracking\n─────────────\n43µs get · 4.3 KB/memory\n8,100 writes/sec")]
+
+    CLI --> PYO3
+    PYO3 --> SEARCH
+    PYO3 --> STORAGE
+    PYO3 --> EMBED
+    EMBED -.->|"vectors"| STORAGE
+    SCHEMA -.->|"DDL + migrations"| DB
+    SEARCH --> DB
+    STORAGE --> DB
+
+    style CORE fill:#161b22,stroke:#f78166,stroke-width:2px,color:#e6edf3
+    style DB fill:#1f6feb,stroke:#388bfd,color:#e6edf3
+    style CLI fill:#161b22,stroke:#388bfd,color:#e6edf3
+    style PYO3 fill:#161b22,stroke:#388bfd,color:#e6edf3
