@@ -1,19 +1,19 @@
 %%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#1f6feb', 'primaryTextColor': '#e6edf3', 'primaryBorderColor': '#388bfd', 'lineColor': '#8b949e', 'secondaryColor': '#161b22', 'tertiaryColor': '#0d1117', 'background': '#0d1117', 'mainBkg': '#161b22', 'nodeBorder': '#388bfd', 'clusterBkg': '#161b2299', 'clusterBorder': '#30363d', 'titleColor': '#e6edf3', 'edgeLabelBackground': '#161b22', 'fontSize': '16px'}}}%%
 
 flowchart TB
-    A1(["🟢 Session Start"])
-    A2["memori context ‹topic›\nLoad relevant memories"]
-    A3["Recall past context\nDebugging lessons · Decisions\nArchitecture notes · Preferences"]
-    A4["Work on task\nCode · Debug · Design · Review"]
+    A1(["Session Start"])
+    A2["memori context<br/>Load relevant memories"]
+    A3["Recall past context<br/>Debugging lessons, Decisions,<br/>Architecture notes, Preferences"]
+    A4["Work on task<br/>Code, Debug, Design, Review"]
 
-    A5{"Memory-worthy\nevent?"}
-    A6["memori store\n🐛 debugging · ⚖️ decision\n🏗️ architecture · ⭐ preference\n🔁 pattern · 🗺️ roadmap"]
+    A5{"Memory-worthy<br/>event?"}
+    A6["memori store<br/>debugging | decision |<br/>architecture | preference |<br/>pattern | roadmap"]
 
-    A7{"Need prior\ncontext?"}
-    A8["memori search --text ‹query›\nHybrid FTS5 + Vector retrieval"]
+    A7{"Need prior<br/>context?"}
+    A8["memori search --text<br/>Hybrid FTS5 + Vector retrieval"]
 
-    A9{"50+\nmemories?"}
-    A10["Self-maintain\nPurge stale · Backfill embeddings\nReview type distribution"]
+    A9{"50+<br/>memories?"}
+    A10["Self-maintain<br/>Purge stale, Backfill embeddings,<br/>Review type distribution"]
 
     A1 --> A2 --> A3 --> A4
     A4 --> A5
