@@ -18,10 +18,10 @@ For the full installation walkthrough (including Claude Code configuration, veri
 
 ## Claude Code Setup
 
-One command adds a behavioral snippet to your CLAUDE.md that teaches Claude Code when and how to use memori:
+One command adds a behavioral snippet that teaches Claude Code when and how to use memori:
 
 ```bash
-memori setup          # adds snippet to CLAUDE.md
+memori setup          # writes snippet to ~/.claude/tools/memori/SNIPPET.md, adds reference to CLAUDE.md
 memori setup --show   # preview what gets written
 memori setup --undo   # clean removal
 ```
@@ -292,9 +292,9 @@ Browse, search, and visualize your memory database in a dark-themed web dashboar
 ### Setup
 
 ```bash
-memori setup          # inject snippet into CLAUDE.md (auto-updates stale versions)
+memori setup          # write snippet to ~/.claude/tools/memori/SNIPPET.md, add reference to CLAUDE.md (auto-updates stale versions)
 memori setup --show   # preview snippet
-memori setup --undo   # remove snippet
+memori setup --undo   # remove snippet and reference
 ```
 
 ## Python API

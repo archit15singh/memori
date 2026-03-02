@@ -1032,10 +1032,15 @@ class TestSetup:
         assert "memori:start" in r.stdout
         assert "memori:end" in r.stdout
 
-    def test_setup_inject(self, tmp_path):
-        """Setup injects snippet into CLAUDE.md found in cwd."""
-        claude_md = tmp_path / "CLAUDE.md"
-        claude_md.write_text("# Existing Content\n")
+    def test_setup_inject(self, tmp_path, monkeypatch):
+        """Setup injects snippet into ~/.claude/tools/memori/SNIPPET.md and pointer into CLAUDE.md."""
+        # Mock home directory to tmp_path for this test
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        # Create a CLAUDE.md in cwd for the pointer to be added to
+        cwd_claude = tmp_path / "CLAUDE.md"
+        cwd_claude.write_text("# Existing Content\n")
+
         db_path = str(tmp_path / "test.db")
 
         # Run setup from cwd=tmp_path
@@ -1044,32 +1049,47 @@ class TestSetup:
             cmd, capture_output=True, text=True, cwd=str(tmp_path), timeout=60,
         )
         assert r.returncode == 0
-        assert "Added" in r.stdout
+        assert "Configured memori" in r.stdout
 
-        content = claude_md.read_text()
-        assert "memori:start" in content
-        assert "# Existing Content" in content
+        # Verify snippet file exists
+        snippet_path = tmp_path / ".claude" / "tools" / "memori" / "SNIPPET.md"
+        assert snippet_path.exists()
+        snippet_content = snippet_path.read_text()
+        assert "memori:start" in snippet_content
+        assert "memori:end" in snippet_content
 
-    def test_setup_idempotent(self, tmp_path):
+        # Verify pointer is in CLAUDE.md
+        claude_content = cwd_claude.read_text()
+        assert "memori:reference" in claude_content
+        assert "# Existing Content" in claude_content
+        assert str(snippet_path) in claude_content
+
+    def test_setup_idempotent(self, tmp_path, monkeypatch):
         """Running setup twice should not duplicate the snippet."""
-        claude_md = tmp_path / "CLAUDE.md"
-        claude_md.write_text("# Test\n")
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        cwd_claude = tmp_path / "CLAUDE.md"
+        cwd_claude.write_text("# Test\n")
         db_path = str(tmp_path / "test.db")
 
         cmd = [MEMORI_BIN, "--db", db_path, "setup"]
         subprocess.run(cmd, capture_output=True, text=True, cwd=str(tmp_path), timeout=60)
         r2 = subprocess.run(cmd, capture_output=True, text=True, cwd=str(tmp_path), timeout=60)
         assert r2.returncode == 0
-        assert "already present" in r2.stdout
+        assert "already configured" in r2.stdout
 
-        # Only one marker pair
-        content = claude_md.read_text()
-        assert content.count("memori:start") == 1
+        # Only one snippet file and pointer
+        snippet_path = tmp_path / ".claude" / "tools" / "memori" / "SNIPPET.md"
+        assert snippet_path.exists()
+        claude_content = cwd_claude.read_text()
+        assert claude_content.count("memori:reference") == 1
 
-    def test_setup_undo(self, tmp_path):
-        """Undo removes the injected snippet."""
-        claude_md = tmp_path / "CLAUDE.md"
-        claude_md.write_text("# Before\n")
+    def test_setup_undo(self, tmp_path, monkeypatch):
+        """Undo removes both the snippet file and pointer."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        cwd_claude = tmp_path / "CLAUDE.md"
+        cwd_claude.write_text("# Before\n")
         db_path = str(tmp_path / "test.db")
 
         cmd_setup = [MEMORI_BIN, "--db", db_path, "setup"]
@@ -1080,9 +1100,60 @@ class TestSetup:
         assert r.returncode == 0
         assert "Removed" in r.stdout
 
-        content = claude_md.read_text()
-        assert "memori:start" not in content
-        assert "# Before" in content
+        # Verify pointer is removed from CLAUDE.md
+        claude_content = cwd_claude.read_text()
+        assert "memori:reference" not in claude_content
+        assert "# Before" in claude_content
+
+        # Verify snippet file is removed
+        snippet_path = tmp_path / ".claude" / "tools" / "memori" / "SNIPPET.md"
+        assert not snippet_path.exists()
+
+    def test_setup_upgrade_version(self, tmp_path, monkeypatch):
+        """Test upgrading from old version to new version."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        cwd_claude = tmp_path / "CLAUDE.md"
+        cwd_claude.write_text("# Test\n")
+
+        # Create old version snippet manually
+        snippet_dir = tmp_path / ".claude" / "tools" / "memori"
+        snippet_dir.mkdir(parents=True, exist_ok=True)
+        snippet_file = snippet_dir / "SNIPPET.md"
+        snippet_file.write_text("<!-- memori:start v0.5.0 -->\nOld snippet\n<!-- memori:end v0.5.0 -->")
+
+        db_path = str(tmp_path / "test.db")
+        cmd = [MEMORI_BIN, "--db", db_path, "setup"]
+        r = subprocess.run(cmd, capture_output=True, text=True, cwd=str(tmp_path), timeout=60)
+        assert r.returncode == 0
+        assert "Updated memori snippet" in r.stdout
+        assert "v0.5.0" in r.stdout
+
+        # Verify snippet was updated
+        updated_content = snippet_file.read_text()
+        assert "v0.6.0" in updated_content
+        assert "Old snippet" not in updated_content
+
+    def test_setup_creates_tools_directory(self, tmp_path, monkeypatch):
+        """Test that ~/.claude/tools/ directory is created if missing."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        cwd_claude = tmp_path / "CLAUDE.md"
+        cwd_claude.write_text("# Test\n")
+
+        # Ensure the directory doesn't exist yet
+        tools_dir = tmp_path / ".claude" / "tools"
+        assert not tools_dir.exists()
+
+        db_path = str(tmp_path / "test.db")
+        cmd = [MEMORI_BIN, "--db", db_path, "setup"]
+        r = subprocess.run(cmd, capture_output=True, text=True, cwd=str(tmp_path), timeout=60)
+        assert r.returncode == 0
+
+        # Verify directory was created
+        assert tools_dir.exists()
+        snippet_file = tools_dir / "memori" / "SNIPPET.md"
+        assert snippet_file.exists()
 
 
 # ---------------------------------------------------------------------------

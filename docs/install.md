@@ -73,34 +73,33 @@ export PATH="$HOME/.local/bin:$PATH"
 
 > **CRITICAL WARNING**: Run from your home directory (`~`), NOT from the project directory.
 >
-> `memori setup` searches for CLAUDE.md starting from the current working directory. If you run from inside the project, it injects into the project's local CLAUDE.md instead of your global `~/.claude/CLAUDE.md`.
+> `memori setup` writes the snippet to `~/.claude/tools/memori/SNIPPET.md` and adds a reference pointer to your CLAUDE.md. If you run from inside the project, the pointer is added to the project's local CLAUDE.md instead of your global `~/.claude/CLAUDE.md`.
 
 ```bash
 cd ~ && memori setup
 ```
 
-This injects a behavioral snippet that teaches Claude Code when and how to use memori -- what to store, when to search, how to self-maintain.
+This writes a behavioral snippet to `~/.claude/tools/memori/SNIPPET.md` that teaches Claude Code when and how to use memori -- what to store, when to search, how to self-maintain.
 
 Expected output (one of):
-- `Added memori snippet to /Users/<your-username>/.claude/CLAUDE.md`
-- `Updated memori snippet in /Users/<your-username>/.claude/CLAUDE.md (...)`
-- `Memori snippet already present in /Users/<your-username>/.claude/CLAUDE.md`
+- `Configured memori. Snippet at /Users/<your-username>/.claude/tools/memori/SNIPPET.md, reference in /Users/<your-username>/.claude/CLAUDE.md`
+- `Updated memori snippet at /Users/<your-username>/.claude/tools/memori/SNIPPET.md (v...)`
+- `Memori already configured at /Users/<your-username>/.claude/tools/memori/SNIPPET.md`
 
-**STOP if the output path is inside the project directory** (e.g., contains `memori/CLAUDE.md`):
-
-```bash
-cd ~ && memori setup --undo   # undo the wrong injection
-cd ~ && memori setup          # re-inject into global file
-```
-
-**Verify injection:**
+**Verify setup:**
 
 ```bash
-grep -c "memori:start" ~/.claude/CLAUDE.md
+test -f ~/.claude/tools/memori/SNIPPET.md && echo "✓ Snippet found" || echo "✗ Not found"
+grep -c "memori:reference" ~/.claude/CLAUDE.md
 # Expected: 1
 ```
 
-If `0`, the file may not exist yet: `mkdir -p ~/.claude && touch ~/.claude/CLAUDE.md && cd ~ && memori setup`
+If the pointer is in the wrong CLAUDE.md (project-local instead of global):
+
+```bash
+cd ~ && memori setup --undo   # undo the wrong setup
+cd ~ && memori setup          # re-setup from home directory
+```
 
 ## Step 3: Verify Claude Code Can Use It
 
@@ -166,7 +165,61 @@ rm /tmp/memori_verify.db /tmp/memori_verify2.db /tmp/memori_verify.jsonl 2>/dev/
 - Dedup detects identical debugging memory and reports "deduplicated"
 - Import count matches export count (3)
 
-## Step 5: Verify and Fix
+## Step 5: Explore the Dashboard
+
+Memori includes a web dashboard to visualize and browse your memories. Open it now:
+
+```bash
+memori ui
+```
+
+Expected:
+- Browser auto-opens to http://127.0.0.1:8899
+- Dashboard loads with your stored memories and charts
+
+**Dashboard Features:**
+
+The left sidebar shows:
+- **Total Memories**: Live count of all memories in your database
+- **Embedding Coverage**: Percentage of memories with embeddings (click to run `memori embed` if needed)
+- **Types**: Donut chart showing distribution of memory types (click segments to filter the list)
+- **Timeline**: Scatter plot with creation date on X-axis and access count on Y-axis (shows memory age vs usage patterns)
+
+The main area displays:
+- **Memory Cards**: 20 memories per page, each showing ID, type badge, content preview, relative timestamp, access count
+- **Live Search**: Text input at top filters by content using hybrid FTS5 + vector search
+- **Type Filter**: Dropdown to show only memories of a specific type
+- **Sort Options**: Create, Updated, Accessed, or Access Count (click column headers)
+- **Date Range Pickers**: Filter memories within a date range
+
+**Expand a Memory:**
+- Click any card to see full content, all metadata, and related memories
+- "Explore Connections" button shows a D3 force-directed graph of related memories
+- Graph nodes are sized by access count and colored by type
+
+**Try It Out:**
+
+Populate the dashboard with test memories (using your real database):
+
+```bash
+memori store "Memori dashboard shows memory stats, search, timeline, and memory relationships" --meta '{"type": "fact"}'
+memori store "Debugging pattern: grep logs → narrow time window → find root cause → verify fix" --meta '{"type": "pattern", "topic": "debugging"}'
+memori store "Chose Rust for memori core for zero-GC performance and seamless PyO3 Python bindings" --meta '{"type": "decision", "topic": "architecture"}'
+
+# Dashboard updates in real-time -- refresh browser to see new memories
+```
+
+Then refresh the browser to see:
+- Updated "Total Memories" count
+- New colors in the Types donut chart
+- New dots on the Timeline
+- Memories searchable and filterable by type
+
+**Close the Dashboard:**
+
+Press `Ctrl+C` in the terminal running `memori ui`. (The database remains intact.)
+
+## Step 6: Verify and Fix
 
 If something didn't work:
 
@@ -175,18 +228,28 @@ If something didn't work:
 | `memori: command not found` | Add uv's bin dir to PATH: `export PATH="$HOME/.local/bin:$PATH"` and restart shell |
 | Build fails with "cargo not found" | Install Rust: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
 | Build fails with Python errors | Ensure Python 3.9+: `python3 --version`. On macOS: `brew install python@3.12` |
-| `memori setup` writes to project CLAUDE.md | Undo: `cd ~ && memori setup --undo`. Then: `cd ~ && memori setup` from home directory |
-| Snippet missing from `~/.claude/CLAUDE.md` | File may not exist yet. Create it: `mkdir -p ~/.claude && touch ~/.claude/CLAUDE.md && cd ~ && memori setup` |
-| Snippet is 2+ (duplicate injections) | Open `~/.claude/CLAUDE.md`, delete extra `<!-- memori:start...memori:end -->` blocks, keep exactly one |
+| `memori setup` writes pointer to project CLAUDE.md | Undo: `cd ~ && memori setup --undo`. Then: `cd ~ && memori setup` from home directory |
+| Snippet file missing at `~/.claude/tools/memori/SNIPPET.md` | Re-run setup: `cd ~ && memori setup` |
+| Reference missing from `~/.claude/CLAUDE.md` | File may not exist yet. Create it: `mkdir -p ~/.claude && touch ~/.claude/CLAUDE.md && cd ~ && memori setup` |
+| Multiple references in CLAUDE.md | Rare. Open file and keep only one `<!-- memori:reference...memori:reference:end -->` block |
 | First `store` hangs or is slow | Normal -- downloading the embedding model (~90MB). Wait 1–2 min. Cached after first run. |
 | Search returns no results | Check `memori stats` -- if embedding coverage is <100%, run `memori embed` to backfill |
 | Dedup didn't trigger | Content must be nearly identical AND same `type` in metadata. Check both match. |
+| `memori ui` says "Address already in use" | Port 8899 is taken. Use: `memori ui --port 9000` |
+| Dashboard charts show "Charts require internet connection" | This is expected (Chart.js and D3 are loaded from CDN). Charts display when online; memory list always works |
+| Browser doesn't auto-open for `memori ui` | Use `memori ui --no-open` and manually visit http://127.0.0.1:8899. Or configure your default browser. |
 
-If tests pass but Claude Code doesn't seem to use memori, verify the snippet is in the **global** file:
+If tests pass but Claude Code doesn't seem to use memori, verify the reference is in the **global** file:
 
 ```bash
-cat ~/.claude/CLAUDE.md | grep -c "memori:start"
+cat ~/.claude/CLAUDE.md | grep -c "memori:reference"
 # Expected: 1
+```
+
+Also verify the snippet file exists:
+
+```bash
+test -f ~/.claude/tools/memori/SNIPPET.md && echo "✓ Snippet found"
 ```
 
 Then start a new Claude Code session -- the snippet is read at session start.
@@ -199,14 +262,14 @@ After pulling new code:
 
 ```bash
 cd memori/memori-python && uv tool install --from . memori --force
-memori setup  # re-run from ~ to update the snippet if version changed
+cd ~ && memori setup  # re-run from ~ to update the snippet if version changed
 ```
 
 ## Uninstalling
 
 ```bash
-uv tool uninstall memori   # remove the CLI binary
-cd ~ && memori setup --undo  # remove snippet from CLAUDE.md (run before uninstalling, or manually delete the memori:start/end block)
+cd ~ && memori setup --undo  # remove reference from CLAUDE.md and snippet file (must run before uninstalling)
+uv tool uninstall memori     # remove the CLI binary
 ```
 
 The database at `~/.claude/memori.db` and model cache at `~/.fastembed_cache/` are left behind. Delete manually if desired.

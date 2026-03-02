@@ -46,6 +46,8 @@ SNIPPET_START_PREFIX = "<!-- memori:start"
 SNIPPET_END_PREFIX = "<!-- memori:end"
 SNIPPET_START = f"<!-- memori:start v{__version__} -->"
 SNIPPET_END = f"<!-- memori:end v{__version__} -->"
+SNIPPET_REFERENCE_START = "<!-- memori:reference -->"
+SNIPPET_REFERENCE_END = "<!-- memori:reference:end -->"
 
 
 def _get_db(path=None):
@@ -73,10 +75,65 @@ def _parse_json(value, flag_name, use_json=False):
 
 
 def _snippet_text():
-  """Load the CLAUDE.md snippet from bundled data."""
+  """Load the memori snippet from bundled data."""
   data_dir = Path(__file__).parent / "data"
   snippet_file = data_dir / "claude_snippet.md"
   return snippet_file.read_text()
+
+
+def _find_snippet_markers(text):
+  """Find version-marked snippet markers (<!-- memori:start v... --> ... <!-- memori:end v... -->).
+
+  Returns:
+    Tuple of (start_idx, end_idx, old_version) if markers found, None otherwise.
+  """
+  start_idx = text.find(SNIPPET_START_PREFIX)
+  if start_idx == -1:
+    return None
+  # Find end of start marker line
+  try:
+    start_line_end = text.index("-->", start_idx) + 3
+  except ValueError:
+    return None
+  # Extract version from start marker
+  marker_line = text[start_idx:start_line_end]
+  old_version = None
+  if " v" in marker_line:
+    old_version = marker_line.split(" v")[1].rstrip(" ->")
+  # Find end marker
+  end_idx = text.find(SNIPPET_END_PREFIX, start_line_end)
+  if end_idx == -1:
+    return None
+  try:
+    end_line_end = text.index("-->", end_idx) + 3
+  except ValueError:
+    return None
+  if end_line_end < len(text) and text[end_line_end] == "\n":
+    end_line_end += 1
+  return start_idx, end_line_end, old_version
+
+
+def _find_reference_markers(text):
+  """Find reference-style markers (<!-- memori:reference --> ... <!-- memori:reference:end -->).
+
+  Returns:
+    Tuple of (start_idx, end_idx) if markers found, None otherwise.
+  """
+  start_idx = text.find(SNIPPET_REFERENCE_START)
+  if start_idx == -1:
+    return None
+  start_line_end = start_idx + len(SNIPPET_REFERENCE_START)
+  # Skip to end of start line
+  if start_line_end < len(text) and text[start_line_end] == "\n":
+    start_line_end += 1
+  # Find end marker
+  end_idx = text.find(SNIPPET_REFERENCE_END, start_line_end)
+  if end_idx == -1:
+    return None
+  end_line_end = end_idx + len(SNIPPET_REFERENCE_END)
+  if end_line_end < len(text) and text[end_line_end] == "\n":
+    end_line_end += 1
+  return start_idx, end_line_end
 
 
 def _json_indent(args):
@@ -755,81 +812,75 @@ def cmd_setup(args):
     print(_snippet_text())
     return
 
-  # Find CLAUDE.md
-  candidates = [
+  # Target: snippet file at ~/.claude/tools/memori/SNIPPET.md
+  snippet_target = Path.home() / ".claude" / "tools" / "memori" / "SNIPPET.md"
+  snippet_target.parent.mkdir(parents=True, exist_ok=True)
+
+  # Find CLAUDE.md for the reference pointer
+  claude_candidates = [
     Path.cwd() / "CLAUDE.md",
     Path.home() / ".claude" / "CLAUDE.md",
   ]
-  target = None
-  for c in candidates:
+  claude_target = None
+  for c in claude_candidates:
     if c.exists():
-      target = c
+      claude_target = c
       break
 
-  if target is None:
+  if claude_target is None:
     # Default to ~/.claude/CLAUDE.md (create it)
-    target = Path.home() / ".claude" / "CLAUDE.md"
-    target.parent.mkdir(parents=True, exist_ok=True)
+    claude_target = Path.home() / ".claude" / "CLAUDE.md"
+    claude_target.parent.mkdir(parents=True, exist_ok=True)
 
-  content = target.read_text() if target.exists() else ""
-
-  def _find_markers(text):
-    """Find start/end marker positions and extract version if present."""
-    start_idx = text.find(SNIPPET_START_PREFIX)
-    if start_idx == -1:
-      return None
-    # Find end of start marker line
-    start_line_end = text.index("-->", start_idx) + 3
-    # Extract version from start marker
-    marker_line = text[start_idx:start_line_end]
-    old_version = None
-    if " v" in marker_line:
-      old_version = marker_line.split(" v")[1].rstrip(" ->")
-    # Find end marker
-    end_idx = text.find(SNIPPET_END_PREFIX, start_line_end)
-    if end_idx == -1:
-      return None
-    end_line_end = text.index("-->", end_idx) + 3
-    if end_line_end < len(text) and text[end_line_end] == "\n":
-      end_line_end += 1
-    return start_idx, end_line_end, old_version
+  snippet_content = snippet_target.read_text() if snippet_target.exists() else ""
+  claude_content = claude_target.read_text() if claude_target.exists() else ""
 
   if args.undo:
-    markers = _find_markers(content)
-    if markers is None:
-      print("No memori snippet found -- nothing to remove.")
-      return
-    start_idx, end_idx, _ = markers
-    content = content[:start_idx] + content[end_idx:]
-    target.write_text(content)
-    print(f"Removed memori snippet from {target}")
+    # Remove pointer from CLAUDE.md
+    markers = _find_reference_markers(claude_content)
+    if markers is not None:
+      start_idx, end_idx = markers
+      claude_content = claude_content[:start_idx] + claude_content[end_idx:]
+      claude_target.write_text(claude_content)
+    # Remove snippet file
+    if snippet_target.exists():
+      snippet_target.unlink()
+    print(f"Removed memori configuration from {claude_target} and {snippet_target}")
     return
 
-  markers = _find_markers(content)
-  if markers is not None:
-    _, _, old_version = markers
+  # Check if snippet file already exists
+  if snippet_target.exists():
+    # Extract version from existing snippet
+    snippet_marker_idx = snippet_content.find(SNIPPET_START_PREFIX)
+    old_version = None
+    if snippet_marker_idx != -1:
+      marker_line_end = snippet_content.index("-->", snippet_marker_idx) + 3
+      marker_line = snippet_content[snippet_marker_idx:marker_line_end]
+      if " v" in marker_line:
+        old_version = marker_line.split(" v")[1].rstrip(" ->")
+
     if old_version == __version__:
-      print(f"Memori snippet already present in {target}")
+      print(f"Memori already configured at {snippet_target}")
       return
-    # Stale version -- re-inject
-    start_idx, end_idx, _ = markers
+
+    # Upgrade: replace snippet file
     old_v = old_version or "unknown"
-    content = content[:start_idx] + content[end_idx:]
-    snippet = _snippet_text()
-    separator = "\n" if content and not content.endswith("\n") else ""
-    separator += "\n" if content else ""
-    content += separator + snippet
-    target.write_text(content)
-    print(f"Updated memori snippet in {target} (v{old_v} -> v{__version__})")
+    new_snippet = _snippet_text()
+    snippet_target.write_text(new_snippet)
+    print(f"Updated memori snippet at {snippet_target} (v{old_v} -> v{__version__})")
     return
 
-  snippet = _snippet_text()
-  # Append with a blank line separator
-  separator = "\n" if content and not content.endswith("\n") else ""
-  separator += "\n" if content else ""
-  content += separator + snippet
-  target.write_text(content)
-  print(f"Added memori snippet to {target}")
+  # New setup: write snippet file and add pointer to CLAUDE.md
+  new_snippet = _snippet_text()
+  snippet_target.write_text(new_snippet)
+
+  # Add reference pointer to CLAUDE.md
+  pointer = f"{SNIPPET_REFERENCE_START}\nRead the memori snippet at {snippet_target} for behavioral guidance on when to store/search/tag memories, key commands, and workflows.\n{SNIPPET_REFERENCE_END}\n"
+  separator = "\n" if claude_content and not claude_content.endswith("\n") else ""
+  claude_content += separator + pointer
+  claude_target.write_text(claude_content)
+
+  print(f"Configured memori. Snippet at {snippet_target}, reference in {claude_target}")
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
