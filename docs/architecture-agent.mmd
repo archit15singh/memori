@@ -1,28 +1,44 @@
-%%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#1f6feb', 'primaryTextColor': '#e6edf3', 'primaryBorderColor': '#388bfd', 'lineColor': '#8b949e', 'secondaryColor': '#161b22', 'tertiaryColor': '#0d1117', 'background': '#0d1117', 'mainBkg': '#161b22', 'nodeBorder': '#388bfd', 'clusterBkg': '#161b2299', 'clusterBorder': '#30363d', 'titleColor': '#e6edf3', 'edgeLabelBackground': '#161b22', 'fontSize': '16px'}}}%%
+%%{init: {'theme': 'dark', 'flowchart': {'htmlLabels': true}, 'themeVariables': {'primaryColor': '#1f6feb', 'primaryTextColor': '#e6edf3', 'primaryBorderColor': '#388bfd', 'lineColor': '#8b949e', 'secondaryColor': '#161b22', 'tertiaryColor': '#0d1117', 'background': '#0d1117', 'mainBkg': '#161b22', 'nodeBorder': '#388bfd', 'clusterBkg': '#161b2299', 'clusterBorder': '#30363d', 'titleColor': '#e6edf3', 'edgeLabelBackground': '#161b22', 'fontSize': '16px'}}}%%
 
 flowchart TB
-    A1(["Session Start"])
-    A2["memori context<br/>Load relevant memories"]
-    A3["Recall past context<br/>Debugging lessons, Decisions,<br/>Architecture notes, Preferences"]
-    A4["Work on task<br/>Code, Debug, Design, Review"]
+    A1(["`**Session Start**`"])
+    A2["`**memori context**
+    Load relevant memories`"]
+    A3["`**Recall past context**
+    Debugging lessons
+    Decisions
+    Architecture notes
+    Preferences`"]
+    A4["`**Work on task**
+    Code, Debug, Design, Review`"]
 
-    A5{"Memory-worthy<br/>event?"}
-    A6["memori store<br/>debugging | decision |<br/>architecture | preference |<br/>pattern | roadmap"]
+    A5{"`**Memory-worthy
+    event?**`"}
+    A6["`**memori store**
+    debugging | decision
+    architecture | preference
+    pattern | roadmap`"]
 
-    A7{"Need prior<br/>context?"}
-    A8["memori search --text<br/>Hybrid FTS5 + Vector retrieval"]
+    A7{"`**Need prior
+    context?**`"}
+    A8["`**memori search --text**
+    Hybrid FTS5 + Vector retrieval`"]
 
-    A9{"50+<br/>memories?"}
-    A10["Self-maintain<br/>Purge stale, Backfill embeddings,<br/>Review type distribution"]
+    A9{"`**50+
+    memories?**`"}
+    A10["`**Self-maintain**
+    Purge stale
+    Backfill embeddings
+    Review type distribution`"]
 
     A1 --> A2 --> A3 --> A4
     A4 --> A5
-    A5 -->|"Yes"| A6 --> A4
-    A5 -->|"No"| A7
-    A7 -->|"Yes"| A8 --> A4
-    A7 -->|"No"| A9
-    A9 -->|"Yes"| A10 --> A4
-    A9 -->|"No"| A4
+    A5 -->|Yes| A6 --> A4
+    A5 -->|No| A7
+    A7 -->|Yes| A8 --> A4
+    A7 -->|No| A9
+    A9 -->|Yes| A10 --> A4
+    A9 -->|No| A4
 
     style A1 fill:#238636,stroke:#2ea043,color:#ffffff
     style A5 fill:#9e6a03,stroke:#d29922,color:#ffffff

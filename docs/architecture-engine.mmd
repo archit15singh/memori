@@ -1,25 +1,47 @@
-%%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#1f6feb', 'primaryTextColor': '#e6edf3', 'primaryBorderColor': '#388bfd', 'lineColor': '#8b949e', 'secondaryColor': '#161b22', 'tertiaryColor': '#0d1117', 'background': '#0d1117', 'mainBkg': '#161b22', 'nodeBorder': '#388bfd', 'clusterBkg': '#161b2299', 'clusterBorder': '#30363d', 'titleColor': '#e6edf3', 'edgeLabelBackground': '#161b22', 'fontSize': '16px'}}}%%
+%%{init: {'theme': 'dark', 'flowchart': {'htmlLabels': true}, 'themeVariables': {'primaryColor': '#1f6feb', 'primaryTextColor': '#e6edf3', 'primaryBorderColor': '#388bfd', 'lineColor': '#8b949e', 'secondaryColor': '#161b22', 'tertiaryColor': '#0d1117', 'background': '#0d1117', 'mainBkg': '#161b22', 'nodeBorder': '#388bfd', 'clusterBkg': '#161b2299', 'clusterBorder': '#30363d', 'titleColor': '#e6edf3', 'edgeLabelBackground': '#161b22', 'fontSize': '16px'}}}%%
 
 flowchart TB
-    CLI["Python CLI<br/>18 subcommands<br/>--json, --raw, --compact"]
-    PYO3["PyO3 Bindings<br/>Mutex Memori + GIL release"]
+    CLI["`**Python CLI**
+    18 subcommands
+    --json, --raw, --compact`"]
+    PYO3["`**PyO3 Bindings**
+    Mutex Memori + GIL release`"]
 
     subgraph CORE["memori-core  (Rust)"]
         direction TB
-        SEARCH["search.rs<br/>4 search modes<br/>RRF hybrid fusion<br/>Decay scoring, ~69 day half-life"]
-        STORAGE["storage.rs<br/>CRUD, Auto-dedup 0.92<br/>Metadata merge<br/>Prefix ID resolution"]
-        EMBED["embed.rs<br/>AllMiniLM-L6-V2<br/>Auto-embed on store<br/>384-dim vectors"]
-        SCHEMA["schema.rs<br/>DDL, FTS5 triggers<br/>3 migration versions"]
+        SEARCH["`**search.rs**
+        4 search modes
+        RRF hybrid fusion
+        Decay scoring, ~69 day half-life`"]
+        STORAGE["`**storage.rs**
+        CRUD, Auto-dedup 0.92
+        Metadata merge
+        Prefix ID resolution`"]
+        EMBED["`**embed.rs**
+        AllMiniLM-L6-V2
+        Auto-embed on store
+        384-dim vectors`"]
+        SCHEMA["`**schema.rs**
+        DDL, FTS5 triggers
+        3 migration versions`"]
     end
 
-    DB[("SQLite + WAL<br/><br/>FTS5 virtual table<br/>384-dim vector BLOBs<br/>JSON metadata<br/>Access tracking<br/><br/>43us get, 4.3 KB/memory<br/>8,100 writes/sec")]
+    DB[("`**SQLite + WAL**
+
+    FTS5 virtual table
+    384-dim vector BLOBs
+    JSON metadata
+    Access tracking
+
+    43us get, 4.3 KB/memory
+    8,100 writes/sec`")]
 
     CLI --> PYO3
     PYO3 --> SEARCH
     PYO3 --> STORAGE
     PYO3 --> EMBED
-    EMBED -.->|"vectors"| STORAGE
-    SCHEMA -.->|"DDL + migrations"| DB
+    EMBED -.->|vectors| STORAGE
+    SCHEMA -.->|DDL + migrations| DB
     SEARCH --> DB
     STORAGE --> DB
 
