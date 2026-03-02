@@ -1,0 +1,51 @@
+%%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#1f6feb', 'primaryTextColor': '#e6edf3', 'primaryBorderColor': '#388bfd', 'lineColor': '#8b949e', 'secondaryColor': '#161b22', 'tertiaryColor': '#0d1117', 'background': '#0d1117', 'mainBkg': '#161b22', 'nodeBorder': '#388bfd', 'clusterBkg': '#161b2299', 'clusterBorder': '#30363d', 'titleColor': '#e6edf3', 'edgeLabelBackground': '#161b22', 'fontSize': '14px'}}}%%
+
+flowchart LR
+    subgraph AGENT["🤖 Claude Code Session"]
+        direction TB
+        A1(["Session Start"])
+        A2["memori context ‹topic›\nLoad relevant memories"]
+        A3["Recall: past bugs,\ndecisions, architecture,\npreferences"]
+        A4["Work on task"]
+        A5{"Memory-worthy?"}
+        A6["memori store\ndebugging | decision |\narchitecture | preference |\npattern | roadmap"]
+        A7{"Need prior context?"}
+        A8["memori search\nHybrid FTS5 + vector"]
+        A9{"50+ memories?"}
+        A10["Self-maintain:\npurge stale, backfill\nembeddings"]
+
+        A1 --> A2 --> A3 --> A4
+        A4 --> A5
+        A5 -->|Yes| A6 --> A4
+        A5 -->|No| A7
+        A7 -->|Yes| A8 --> A4
+        A7 -->|No| A9
+        A9 -->|Yes| A10 --> A4
+        A9 -->|No| A4
+    end
+
+    subgraph ENGINE["⚙️ Memori Engine"]
+        direction TB
+        E1["Python CLI\n18 subcommands"]
+        E2["PyO3 Bindings\nRust ↔ Python"]
+        E3["search.rs\nFTS5 + Vector\nRRF Fusion\nDecay Scoring"]
+        E4["storage.rs\nCRUD + Dedup\nMetadata Merge"]
+        E5["embed.rs\nAllMiniLM-L6-V2\nAuto-embed"]
+        E6[("SQLite + WAL\nFTS5 · Vectors\nMetadata · Stats")]
+
+        E1 --> E2
+        E2 --> E3 & E4 & E5
+        E3 --> E6
+        E4 --> E6
+        E5 --> E4
+    end
+
+    A2 & A6 & A8 & A10 --> E1
+
+    style AGENT fill:#0d1117,stroke:#388bfd,stroke-width:2px,color:#e6edf3
+    style ENGINE fill:#0d1117,stroke:#f78166,stroke-width:2px,color:#e6edf3
+    style A1 fill:#238636,stroke:#2ea043,color:#ffffff
+    style A5 fill:#9e6a03,stroke:#d29922,color:#ffffff
+    style A7 fill:#9e6a03,stroke:#d29922,color:#ffffff
+    style A9 fill:#9e6a03,stroke:#d29922,color:#ffffff
+    style E6 fill:#1f6feb,stroke:#388bfd,color:#e6edf3
