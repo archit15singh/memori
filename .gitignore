@@ -8,6 +8,7 @@ __pycache__/
 *.whl
 dist/
 .fastembed_cache/
+.worktrees/
 
 # Private working drafts (superseded by CLAUDE.md and README.md)
 memori_dev.md
