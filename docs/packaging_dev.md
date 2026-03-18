@@ -83,7 +83,7 @@ Memori has strong fundamentals -- solid Rust core, good test coverage (94 tests)
 - Signals "contributions welcome" to the OSS community
 
 **12. Fix URL mismatch**
-- README and pyproject.toml reference `archit-singhh/memori`, git remote is `archit-15dev/memori`
+- README and pyproject.toml reference `archit-singhh/memori`, git remote is `archit15singh/memori`
 - Broken links = instant credibility loss
 
 **13. Code quality cleanup**
@@ -131,7 +131,7 @@ Memori has strong fundamentals -- solid Rust core, good test coverage (94 tests)
 
 ### Wave 1: Weekend sprint -- unblock everything
 
-- [ ] Fix URL mismatch (`archit-singhh` -> `archit-15dev` in README.md, pyproject.toml)
+- [ ] Fix URL mismatch (`archit-singhh` -> `archit15singh` in README.md, pyproject.toml)
 - [ ] GitHub repo description + topics (via `gh` CLI or GitHub UI)
 - [ ] `cargo fmt` + `cargo clippy --fix`
 - [ ] Add CI (GitHub Actions: `cargo test`, `clippy`, `fmt --check`, `maturin develop`, `pytest`)

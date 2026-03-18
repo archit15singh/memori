@@ -171,23 +171,3 @@ When making changes to the codebase, always update `CLAUDE.md` and `README.md` t
 | `docs/install.md` | Full installation and verification guide |
 | `.claude/skills/install/SKILL.md` | Claude Code skill: auto-triggered on "install", runs full automated install with verifications |
 
-## Multi-Account Sync
-
-This repo (`archit15singh/memori`) is a mirror of `archit-15dev/memori` with full commit history.
-
-| Remote     | Repo                          | Purpose              |
-|------------|-------------------------------|----------------------|
-| `origin`   | `archit15singh/memori`        | This machine's repo  |
-| `upstream` | `archit-15dev/memori`         | Source repo (other machine/account) |
-
-**Sync from upstream:**
-
-```bash
-git fetch upstream
-git merge upstream/main
-git push origin main
-```
-
-Run after pushing changes from the other machine to `archit-15dev/memori`.
-
-**Creating PRs in a fork setup:** `gh pr create` defaults to opening PRs against the upstream repo (`archit-15dev`), which fails with "No commits between" errors because the fork's branch isn't visible there. Always target the correct repo explicitly: `gh pr create --repo archit15singh/memori`. Similarly, `gh pr merge` needs `--repo archit15singh/memori`.

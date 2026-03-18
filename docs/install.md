@@ -3,7 +3,7 @@
 ## Quick Start
 
 ```bash
-git clone https://github.com/archit-15dev/memori.git
+git clone https://github.com/archit15singh/memori.git
 cd memori
 ```
 
