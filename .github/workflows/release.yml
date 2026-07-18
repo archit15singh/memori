@@ -10,7 +10,7 @@ jobs:
     name: Publish memori-ai-core to crates.io
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -24,14 +24,13 @@ jobs:
 
   pypi:
     name: Build wheels for ${{ matrix.os }}
-    needs: crates-io
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-13, macos-14, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -52,16 +51,17 @@ jobs:
     name: GitHub Release
     needs: [crates-io, pypi]
     runs-on: ubuntu-latest
+    if: always()
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Extract tag name
         id: tag
         run: echo "name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
-      - name: Create or update release
+      - name: Create release even if registry jobs had failures
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ steps.tag.outputs.name }}
