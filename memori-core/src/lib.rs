@@ -1,3 +1,12 @@
+//! Persistent memory for AI coding agents — SQLite + FTS5 + vector search in a single binary.
+//!
+//! `memori-ai-core` is the Rust engine behind the `memori-ai` Python package and the
+//! `memori` CLI. It stores memories (text + 384-dim embeddings + JSON metadata + access
+//! stats) in one SQLite file with WAL journaling, exposes FTS5 full-text search and
+//! brute-force cosine vector search, and fuses them with Reciprocal Rank Fusion (k=60).
+//!
+//! See <https://github.com/archit15singh/memori> for the full design and CLI usage.
+
 pub mod embed;
 pub mod schema;
 pub mod search;

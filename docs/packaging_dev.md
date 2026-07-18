@@ -131,22 +131,22 @@ Memori has strong fundamentals -- solid Rust core, good test coverage (94 tests)
 
 ### Wave 1: Weekend sprint -- unblock everything
 
-- [ ] Fix URL mismatch (`archit-singhh` -> `archit15singh` in README.md, pyproject.toml)
+- [x] Fix URL mismatch (`archit-singhh` -> `archit15singh` in README.md, pyproject.toml)
 - [ ] GitHub repo description + topics (via `gh` CLI or GitHub UI)
 - [ ] `cargo fmt` + `cargo clippy --fix`
-- [ ] Add CI (GitHub Actions: `cargo test`, `clippy`, `fmt --check`, `maturin develop`, `pytest`)
-- [ ] Add badges to README (CI, PyPI, license, Python version)
-- [ ] Fill in Cargo.toml metadata (repository, keywords, categories for crates.io)
+- [x] Add CI (GitHub Actions: `cargo test`, `clippy`, `fmt --check`, `maturin develop`, `pytest`)
+- [x] Add badges to README (CI, PyPI, license, Python version)
+- [x] Fill in Cargo.toml metadata (repository, keywords, categories for crates.io)
 - [ ] Add rustfmt.toml, .editorconfig, LICENSE file
 
 ### Wave 2: Ship the package
 
-- [ ] Publish to PyPI (maturin + GitHub Actions release workflow on tag)
-- [ ] Publish to crates.io
-- [ ] Restructure README above-the-fold (punchy one-liner, badges, "Why Memori?" bullets, `pip install`, 3-command quickstart)
+- [x] Publish to PyPI as `memori-ai` (renamed from `memori` due to namespace collision; maturin + GitHub Actions release workflow on tag, matrix Linux/macOS/Windows)
+- [x] Publish to crates.io as `memori-ai-core` (renamed from `memori-core` due to namespace collision)
+- [x] Restructure README above-the-fold (punchy one-liner, badges, "Why Memori?" bullets, `pip install`, 3-command quickstart)
 - [ ] Add hero GIF (asciinema recording of `store -> search -> context`)
 - [ ] Add dashboard screenshot
-- [ ] Add comparison table (vs Mem0, Engram, agent-recall)
+- [x] Add comparison table (vs Mem0, Engram, agent-recall)
 
 ### Wave 3: Ecosystem play
 

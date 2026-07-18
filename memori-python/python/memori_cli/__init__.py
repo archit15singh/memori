@@ -32,7 +32,7 @@ from urllib.parse import parse_qs, urlparse
 
 from memori import PyMemori
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 DEFAULT_DB = os.path.expanduser("~/.claude/memori.db")
 DEFAULT_DEDUP_THRESHOLD = 0.92
@@ -75,10 +75,29 @@ def _parse_json(value, flag_name, use_json=False):
 
 
 def _snippet_text():
-  """Load the memori snippet from bundled data."""
+  """Load the memori snippet from bundled data.
+
+  The bundled `claude_snippet.md` ships with version markers like
+  `<!-- memori:start v0.0.0 -->`. We rewrite both start and end markers
+  to the current `__version__` so the snippet on disk always carries the
+  installed package's version — independent of what version string is
+  committed in the data file.
+  """
   data_dir = Path(__file__).parent / "data"
   snippet_file = data_dir / "claude_snippet.md"
-  return snippet_file.read_text()
+  text = snippet_file.read_text()
+  import re
+  text = re.sub(
+    r"<!-- memori:start v[^\s>]+ -->",
+    f"<!-- memori:start v{__version__} -->",
+    text,
+  )
+  text = re.sub(
+    r"<!-- memori:end v[^\s>]+ -->",
+    f"<!-- memori:end v{__version__} -->",
+    text,
+  )
+  return text
 
 
 def _find_snippet_markers(text):

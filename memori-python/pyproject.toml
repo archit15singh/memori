@@ -3,27 +3,41 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "memori"
-version = "0.6.0"
+name = "memori-ai"
+version = "0.7.0"
 description = "Embedded AI agent memory -- SQLite + vector search + FTS5"
 requires-python = ">=3.9"
 license = "MIT"
 readme = "../README.md"
 keywords = ["ai", "memory", "vector-search", "sqlite", "agent"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
 ]
 
 [project.urls]
 Repository = "https://github.com/archit15singh/memori"
+Homepage = "https://github.com/archit15singh/memori"
+Documentation = "https://github.com/archit15singh/memori#readme"
+Changelog = "https://github.com/archit15singh/memori/blob/main/CHANGELOG.md"
 
 [project.scripts]
 memori = "memori_cli:main"
 
 [tool.maturin]
-features = ["pyo3/abi3-py39", "embeddings"]
+features = ["pyo3/abi3-py39", "pyo3/extension-module", "embeddings"]
 python-source = "python"
 python-packages = ["memori", "memori_cli"]
 

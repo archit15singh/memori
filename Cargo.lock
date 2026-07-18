@@ -1532,8 +1532,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "memori-core"
-version = "0.6.0"
+name = "memori-ai-core"
+version = "0.7.0"
 dependencies = [
  "criterion",
  "fastembed",
@@ -1546,10 +1546,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "memori-python"
-version = "0.6.0"
+name = "memori-ai-py"
+version = "0.7.0"
 dependencies = [
- "memori-core",
+ "memori-ai-core",
  "pyo3",
  "serde_json",
  "uuid",

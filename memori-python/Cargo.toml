@@ -1,7 +1,12 @@
 [package]
-name = "memori-python"
-version = "0.6.0"
+name = "memori-ai-py"
+version = "0.7.0"
 edition = "2021"
+description = "PyO3 bindings + CLI for memori-ai-core (published to PyPI as memori-ai)"
+license = "MIT"
+authors = ["Archit Singh <archit15singh@gmail.com>"]
+repository = "https://github.com/archit15singh/memori"
+publish = false
 
 [lib]
 name = "memori"
@@ -9,10 +14,10 @@ crate-type = ["cdylib"]
 
 [features]
 default = ["embeddings"]
-embeddings = ["memori-core/embeddings"]
+embeddings = ["memori-ai-core/embeddings"]
 
 [dependencies]
-memori-core = { path = "../memori-core" }
+memori-ai-core = { path = "../memori-core" }
 pyo3 = { version = "0.22", features = ["abi3-py39"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4"] }

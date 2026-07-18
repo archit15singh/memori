@@ -3,6 +3,14 @@
 ## Quick Start
 
 ```bash
+pip install memori-ai
+```
+
+Pre-built wheels ship for Linux, macOS (Intel + Apple Silicon), and Windows on Python 3.9–3.13. No Rust toolchain required.
+
+If you'd rather install from source (or want the latest unreleased commits):
+
+```bash
 git clone https://github.com/archit15singh/memori.git
 cd memori
 ```
@@ -11,7 +19,9 @@ Then open Claude Code in this directory and ask it to install memori. It will re
 
 ---
 
-## Prerequisites
+## Prerequisites (source install only)
+
+The `pip install memori-ai` path needs only Python 3.9+. Skip this section unless you're building from source.
 
 Check each prerequisite individually:
 
@@ -47,22 +57,28 @@ Expected: `uv` followed by version `0.4` or higher
 
 ## Step 1: Install the CLI
 
-From the repository root:
+From PyPI (recommended):
 
 ```bash
-cd memori-python && uv tool install --from . memori
+pip install memori-ai        # or: pipx install memori-ai
 ```
 
-This compiles the Rust core (SQLite + fastembed bundled), builds PyO3 bindings, and places the `memori` binary on PATH. First build takes 2-3 minutes.
+From source:
+
+```bash
+cd memori-python && uv tool install --from . memori-ai
+```
+
+This compiles the Rust core (SQLite + fastembed bundled), builds PyO3 bindings, and places the `memori` binary on PATH. First source build takes 2-3 minutes.
 
 **Verify:**
 
 ```bash
 memori --version
-# Expected: memori 0.6.0
+# Expected: memori 0.7.0
 ```
 
-If `memori` is not found, ensure uv's tool bin directory is on your PATH:
+If `memori` is not found, ensure the install bin directory is on your PATH:
 
 ```bash
 # Add to ~/.zshrc or ~/.bashrc:
@@ -258,10 +274,15 @@ Then start a new Claude Code session -- the snippet is read at session start.
 
 ## Upgrading
 
-After pulling new code:
+```bash
+pip install --upgrade memori-ai
+cd ~ && memori setup  # re-run from ~ to update the snippet if version changed
+```
+
+If you installed from source instead:
 
 ```bash
-cd memori/memori-python && uv tool install --from . memori --force
+cd memori/memori-python && uv tool install --from . memori-ai --force
 cd ~ && memori setup  # re-run from ~ to update the snippet if version changed
 ```
 
@@ -269,7 +290,7 @@ cd ~ && memori setup  # re-run from ~ to update the snippet if version changed
 
 ```bash
 cd ~ && memori setup --undo  # remove reference from CLAUDE.md and snippet file (must run before uninstalling)
-uv tool uninstall memori     # remove the CLI binary
+pip uninstall memori-ai      # or: uv tool uninstall memori-ai
 ```
 
 The database at `~/.claude/memori.db` and model cache at `~/.fastembed_cache/` are left behind. Delete manually if desired.

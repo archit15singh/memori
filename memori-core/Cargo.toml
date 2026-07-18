@@ -1,9 +1,21 @@
 [package]
-name = "memori-core"
-version = "0.6.0"
+name = "memori-ai-core"
+version = "0.7.0"
 edition = "2021"
 description = "Embedded AI agent memory -- SQLite + vector search + FTS5"
 license = "MIT"
+authors = ["Archit Singh <archit15singh@gmail.com>"]
+repository = "https://github.com/archit15singh/memori"
+homepage = "https://github.com/archit15singh/memori"
+documentation = "https://docs.rs/memori-ai-core"
+readme = "README.md"
+keywords = ["sqlite", "vector-search", "ai-agent", "memory", "fts5"]
+categories = ["database", "science"]
+rust-version = "1.74"
+
+[lib]
+name = "memori_core"
+path = "src/lib.rs"
 
 [features]
 default = ["embeddings"]

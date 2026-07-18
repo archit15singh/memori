@@ -1082,7 +1082,9 @@ class TestSetup:
         snippet_path = tmp_path / ".claude" / "tools" / "memori" / "SNIPPET.md"
         assert snippet_path.exists()
         claude_content = cwd_claude.read_text()
-        assert claude_content.count("memori:reference") == 1
+        # Count pointer *blocks* (start tag), not substrings — "memori:reference"
+        # matches both "<!-- memori:reference -->" and "<!-- memori:reference:end -->".
+        assert claude_content.count("<!-- memori:reference -->") == 1
 
     def test_setup_undo(self, tmp_path, monkeypatch):
         """Undo removes both the snippet file and pointer."""
@@ -1122,6 +1124,13 @@ class TestSetup:
         snippet_file = snippet_dir / "SNIPPET.md"
         snippet_file.write_text("<!-- memori:start v0.5.0 -->\nOld snippet\n<!-- memori:end v0.5.0 -->")
 
+        # Probe the CLI's current version so this test is version-agnostic
+        probe = subprocess.run([MEMORI_BIN, "--version"], capture_output=True, text=True, timeout=30)
+        assert probe.returncode == 0
+        # Output: "memori 0.7.0"
+        current_version = probe.stdout.strip().split()[-1]
+        assert current_version != "0.5.0", "test seed version must differ from installed version"
+
         db_path = str(tmp_path / "test.db")
         cmd = [MEMORI_BIN, "--db", db_path, "setup"]
         r = subprocess.run(cmd, capture_output=True, text=True, cwd=str(tmp_path), timeout=60)
@@ -1129,9 +1138,9 @@ class TestSetup:
         assert "Updated memori snippet" in r.stdout
         assert "v0.5.0" in r.stdout
 
-        # Verify snippet was updated
+        # Verify snippet was updated to the installed version
         updated_content = snippet_file.read_text()
-        assert "v0.6.0" in updated_content
+        assert f"v{current_version}" in updated_content
         assert "Old snippet" not in updated_content
 
     def test_setup_creates_tools_directory(self, tmp_path, monkeypatch):

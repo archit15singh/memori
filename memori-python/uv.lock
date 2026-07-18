@@ -52,8 +52,8 @@ wheels = [
 ]
 
 [[package]]
-name = "memori"
-version = "0.6.0"
+name = "memori-ai"
+version = "0.7.0"
 source = { editable = "." }
 
 [package.dev-dependencies]

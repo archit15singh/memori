@@ -1,5 +1,12 @@
 # Memori
 
+[![PyPI](https://img.shields.io/pypi/v/memori-ai.svg)](https://pypi.org/project/memori-ai/)
+[![crates.io](https://img.shields.io/crates/v/memori-ai-core.svg)](https://crates.io/crates/memori-ai-core)
+[![CI](https://github.com/archit15singh/memori/actions/workflows/ci.yml/badge.svg)](https://github.com/archit15singh/memori/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://pypi.org/project/memori-ai/)
+[![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://crates.io/crates/memori-ai-core)
+
 **Persistent memory for AI coding agents. Rust + SQLite + FTS5 + vector search in a single file.**
 
 AI coding agents forget everything between sessions. Memori gives them a persistent memory layer that accumulates knowledge over time — so every session starts with the context it needs, not from zero.
@@ -21,14 +28,27 @@ After `memori setup`, Claude Code automatically recalls debugging lessons before
 
 ## Install
 
-Requires Rust toolchain, Python 3.9+, and [uv](https://docs.astral.sh/uv/).
-
 ```bash
-git clone https://github.com/archit15singh/memori.git
-cd memori/memori-python && uv tool install --from . memori
+pip install memori-ai        # or: pipx install memori-ai
 ```
 
-First build compiles the Rust core with bundled SQLite and fastembed (~2–3 minutes). Subsequent runs start in milliseconds.
+Pre-built wheels ship for Linux, macOS (Intel + Apple Silicon), and Windows — Python 3.9–3.13. The embedding model is bundled and cached on first run; no API keys, no network after install.
+
+<details>
+<summary>Other install methods</summary>
+
+```bash
+# Rust library
+cargo add memori-ai-core
+
+# From source (requires Rust toolchain + uv)
+git clone https://github.com/archit15singh/memori.git
+cd memori/memori-python && uv tool install --from . memori-ai
+```
+
+First source build compiles the Rust core with bundled SQLite and fastembed (~2–3 minutes). Subsequent builds start in seconds.
+
+</details>
 
 For the full walkthrough — verification steps, troubleshooting, dashboard tour — see **[docs/install.md](docs/install.md)**.
 
@@ -352,7 +372,7 @@ All ID-based commands accept 6+ character prefixes. Resolution uses `WHERE id LI
 ## Architecture
 
 ```
-memori-core/  (Rust library, v0.6.0)
+memori-core/  (Rust library, published to crates.io as memori-ai-core, v0.7.0)
   lib.rs        Memori facade — prefix-resolving API over storage + search
   types.rs      Memory, SearchQuery, InsertResult, MemoriError, SortField
   schema.rs     SQLite DDL, migration versions v0–v3 (PRAGMA user_version)
@@ -361,7 +381,7 @@ memori-core/  (Rust library, v0.6.0)
   embed.rs      fastembed AllMiniLM-L6-V2 (lazy singleton, feature-gated)
   util.rs       cosine_similarity, vec<->blob (unsafe pointer casts, f32 platform-native)
 
-memori-python/  (PyO3 bindings + CLI, v0.6.0)
+memori-python/  (PyO3 bindings + CLI, published to PyPI as memori-ai, v0.7.0)
   src/lib.rs          PyMemori class (Mutex<Memori>, GIL release on search/insert/embed)
   python/memori_cli/  Argparse CLI (18 subcommands, --json/--raw on all)
     data/             claude_snippet.md, dashboard.html (single-file web UI)
@@ -568,3 +588,13 @@ cd memori-python && maturin develop && pytest tests/test_memori.py tests/test_cl
 ## License
 
 MIT
+
+---
+
+## Writing & design blog posts
+
+Long-form design notes on how memori was built and why — written by the author:
+
+- [Designing CLI tools for AI agents](https://archit15singh.github.io/posts/2026-02-28-designing-cli-tools-for-ai-agents/) — the CLI design that makes memori agent-friendly (prefix IDs, `--json`/`--raw` anywhere, autonomous `setup`, compact context mode).
+- [Memori: Architecture](https://archit15singh.github.io/posts/2026-03-24-memori-architecture/) — why single-file SQLite, why brute-force vector search, why RRF fusion, why `Mutex<Memori>` in PyO3.
+- [Memori: Recursive design](https://archit15singh.github.io/posts/2026-04-10-memori-recursive-design/) — using memori to remember the lessons from building memori. The agent storing its own design decisions.

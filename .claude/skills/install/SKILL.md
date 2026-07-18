@@ -1,7 +1,7 @@
 ---
 name: install
 description: >
-  Install memori from source and configure it for Claude Code. Use when the user
+  Install memori and configure it for Claude Code. Use when the user
   says "install", "install memori", "set this up", "set up memori", or any
   equivalent request to get memori working on the current machine.
 ---
@@ -16,15 +16,74 @@ description: >
 
 Check each prerequisite individually. STOP immediately if any check fails.
 
-### Rust toolchain
+### Python 3.9+
 
 ```bash
-cargo --version
+python3 --version
 ```
 
-Expected output: any string starting with `cargo`
+Expected output: `Python 3.9` or higher (e.g., `Python 3.12.1`)
 
-**If fails**: Install Rust via `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`, then restart your shell and verify again. If Rust is installed but `cargo` is not in PATH, run `source ~/.cargo/env && cargo --version`.
+**If fails (too old or not found)**:
+- macOS: `brew install python@3.12`
+- Linux: `apt-get install python3.12` (or similar for your distro)
+- Windows: [python.org](https://www.python.org/downloads/)
+
+Restart shell and verify again.
+
+---
+
+### uv (0.4+) — only required for source build fallback
+
+```bash
+uv --version
+```
+
+Expected output: `uv` followed by version `0.4` or higher
+
+**If fails**: Install via `curl -LsSf https://astral.sh/uv/install.sh | sh`, restart your shell, and verify again.
+
+---
+
+## Phase 2: Install CLI
+
+Attempt PyPI install first (no Rust toolchain needed). Fall back to source build only if PyPI lacks a wheel for your platform.
+
+### Path A: PyPI (preferred)
+
+```bash
+pip install memori-ai        # or: pipx install memori-ai
+```
+
+**Expected**: `memori` script installed; final output mentions ` Successfully installed memori-ai-0.7.0` (or similar).
+
+If pip reports "no matching distribution for memori-ai" (no pre-built wheel for your platform/arch), fall back to Path B.
+
+### Path B: Source build (fallback — requires Rust toolchain)
+
+Install Rust first if needed: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`. Then from the memori repository root:
+
+```bash
+cd memori-python && uv tool install --from . memori-ai
+```
+
+**Note**: First build compiles the Rust core — takes 2–5 minutes. Rust compiler output is normal.
+
+**Expected**: Final output line contains `Installed 1 executable: memori`.
+
+### Verify CLI installation
+
+```bash
+memori --version
+```
+
+Expected: `memori 0.7.0`
+
+**If command not found**: Ensure the install bin directory is on your PATH:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
 
 ---
 
@@ -62,7 +121,7 @@ Expected output: `uv` followed by version `0.4` or higher
 From the memori repository root (the top-level directory where you cloned memori):
 
 ```bash
-cd memori-python && uv tool install --from . memori
+cd memori-python && uv tool install --from . memori-ai
 ```
 
 **Note**: First build compiles the Rust core — takes 2–5 minutes. Rust compiler output is normal.
@@ -75,7 +134,7 @@ cd memori-python && uv tool install --from . memori
 memori --version
 ```
 
-Expected: `memori 0.6.0`
+Expected: `memori 0.7.0`
 
 **If command not found**:
 

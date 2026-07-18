@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 # Rust core -- build and test
 cargo build --workspace
-cargo test -p memori-core
+cargo test -p memori-ai-core
 
 # Python bindings -- build (requires venv with maturin)
 cd memori-python && maturin develop
@@ -15,24 +15,27 @@ cd memori-python && maturin develop
 # Python tests
 pytest memori-python/tests/test_memori.py -v
 
-# Install as CLI tool
-cd memori-python && uv tool install --from . memori
+# Install as CLI tool (from PyPI -- no Rust toolchain needed)
+pip install memori-ai         # installs the `memori` CLI script
+
+# Install from source
+cd memori-python && uv tool install --from . memori-ai
 
 # Benchmarks (criterion + memory)
-cargo bench -p memori-core                          # all benchmarks (~30 min with 500K)
-cargo bench -p memori-core --bench vector_ops_bench  # micro-benchmarks only (~30s)
-cargo bench -p memori-core --bench crud_bench        # CRUD at 1K/10K/100K/500K
-cargo bench -p memori-core --bench search_bench      # search at 1K/10K/100K/500K
-cargo bench -p memori-core --bench embed_bench       # embedding model (slow)
-cargo bench -p memori-core --bench memory_bench      # file size + throughput (1K-1M, ~10 min)
+cargo bench -p memori-ai-core                          # all benchmarks (~30 min with 500K)
+cargo bench -p memori-ai-core --bench vector_ops_bench  # micro-benchmarks only (~30s)
+cargo bench -p memori-ai-core --bench crud_bench        # CRUD at 1K/10K/100K/500K
+cargo bench -p memori-ai-core --bench search_bench      # search at 1K/10K/100K/500K
+cargo bench -p memori-ai-core --bench embed_bench       # embedding model (slow)
+cargo bench -p memori-ai-core --bench memory_bench      # file size + throughput (1K-1M, ~10 min)
 python3 scripts/bench-table.py                       # criterion JSON -> markdown table
 bash scripts/bench-cli.sh                            # CLI-level timing (needs hyperfine)
 
 # Full verification after changes
-cargo test -p memori-core && cd memori-python && maturin develop && pytest tests/test_memori.py tests/test_cli.py -v
+cargo test -p memori-ai-core && cd memori-python && maturin develop && pytest tests/test_memori.py tests/test_cli.py -v
 ```
 
-No linter configuration exists. No CI/CD workflows are set up.
+CI/CD: `.github/workflows/ci.yml` runs `cargo fmt --check`, `cargo clippy`, `cargo test`, `maturin develop`, and `pytest` on push and PR. `.github/workflows/release.yml` is tag-triggered and publishes wheels to PyPI + the Rust crate to crates.io.
 
 ## Architecture
 
@@ -162,7 +165,7 @@ When making changes to the codebase, always update `CLAUDE.md` and `README.md` t
 | `scripts/bench-table.py` | Parse criterion JSON output into README markdown table |
 | `scripts/bench-cli.sh` | CLI-level timing with hyperfine |
 | `memori_dev.md` | Developer reference (arch decisions, change workflows) |
-| `memori-python/Cargo.toml` | PyO3 crate config (cdylib, pyo3 0.22, abi3-py39) |
+| `memori-python/Cargo.toml` | PyO3 crate config (cdylib, pyo3 0.22, abi3-py39) — published as `memori-ai-py` (publish=false, internal only) |
 | `memori-python/tests/test_cli.py` | ~95 CLI integration tests (subprocess-based, all 18 subcommands) |
 | `memori-python/python/memori_cli/data/claude_snippet.md` | Snippet injected by `memori setup` (version-tagged markers) |
 | `docs/packaging_dev.md` | Open-source packaging strategy and execution plan |

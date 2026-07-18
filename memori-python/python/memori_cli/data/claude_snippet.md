@@ -1,4 +1,4 @@
-<!-- memori:start v0.6.0 -->
+<!-- memori:start v0.7.0 -->
 ## Memori -- Persistent Agent Memory
 
 Persistent memory across sessions via `memori` CLI. DB at `~/.claude/memori.db`.
@@ -65,4 +65,4 @@ Run `memori <cmd> --help` for full details and examples on any command.
 | `memori delete <id>` / `memori purge` | Remove single / bulk delete with preview |
 | `memori stats` / `memori embed` / `memori gc` | DB health, backfill embeddings, compact |
 | `memori export > backup.jsonl` | JSONL backup (always JSONL regardless of --json flag) |
-<!-- memori:end v0.6.0 -->
+<!-- memori:end v0.7.0 -->
