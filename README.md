@@ -7,22 +7,29 @@
 [![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://pypi.org/project/memori-ai/)
 [![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://crates.io/crates/memori-ai-core)
 
-**Persistent memory for AI coding agents. Rust + SQLite + FTS5 + vector search in a single file.**
+> Persistent memory for AI coding agents — Rust + SQLite + FTS5 + vector search in a single file.
 
-AI coding agents forget everything between sessions. Memori gives them a persistent memory layer that accumulates knowledge over time — so every session starts with the context it needs, not from zero.
+AI agents forget everything between sessions. Memori gives them a persistent memory layer that accumulates knowledge over time — so every session starts with the context it needs, not from zero.
 
-After `memori setup`, Claude Code automatically recalls debugging lessons before investigating bugs, stores architecture decisions with rationale, remembers your tool preferences, and self-maintains its own memory. No human intervention needed.
+```bash
+pip install memori-ai                # 1. install (Linux/macOS/Windows, Python 3.9-3.13)
+cd ~ && memori setup                  # 2. wire into Claude Code (writes ~/.claude/tools/memori/SNIPPET.md)
+memori store "Chose SQLite over Postgres for zero-config portability." --meta '{"type":"decision"}'
+memori search --text "database choice"   # hybrid FTS5 + vector, auto-vectorized
+```
+
+> **Status:** beta · **Platforms:** Linux, macOS (Intel + Apple Silicon), Windows · **No API keys, no cloud, no LLM dependency**
 
 ---
 
-## What developers get
+## What you get
 
-- **Session continuity** — Your agent remembers the bug you debugged yesterday, the architecture decision from last week, and that you prefer Tailwind over Bootstrap.
-- **Zero config** — One SQLite file stores everything: text, 384-dim vector embeddings, JSON metadata, access tracking. Copy it, back it up, or delete it.
-- **No external services** — No OpenAI API calls for memory operations. No cloud vector DB. Embedding model ships with the binary.
-- **Hybrid search in milliseconds** — FTS5 full-text and cosine vector search fused with Reciprocal Rank Fusion. Text queries auto-vectorize. No manual `--vector` flag.
-- **Agents that don't bloat** — Cosine similarity deduplication prevents your agent from accumulating thousands of near-duplicate memories.
-- **Memories that matter surface first** — Decay scoring prioritizes frequently-accessed recent knowledge; stale memories fade out automatically.
+- **Session continuity** — your agent remembers the bug from yesterday, the architecture decision from last week, that you prefer Tailwind over Bootstrap.
+- **Zero config** — one SQLite file stores text, 384-dim embeddings, JSON metadata, access stats. Copy it, back it up, delete it.
+- **No external services** — embedding model ships with the binary. No OpenAI calls, no cloud vector DB, no rate limits.
+- **Hybrid search in milliseconds** — FTS5 full-text + cosine vector fused with Reciprocal Rank Fusion. Text queries auto-vectorize.
+- **Agents that don't bloat** — cosine-similarity dedup prevents thousands of near-duplicate memories.
+- **Memories that matter surface first** — decay scoring prioritizes frequently-accessed recent knowledge; stale ones fade.
 
 ---
 
@@ -32,13 +39,13 @@ After `memori setup`, Claude Code automatically recalls debugging lessons before
 pip install memori-ai        # or: pipx install memori-ai
 ```
 
-Pre-built wheels ship for Linux, macOS (Intel + Apple Silicon), and Windows — Python 3.9–3.13. The embedding model is bundled and cached on first run; no API keys, no network after install.
+Pre-built wheels ship for Linux, macOS (Intel + Apple Silicon), and Windows — Python 3.9–3.13. The embedding model is bundled and cached on first run (~90MB to `~/.fastembed_cache/`); no network after install.
 
 <details>
 <summary>Other install methods</summary>
 
 ```bash
-# Rust library
+# Rust library (for use in other Rust projects)
 cargo add memori-ai-core
 
 # From source (requires Rust toolchain + uv)
@@ -54,7 +61,67 @@ For the full walkthrough — verification steps, troubleshooting, dashboard tour
 
 ---
 
-## Claude Code setup
+## Why Memori
+
+The hard problem for AI agents isn't *storing* memories — it's *finding the right one* when you need it. Keyword search misses semantic matches. Pure vector search misses exact terms. Memori solves this with three design choices that are unusual in the space:
+
+### 1. Hybrid search with Reciprocal Rank Fusion
+
+Memori runs FTS5 full-text (BM25) and cosine vector similarity independently, then fuses results using [Reciprocal Rank Fusion](https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf) (k=60) — a rank-based method that sidesteps the normalization problem between BM25 (negative floats) and cosine similarity (0..1). Text queries auto-vectorize; no `--vector` flag needed.
+
+| Query | Mode | How it works |
+|-------|------|-------------|
+| `--text "..."` | Hybrid (auto) | Auto-embeds → runs FTS5 + cosine → RRF fusion |
+| `--text "..." --text-only` | FTS5 only | Faster, for exact term matching |
+| `--vector [...]` | Vector only | Brute-force cosine similarity |
+| neither | Recent | Returns most recently updated memories |
+
+### 2. Access-weighted decay scoring
+
+Every memory carries `access_count` and `last_accessed`. Search results are boosted by usage:
+
+```
+final_score = base_score × boost × decay
+
+boost = 1 + 0.1 × ln(1 + access_count)           # logarithmic, sublinear
+decay = exp(−0.01 × days_since_last_access)      # ~69-day half-life
+```
+
+Frequently-accessed memories surface first; stale ones fade. New memories carry no decay penalty until accessed.
+
+### 3. Cosine-similarity deduplication
+
+On insert, memori checks for existing memories of the same type with cosine similarity > 0.92 (configurable). A near-duplicate triggers an update instead of a new insert. Agents that store aggressively don't accumulate hundreds of redundant memories over time.
+
+### Zero LLM dependency
+
+Unlike Mem0 (requires LLM API calls to extract and structure memories) or Graphiti (knowledge graph over LLM), memori uses fastembed's AllMiniLM-L6-V2 (384-dim, ~9ms/memory on M4 Pro) — no API keys, no network, no rate limits. The model ships with the binary and is cached locally after the first use.
+
+### Comparison
+
+| | Memori | Mem0 | Engram | agent-recall |
+|---|---|---|---|---|
+| Storage | SQLite (single file) | Postgres + vector DB + graph DB | SQLite | SQLite |
+| Embeddings | Built-in (fastembed) | External API | None | None |
+| Search | Hybrid FTS5 + vector (RRF) | Vector only | FTS5 only | SQLite FTS |
+| Deduplication | Cosine similarity (auto) | None | None | None |
+| Decay scoring | Access + time | Access counter only | None | None |
+| LLM dependency | None | Required | None | None |
+| Config | Zero | Cloud service | File | File |
+| Install | `pip install memori-ai` | Cloud service | `cargo + go` | `cargo` |
+
+**Design notes** (long-form blog posts by the author):
+- [Designing CLI tools for AI agents](https://archit15singh.github.io/posts/2026-02-28-designing-cli-tools-for-ai-agents/) — the CLI design that makes memori agent-friendly (prefix IDs, `--json`/`--raw` anywhere, autonomous `setup`, compact context mode).
+- [Memori: Architecture](https://archit15singh.github.io/posts/2026-03-24-memori-architecture/) — why single-file SQLite, why brute-force vector search, why RRF fusion, why `Mutex<Memori>` in PyO3.
+- [Memori: Recursive design](https://archit15singh.github.io/posts/2026-04-10-memori-recursive-design/) — using memori to remember the lessons from building memori. The agent storing its own design decisions.
+
+> Hero visual (asciinema GIF of `store → search → context`) and dashboard screenshot — TODO, see [`docs/packaging_dev.md`](docs/packaging_dev.md) Wave 2.
+
+---
+
+## Agent setup
+
+### Claude Code (autonomous)
 
 One command writes a behavioral snippet that teaches Claude Code when and how to use memori:
 
@@ -72,45 +139,28 @@ After setup, Claude Code will:
 - Search past knowledge before deep-diving into unfamiliar code
 - Update stale memories, purge scratch notes, backfill embeddings autonomously
 
+### Other AI agents
+
+Memori is agent-agnostic — any tool that can shell out can use it. Cursor, Windsurf, Copilot CLI, Aider, Continue, etc. can call `memori store` / `memori search` / `memori context` directly from their own slash commands or hooks. The CLI's `--json` and `--raw` flags exist specifically for piping into agent loops. See **[docs/install.md](docs/install.md)** for patterns.
+
 ---
 
 ## Demo
-
-### Store memories with auto-embedding and dedup
 
 ```bash
 $ memori store "FTS5 hyphens crash MATCH because - is the NOT operator. Fix: quote each token." \
     --meta '{"type": "debugging", "topic": "sqlite"}'
 Stored: b338b67f-b40b-4243-9219-2a2375e3d249
 
-$ memori store "Chose SQLite over Postgres for zero-config portability." \
-    --meta '{"type": "decision", "topic": "architecture"}' --json
-{"id": "6bf65b6f-dece-4be9-9517-7db7bf24dce7", "status": "created"}
+$ memori search --text "sqlite" --limit 3
+6bf65b6f [0.0329] Chose SQLite over Postgres for zero-config portability.  meta={"type": "decision"}
+b338b67f [0.0304] FTS5 hyphens crash MATCH because - is the NOT operator.  meta={"type": "debugging"}
 ```
 
 Storing similar content of the same type auto-deduplicates — updates the existing memory instead of creating a duplicate.
 
-### Hybrid search (FTS5 + vector, auto-vectorized)
-
-```bash
-$ memori search --text "sqlite" --limit 3
-6bf65b6f [0.0329] Chose SQLite over Postgres for zero-config portability.  meta={"type": "decision"}
-b338b67f [0.0304] FTS5 hyphens crash MATCH because - is the NOT operator.  meta={"type": "debugging"}
-
-$ memori search --text "sqlite" --limit 1 --json
-[
-  {
-    "id": "6bf65b6f-dece-4be9-9517-7db7bf24dce7",
-    "content": "Chose SQLite over Postgres for zero-config portability.",
-    "score": 0.0328,
-    "metadata": {"topic": "architecture", "type": "decision"},
-    "created_at": 1772183755.758478,
-    "access_count": 0
-  }
-]
-```
-
-`--json` and `--raw` (compact single-line JSON) work before or after the subcommand — agents can compose them freely in pipes.
+<details>
+<summary>Full demo (context, prefix IDs, related, tags, maintenance, export/import, dashboard)</summary>
 
 ### Session start: context in one call
 
@@ -122,20 +172,9 @@ $ memori context "sqlite architecture" --limit 3
 - b338b67f [0.0304] FTS5 hyphens crash MATCH because - is the NOT operator.
 
 ## Recent Memories (by last update)
-
-- 6bf65b6f [decision] Chose SQLite over Postgres...
-- b338b67f [debugging] FTS5 hyphens crash MATCH...
-
 ## Frequently Accessed
-
-- 6bf65b6f (12 hits) Chose SQLite over Postgres...
-
 ## Stale Memories (30+ days, never accessed)
-
-- a1c2d3e4 WAL mode enables concurrent reads...
-
 ## Stats
-
 Total: 12 memories
 Types: debugging: 4, decision: 4, architecture: 2, fact: 1, preference: 1
 ```
@@ -144,7 +183,7 @@ Use `--compact` for a flat JSON payload that saves tokens in agent pipelines.
 
 ### Prefix IDs
 
-All commands accept short prefixes (6+ chars):
+All commands accept 6+ char prefixes:
 
 ```bash
 $ memori get b338b67f                           # 8-char prefix
@@ -194,11 +233,10 @@ Types:
   preference: 1
   fact: 1
 
-$ memori gc
-Compacted: 72.0 KB -> 60.0 KB (saved 12.0 KB)
-
-$ memori embed             # backfill embeddings on memories with NULL vectors
+$ memori gc                                 # compact database (SQLite VACUUM)
+$ memori embed                              # backfill embeddings on memories with NULL vectors
 $ memori embed --batch-size 100
+$ memori purge --type temporary --confirm   # delete by type (AND with --before)
 ```
 
 ### Export / import (lossless round-trip)
@@ -218,57 +256,9 @@ $ memori ui --port 9000
 $ memori ui --no-open       # start without auto-opening browser
 ```
 
-Dark-themed dashboard with: memory list (search, type filter, sort, date range), types donut chart, creation timeline scatter plot, memory detail panel, and a D3 force-directed connection graph (2-hop traversal from any memory). Read-only — browsing does not inflate access counts. Charts require internet (Chart.js + D3 from CDN); memory list works offline.
+Dark-themed dashboard: memory list (search, type filter, sort, date range), types donut chart, creation timeline scatter plot, memory detail panel, and a D3 force-directed connection graph (2-hop traversal from any memory). Read-only — browsing does not inflate access counts. Charts require internet (Chart.js + D3 from CDN); memory list works offline.
 
----
-
-## Why Memori
-
-The hard problem for AI agents isn't *storing* memories — it's *finding the right one* when you need it. Keyword search misses semantic matches. Pure vector search misses exact terms. Memori solves this with three design choices that are unusual in the space:
-
-### 1. Hybrid search with Reciprocal Rank Fusion
-
-Memori runs FTS5 full-text (BM25 scoring) and cosine vector similarity independently, then fuses results using [Reciprocal Rank Fusion](https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf) (k=60) — a rank-based method that avoids the normalization problem between BM25 (negative floats) and cosine similarity (0..1). Text queries auto-vectorize; no `--vector` flag needed.
-
-| Query | Mode | How it works |
-|-------|------|-------------|
-| `--text "..."` | Hybrid (auto) | Auto-embeds → runs FTS5 + cosine → RRF fusion |
-| `--text "..." --text-only` | FTS5 only | Faster, for exact term matching |
-| `--vector [...]` | Vector only | Brute-force cosine similarity |
-| neither | Recent | Returns most recently updated memories |
-
-### 2. Access-weighted decay scoring
-
-Every memory carries `access_count` and `last_accessed`. Search results are boosted by usage:
-
-```
-final_score = base_score × boost × decay
-
-boost = 1 + 0.1 × ln(1 + access_count)   # logarithmic, sublinear
-decay = exp(−0.01 × days_since_last_access) # ~69-day half-life
-```
-
-Frequently-accessed memories surface first; stale ones fade. New memories carry no decay penalty until accessed.
-
-### 3. Cosine-similarity deduplication
-
-On insert, memori checks for existing memories of the same type with cosine similarity > 0.92 (configurable). A near-duplicate triggers an update instead of a new insert. Agents that store aggressively don't accumulate hundreds of redundant memories over time.
-
-### Zero LLM dependency
-
-Unlike Mem0 (requires LLM API calls to extract and structure memories) or Graphiti (knowledge graph over LLM), memori uses fastembed's AllMiniLM-L6-V2 (384-dim, ~9ms/memory on M4 Pro) — no API keys, no network, no rate limits. The model ships with the binary and is cached locally after the first use.
-
-### Comparison
-
-| | Memori | Mem0 | Engram | agent-recall |
-|---|---|---|---|---|
-| Storage | SQLite (single file) | Postgres + vector DB + graph DB | SQLite | SQLite |
-| Embeddings | Built-in (fastembed) | External API | None | None |
-| Search | Hybrid FTS5 + vector (RRF) | Vector only | FTS5 only | SQLite FTS |
-| Deduplication | Cosine similarity (auto) | None | None | None |
-| Decay scoring | Access + time | Access counter only | None | None |
-| LLM dependency | None | Required | None | None |
-| Config | Zero | Cloud service | File | File |
+</details>
 
 ---
 
@@ -406,6 +396,9 @@ memori [--db PATH] [--json | --raw] [--version] <command> [options]
 
 Global options work before or after the subcommand.
 
+<details>
+<summary>All subcommands and flags</summary>
+
 ### store
 
 ```bash
@@ -501,12 +494,14 @@ memori ui --port 9000
 memori ui --no-open          # start server without auto-opening browser
 ```
 
+</details>
+
 ---
 
 ## Python API
 
 ```python
-from memori import PyMemori
+from memori import PyMemori   # import name is `memori` (not `memori_ai`)
 
 db = PyMemori("memories.db")
 
@@ -559,6 +554,32 @@ db.delete_by_type("temporary")
 
 ---
 
+## Status & roadmap
+
+**Done (v0.7.0):**
+- [x] PyPI release (`memori-ai` — Linux, macOS Intel/ARM, Windows wheels via GitHub Actions)
+- [x] crates.io release (`memori-ai-core`)
+- [x] CI (fmt, clippy, cargo test, maturin develop, pytest on push/PR)
+- [x] Tag-triggered release workflow (matrix wheels → crates.io + PyPI + GitHub release)
+- [x] Hybrid search with RRF fusion
+- [x] Cosine-similarity dedup
+- [x] Access-weighted decay scoring
+- [x] Web dashboard with D3 graph
+- [x] Prefix ID resolution
+- [x] Export/import round-trip
+
+**Planned:**
+- [ ] MCP server (thin wrapper over existing API — Cursor/Windsurf/Copilot discovery)
+- [ ] HNSW-accelerated vector search (drop-in replacement for `vector_search()`, scales past 100K)
+- [ ] Multi-agent / workspace isolation (one DB per project with shared cache)
+- [ ] Hero asciinema GIF + dashboard screenshot in README
+- [ ] Homebrew formula
+- [ ] `CONTRIBUTING.md` + issue/PR templates
+
+See [`docs/packaging_dev.md`](docs/packaging_dev.md) for the full open-source packaging strategy.
+
+---
+
 ## Testing
 
 ~190 tests across three layers — all real SQLite, no mocking:
@@ -583,18 +604,10 @@ cd memori-python && maturin develop && pytest tests/test_memori.py tests/test_cl
 - **Prefix collisions** — 8-char prefixes collide above ~100K UUIDs (birthday paradox on 16^8 space). Use 12-char prefixes at scale.
 - **Exit codes** — 0 success, 1 not found, 2 user input error. `--json` errors go to stderr; successes to stdout.
 
+See [`CLAUDE.md`](CLAUDE.md) for the full engineering reference (build commands, schema migrations, change workflows, non-obvious constraints).
+
 ---
 
 ## License
 
 MIT
-
----
-
-## Writing & design blog posts
-
-Long-form design notes on how memori was built and why — written by the author:
-
-- [Designing CLI tools for AI agents](https://archit15singh.github.io/posts/2026-02-28-designing-cli-tools-for-ai-agents/) — the CLI design that makes memori agent-friendly (prefix IDs, `--json`/`--raw` anywhere, autonomous `setup`, compact context mode).
-- [Memori: Architecture](https://archit15singh.github.io/posts/2026-03-24-memori-architecture/) — why single-file SQLite, why brute-force vector search, why RRF fusion, why `Mutex<Memori>` in PyO3.
-- [Memori: Recursive design](https://archit15singh.github.io/posts/2026-04-10-memori-recursive-design/) — using memori to remember the lessons from building memori. The agent storing its own design decisions.
