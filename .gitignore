@@ -13,3 +13,6 @@ dist/
 # Private working drafts (superseded by CLAUDE.md and README.md)
 memori_dev.md
 memori_usage.md
+
+# publish tokens (never commit)
+.memori-publish-tokens/
