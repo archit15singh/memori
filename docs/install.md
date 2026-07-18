@@ -3,7 +3,7 @@
 ## Quick Start
 
 ```bash
-pip install memori-ai
+pip install py-memori
 ```
 
 Pre-built wheels ship for Linux, macOS (Intel + Apple Silicon), and Windows on Python 3.9–3.13. No Rust toolchain required.
@@ -21,7 +21,7 @@ Then open Claude Code in this directory and ask it to install memori. It will re
 
 ## Prerequisites (source install only)
 
-The `pip install memori-ai` path needs only Python 3.9+. Skip this section unless you're building from source.
+The `pip install py-memori` path needs only Python 3.9+. Skip this section unless you're building from source.
 
 Check each prerequisite individually:
 
@@ -60,13 +60,13 @@ Expected: `uv` followed by version `0.4` or higher
 From PyPI (recommended):
 
 ```bash
-pip install memori-ai        # or: pipx install memori-ai
+pip install py-memori        # or: pipx install py-memori
 ```
 
 From source:
 
 ```bash
-cd memori-python && uv tool install --from . memori-ai
+cd memori-python && uv tool install --from . py-memori
 ```
 
 This compiles the Rust core (SQLite + fastembed bundled), builds PyO3 bindings, and places the `memori` binary on PATH. First source build takes 2-3 minutes.
@@ -275,14 +275,14 @@ Then start a new Claude Code session -- the snippet is read at session start.
 ## Upgrading
 
 ```bash
-pip install --upgrade memori-ai
+pip install --upgrade py-memori
 cd ~ && memori setup  # re-run from ~ to update the snippet if version changed
 ```
 
 If you installed from source instead:
 
 ```bash
-cd memori/memori-python && uv tool install --from . memori-ai --force
+cd memori/memori-python && uv tool install --from . py-memori --force
 cd ~ && memori setup  # re-run from ~ to update the snippet if version changed
 ```
 
@@ -290,7 +290,7 @@ cd ~ && memori setup  # re-run from ~ to update the snippet if version changed
 
 ```bash
 cd ~ && memori setup --undo  # remove reference from CLAUDE.md and snippet file (must run before uninstalling)
-pip uninstall memori-ai      # or: uv tool uninstall memori-ai
+pip uninstall py-memori      # or: uv tool uninstall py-memori
 ```
 
 The database at `~/.claude/memori.db` and model cache at `~/.fastembed_cache/` are left behind. Delete manually if desired.

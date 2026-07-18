@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0] — 2026-07-18
 
 ### Added
-- **PyPI release** — `memori-ai` package with pre-built wheels for Linux, macOS (Intel + Apple Silicon), and Windows, Python 3.9–3.13.
+- **PyPI release** — `py-memori` package with pre-built wheels for Linux, macOS (Intel + Apple Silicon), and Windows, Python 3.9–3.13.
 - **crates.io release** — `memori-ai-core` Rust crate with full metadata (repository, homepage, documentation, keywords, categories).
 - **CI workflow** (`.github/workflows/ci.yml`) — `cargo fmt --check`, `cargo clippy`, `cargo test`, `maturin develop`, `pytest` on push and PR.
 - **Release workflow** (`.github/workflows/release.yml`) — tag-triggered, matrix-build wheels via `maturin-action`, automatic crates.io + PyPI upload.
@@ -18,13 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README badges (PyPI, crates.io, CI, license, Python, Rust), blog post links, and expanded PyPI classifiers.
 
 ### Changed
-- **Package renamed:** `memori` → `memori-ai` (PyPI) and `memori-core` → `memori-ai-core` (crates.io) due to namespace collisions on both registries.
+- **Package renamed:** `memori` → `py-memori` (PyPI, both naming-collision and "too similar to memori" rejection) and `memori-core` → `memori-ai-core` (crates.io) due to namespace collisions on both registries.
 - **Import names unchanged:** Python `import memori` / `import memori_cli` and Rust `use memori_core::...` still work — only the *distribution* name changed.
-- **CLI command unchanged:** `memori` is still the binary name (`pip install memori-ai` installs a `memori` script).
+- **CLI command unchanged:** `memori` is still the binary name (`pip install py-memori` installs a `memori` script).
 - **Development status** raised from `3 - Alpha` to `4 - Beta`.
 
 ### Fixed
-- README install instructions no longer require Rust toolchain — `pip install memori-ai` works out of the box.
+- README install instructions no longer require Rust toolchain — `pip install py-memori` works out of the box.
 
 ## [0.6.0] — 2026-03
 

@@ -141,7 +141,7 @@ Memori has strong fundamentals -- solid Rust core, good test coverage (94 tests)
 
 ### Wave 2: Ship the package
 
-- [x] Publish to PyPI as `memori-ai` (renamed from `memori` due to namespace collision; maturin + GitHub Actions release workflow on tag, matrix Linux/macOS/Windows)
+- [x] Publish to PyPI as `py-memori` (renamed from `memori` due to namespace collision; `memori-ai` was rejected by PyPI as too similar to existing `memori` project; maturin + GitHub Actions release workflow on tag, matrix Linux/macOS/Windows)
 - [x] Publish to crates.io as `memori-ai-core` (renamed from `memori-core` due to namespace collision)
 - [x] Restructure README above-the-fold (punchy one-liner, badges, "Why Memori?" bullets, `pip install`, 3-command quickstart)
 - [ ] Add hero GIF (asciinema recording of `store -> search -> context`)

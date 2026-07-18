@@ -2,7 +2,7 @@
 name = "memori-ai-py"
 version = "0.7.0"
 edition = "2021"
-description = "PyO3 bindings + CLI for memori-ai-core (published to PyPI as memori-ai)"
+description = "PyO3 bindings + CLI for memori-ai-core (published to PyPI as py-memori)"
 license = "MIT"
 authors = ["Archit Singh <archit15singh@gmail.com>"]
 repository = "https://github.com/archit15singh/memori"

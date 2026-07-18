@@ -52,19 +52,19 @@ Attempt PyPI install first (no Rust toolchain needed). Fall back to source build
 ### Path A: PyPI (preferred)
 
 ```bash
-pip install memori-ai        # or: pipx install memori-ai
+pip install py-memori        # or: pipx install py-memori
 ```
 
-**Expected**: `memori` script installed; final output mentions ` Successfully installed memori-ai-0.7.0` (or similar).
+**Expected**: `memori` script installed; final output mentions ` Successfully installed py-memori-0.7.0` (or similar).
 
-If pip reports "no matching distribution for memori-ai" (no pre-built wheel for your platform/arch), fall back to Path B.
+If pip reports "no matching distribution for py-memori" (no pre-built wheel for your platform/arch), fall back to Path B.
 
 ### Path B: Source build (fallback — requires Rust toolchain)
 
 Install Rust first if needed: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`. Then from the memori repository root:
 
 ```bash
-cd memori-python && uv tool install --from . memori-ai
+cd memori-python && uv tool install --from . py-memori
 ```
 
 **Note**: First build compiles the Rust core — takes 2–5 minutes. Rust compiler output is normal.
@@ -121,7 +121,7 @@ Expected output: `uv` followed by version `0.4` or higher
 From the memori repository root (the top-level directory where you cloned memori):
 
 ```bash
-cd memori-python && uv tool install --from . memori-ai
+cd memori-python && uv tool install --from . py-memori
 ```
 
 **Note**: First build compiles the Rust core — takes 2–5 minutes. Rust compiler output is normal.

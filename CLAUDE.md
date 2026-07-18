@@ -16,10 +16,10 @@ cd memori-python && maturin develop
 pytest memori-python/tests/test_memori.py -v
 
 # Install as CLI tool (from PyPI -- no Rust toolchain needed)
-pip install memori-ai         # installs the `memori` CLI script
+pip install py-memori         # installs the `memori` CLI script
 
 # Install from source
-cd memori-python && uv tool install --from . memori-ai
+cd memori-python && uv tool install --from . py-memori
 
 # Benchmarks (criterion + memory)
 cargo bench -p memori-ai-core                          # all benchmarks (~30 min with 500K)

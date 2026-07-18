@@ -3,7 +3,7 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "memori-ai"
+name = "py-memori"
 version = "0.7.0"
 description = "Embedded AI agent memory -- SQLite + vector search + FTS5"
 requires-python = ">=3.9"

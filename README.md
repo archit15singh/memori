@@ -1,10 +1,10 @@
 # Memori
 
-[![PyPI](https://img.shields.io/pypi/v/memori-ai.svg)](https://pypi.org/project/memori-ai/)
+[![PyPI](https://img.shields.io/pypi/v/py-memori.svg)](https://pypi.org/project/py-memori/)
 [![crates.io](https://img.shields.io/crates/v/memori-ai-core.svg)](https://crates.io/crates/memori-ai-core)
 [![CI](https://github.com/archit15singh/memori/actions/workflows/ci.yml/badge.svg)](https://github.com/archit15singh/memori/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://pypi.org/project/memori-ai/)
+[![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://pypi.org/project/py-memori/)
 [![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://crates.io/crates/memori-ai-core)
 
 > Persistent memory for AI coding agents — Rust + SQLite + FTS5 + vector search in a single file.
@@ -12,7 +12,7 @@
 AI agents forget everything between sessions. Memori gives them a persistent memory layer that accumulates knowledge over time — so every session starts with the context it needs, not from zero.
 
 ```bash
-pip install memori-ai                # 1. install (Linux/macOS/Windows, Python 3.9-3.13)
+pip install py-memori                # 1. install (Linux/macOS/Windows, Python 3.9-3.13)
 cd ~ && memori setup                  # 2. wire into Claude Code (writes ~/.claude/tools/memori/SNIPPET.md)
 memori store "Chose SQLite over Postgres for zero-config portability." --meta '{"type":"decision"}'
 memori search --text "database choice"   # hybrid FTS5 + vector, auto-vectorized
@@ -36,7 +36,7 @@ memori search --text "database choice"   # hybrid FTS5 + vector, auto-vectorized
 ## Install
 
 ```bash
-pip install memori-ai        # or: pipx install memori-ai
+pip install py-memori        # or: pipx install py-memori
 ```
 
 Pre-built wheels ship for Linux, macOS (Intel + Apple Silicon), and Windows — Python 3.9–3.13. The embedding model is bundled and cached on first run (~90MB to `~/.fastembed_cache/`); no network after install.
@@ -50,7 +50,7 @@ cargo add memori-ai-core
 
 # From source (requires Rust toolchain + uv)
 git clone https://github.com/archit15singh/memori.git
-cd memori/memori-python && uv tool install --from . memori-ai
+cd memori/memori-python && uv tool install --from . py-memori
 ```
 
 First source build compiles the Rust core with bundled SQLite and fastembed (~2–3 minutes). Subsequent builds start in seconds.
@@ -108,7 +108,7 @@ Unlike Mem0 (requires LLM API calls to extract and structure memories) or Graphi
 | Decay scoring | Access + time | Access counter only | None | None |
 | LLM dependency | None | Required | None | None |
 | Config | Zero | Cloud service | File | File |
-| Install | `pip install memori-ai` | Cloud service | `cargo + go` | `cargo` |
+| Install | `pip install py-memori` | Cloud service | `cargo + go` | `cargo` |
 
 **Design notes** (long-form blog posts by the author):
 - [Designing CLI tools for AI agents](https://archit15singh.github.io/posts/2026-02-28-designing-cli-tools-for-ai-agents/) — the CLI design that makes memori agent-friendly (prefix IDs, `--json`/`--raw` anywhere, autonomous `setup`, compact context mode).
@@ -371,7 +371,7 @@ memori-core/  (Rust library, published to crates.io as memori-ai-core, v0.7.0)
   embed.rs      fastembed AllMiniLM-L6-V2 (lazy singleton, feature-gated)
   util.rs       cosine_similarity, vec<->blob (unsafe pointer casts, f32 platform-native)
 
-memori-python/  (PyO3 bindings + CLI, published to PyPI as memori-ai, v0.7.0)
+memori-python/  (PyO3 bindings + CLI, published to PyPI as py-memori, v0.7.0)
   src/lib.rs          PyMemori class (Mutex<Memori>, GIL release on search/insert/embed)
   python/memori_cli/  Argparse CLI (18 subcommands, --json/--raw on all)
     data/             claude_snippet.md, dashboard.html (single-file web UI)
@@ -557,7 +557,7 @@ db.delete_by_type("temporary")
 ## Status & roadmap
 
 **Done (v0.7.0):**
-- [x] PyPI release (`memori-ai` — Linux, macOS Intel/ARM, Windows wheels via GitHub Actions)
+- [x] PyPI release (`py-memori` — Linux, macOS Intel/ARM, Windows wheels via GitHub Actions)
 - [x] crates.io release (`memori-ai-core`)
 - [x] CI (fmt, clippy, cargo test, maturin develop, pytest on push/PR)
 - [x] Tag-triggered release workflow (matrix wheels → crates.io + PyPI + GitHub release)

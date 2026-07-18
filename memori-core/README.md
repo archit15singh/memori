@@ -2,11 +2,11 @@
 
 Persistent memory for AI coding agents — SQLite + FTS5 + vector search in a single binary.
 
-This is the Rust engine behind the **[`memori-ai`](https://pypi.org/project/memori-ai/)** Python package
+This is the Rust engine behind the **[`py-memori`](https://pypi.org/project/py-memori/)** Python package
 and the `memori` CLI. Most users want the Python package:
 
 ```bash
-pip install memori-ai
+pip install py-memori
 ```
 
 ## Rust usage
