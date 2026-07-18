@@ -320,14 +320,14 @@ Unlike Mem0 (requires LLM API calls to extract and structure memories) or Graphi
 
 ```bash
 # Run all Rust benchmarks (~30 min with 500K scale)
-cargo bench -p memori-core
+cargo bench -p memori-ai-core
 
 # Individual benchmark groups
-cargo bench -p memori-core --bench search_bench    # search at 1K/10K/100K/500K
-cargo bench -p memori-core --bench crud_bench      # CRUD at 1K/10K/100K/500K
-cargo bench -p memori-core --bench vector_ops_bench
-cargo bench -p memori-core --bench embed_bench     # requires embeddings feature
-cargo bench -p memori-core --bench memory_bench    # file size + throughput (1K-1M, ~10 min)
+cargo bench -p memori-ai-core --bench search_bench    # search at 1K/10K/100K/500K
+cargo bench -p memori-ai-core --bench crud_bench      # CRUD at 1K/10K/100K/500K
+cargo bench -p memori-ai-core --bench vector_ops_bench
+cargo bench -p memori-ai-core --bench embed_bench     # requires embeddings feature
+cargo bench -p memori-ai-core --bench memory_bench    # file size + throughput (1K-1M, ~10 min)
 
 # Parse criterion output into a markdown table
 python3 scripts/bench-table.py
@@ -561,14 +561,14 @@ db.delete_by_type("temporary")
 
 ## Testing
 
-~195 tests across three layers — all real SQLite, no mocking:
+~190 tests across three layers — all real SQLite, no mocking:
 
 - **Rust integration** (`memori-core/tests/integration_test.rs`): 63 tests using in-memory SQLite via `open_temp()`. Covers CRUD, dedup, all four search modes, decay scoring, prefix resolution, embedding backfill, export/import.
 - **Python API** (`memori-python/tests/test_memori.py`): 37 pytest tests via `tmp_path` fixture. Covers PyMemori bindings end-to-end.
-- **CLI** (`memori-python/tests/test_cli.py`): ~95 subprocess-based tests. Full command matrix: all 18 subcommands, output modes, error cases, date filtering, dedup behavior, typed tag coercion, purge AND logic.
+- **CLI** (`memori-python/tests/test_cli.py`): 91 subprocess-based tests. Full command matrix: all 18 subcommands, output modes, error cases, date filtering, dedup behavior, typed tag coercion, purge AND logic.
 
 ```bash
-cargo test -p memori-core
+cargo test -p memori-ai-core
 cd memori-python && maturin develop && pytest tests/test_memori.py tests/test_cli.py -v
 ```
 

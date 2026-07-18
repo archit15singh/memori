@@ -111,8 +111,8 @@ Add a `cmd_<name>()` function and wire it into the argparse subparser in `memori
 
 - **Rust**: 63 integration tests in `memori-core/tests/integration_test.rs` using in-memory SQLite (`:memory:`) via `open_temp()` helper, plus 7 unit tests in `util.rs` (cosine similarity, vec/blob roundtrip)
 - **Python**: 37 pytest tests in `memori-python/tests/test_memori.py` using `tmp_path` fixture for DB files (PyMemori API level)
-- **CLI**: ~95 pytest tests in `memori-python/tests/test_cli.py` using `subprocess.run()` against temp DBs -- full command matrix covering all 18 subcommands, output modes, error cases, and regression tests for fixed bugs
-- **Total: ~195 tests** (70 Rust + ~132 Python) -- no mocking, all real SQLite
+- **CLI**: 91 pytest tests in `memori-python/tests/test_cli.py` using `subprocess.run()` against temp DBs -- full command matrix covering all 18 subcommands, output modes, error cases, and regression tests for fixed bugs
+- **Total: ~190 tests** (70 Rust + 128 Python) -- no mocking, all real SQLite
 - Notable untested paths: `vacuum()`, schema migration upgrades
 
 ### E2E Agent Simulation Testing
@@ -166,7 +166,7 @@ When making changes to the codebase, always update `CLAUDE.md` and `README.md` t
 | `scripts/bench-cli.sh` | CLI-level timing with hyperfine |
 | `memori_dev.md` | Developer reference (arch decisions, change workflows) |
 | `memori-python/Cargo.toml` | PyO3 crate config (cdylib, pyo3 0.22, abi3-py39) — published as `memori-ai-py` (publish=false, internal only) |
-| `memori-python/tests/test_cli.py` | ~95 CLI integration tests (subprocess-based, all 18 subcommands) |
+| `memori-python/tests/test_cli.py` | 91 CLI integration tests (subprocess-based, all 18 subcommands) |
 | `memori-python/python/memori_cli/data/claude_snippet.md` | Snippet injected by `memori setup` (version-tagged markers) |
 | `docs/packaging_dev.md` | Open-source packaging strategy and execution plan |
 | `LICENSE` | MIT license |
