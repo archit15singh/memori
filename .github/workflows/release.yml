@@ -44,6 +44,7 @@ jobs:
           working-directory: memori-python
           command: publish
           args: --non-interactive --skip-existing
+          manylinux: 2_28
         env:
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
 
