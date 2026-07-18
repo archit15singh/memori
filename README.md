@@ -18,7 +18,7 @@ memori store "Chose SQLite over Postgres for zero-config portability." --meta '{
 memori search --text "database choice"   # hybrid FTS5 + vector, auto-vectorized
 ```
 
-> **Status:** beta · **Platforms:** Linux, macOS (Intel + Apple Silicon), Windows · **No API keys, no cloud, no LLM dependency**
+> **Status:** v0.7.0 released Jul 2026 ([CHANGELOG](CHANGELOG.md)) · **Platforms:** Linux, macOS (Intel + Apple Silicon), Windows · **No API keys, no cloud, no LLM dependency**
 
 ---
 
@@ -114,8 +114,6 @@ Unlike Mem0 (requires LLM API calls to extract and structure memories) or Graphi
 - [Designing CLI tools for AI agents](https://archit15singh.github.io/posts/2026-02-28-designing-cli-tools-for-ai-agents/) — the CLI design that makes memori agent-friendly (prefix IDs, `--json`/`--raw` anywhere, autonomous `setup`, compact context mode).
 - [Memori: Architecture](https://archit15singh.github.io/posts/2026-03-24-memori-architecture/) — why single-file SQLite, why brute-force vector search, why RRF fusion, why `Mutex<Memori>` in PyO3.
 - [Memori: Recursive design](https://archit15singh.github.io/posts/2026-04-10-memori-recursive-design/) — using memori to remember the lessons from building memori. The agent storing its own design decisions.
-
-> Hero visual (asciinema GIF of `store → search → context`) and dashboard screenshot — TODO, see [`docs/packaging_dev.md`](docs/packaging_dev.md) Wave 2.
 
 ---
 
