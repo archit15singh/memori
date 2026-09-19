@@ -25,7 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - README install instructions no longer require Rust toolchain — `pip install py-memori` works out of the box.
-- Linux `manylinux` wheel actually published — the release build container now installs `openssl-devel` before the first successful Linux upload.
+- Linux manylinux wheel build fixed — the build container now installs `openssl-devel`. The wheel could not ship in 0.7.0 (PyPI rejects new files on releases older than 14 days), so it ships in 0.7.1.
+
+## [0.7.1] — 2026-09-20
+
+### Added
+- **Linux manylinux wheels on PyPI** — `py_memori-0.7.0-cp39-abi3-manylinux_2_28_x86_64.whl` was built by the fixed CI (openssl-devel now installed in the build container) but PyPI refused the upload: 0.7.0 was older than 14 days. This release carries the Linux wheels (x86_64 + aarch64). `pip install py-memori` on Linux now installs a prebuilt wheel, no Rust toolchain.
+- Release workflow gains `workflow_dispatch` and an `ubuntu-24.04-arm` matrix entry for aarch64 manylinux wheels.
 
 ## [0.6.0] — 2026-03
 

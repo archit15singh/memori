@@ -18,7 +18,7 @@ memori store "Chose SQLite over Postgres for zero-config portability." --meta '{
 memori search --text "database choice"   # hybrid FTS5 + vector, auto-vectorized
 ```
 
-> **Status:** v0.7.0 released Jul 2026 ([CHANGELOG](CHANGELOG.md)) · **Platforms:** Linux, macOS (Intel + Apple Silicon), Windows · **No API keys, no cloud, no LLM dependency**
+> **Status:** v0.7.1 released Sep 2026 ([CHANGELOG](CHANGELOG.md)) · **Platforms:** Linux, macOS (Intel + Apple Silicon), Windows · **No API keys, no cloud, no LLM dependency**
 
 ---
 
@@ -360,7 +360,7 @@ All ID-based commands accept 6+ character prefixes. Resolution uses `WHERE id LI
 ## Architecture
 
 ```
-memori-core/  (Rust library, published to crates.io as memori-ai-core, v0.7.0)
+memori-core/  (Rust library, published to crates.io as memori-ai-core, v0.7.1)
   lib.rs        Memori facade — prefix-resolving API over storage + search
   types.rs      Memory, SearchQuery, InsertResult, MemoriError, SortField
   schema.rs     SQLite DDL, migration versions v0–v3 (PRAGMA user_version)
@@ -369,7 +369,7 @@ memori-core/  (Rust library, published to crates.io as memori-ai-core, v0.7.0)
   embed.rs      fastembed AllMiniLM-L6-V2 (lazy singleton, feature-gated)
   util.rs       cosine_similarity, vec<->blob (unsafe pointer casts, f32 platform-native)
 
-memori-python/  (PyO3 bindings + CLI, published to PyPI as py-memori, v0.7.0)
+memori-python/  (PyO3 bindings + CLI, published to PyPI as py-memori, v0.7.1)
   src/lib.rs          PyMemori class (Mutex<Memori>, GIL release on search/insert/embed)
   python/memori_cli/  Argparse CLI (18 subcommands, --json/--raw on all)
     data/             claude_snippet.md, dashboard.html (single-file web UI)
@@ -554,7 +554,7 @@ db.delete_by_type("temporary")
 
 ## Status & roadmap
 
-**Done (v0.7.0):**
+**Done (v0.7.1):**
 - [x] PyPI release (`py-memori` — Linux, macOS Intel/ARM, Windows wheels via GitHub Actions)
 - [x] crates.io release (`memori-ai-core`)
 - [x] CI (fmt, clippy, cargo test, maturin develop, pytest on push/PR)

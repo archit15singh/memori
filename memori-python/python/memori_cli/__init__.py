@@ -32,7 +32,7 @@ from urllib.parse import parse_qs, urlparse
 
 from memori import PyMemori
 
-__version__ = "0.7.0"
+__version__ = "0.7.1"
 
 DEFAULT_DB = os.path.expanduser("~/.claude/memori.db")
 DEFAULT_DEDUP_THRESHOLD = 0.92
