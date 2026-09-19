@@ -4,10 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 jobs:
   crates-io:
     name: Publish memori-ai-core to crates.io
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -27,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-13, macos-14, windows-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-13, macos-14, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -44,7 +46,8 @@ jobs:
           working-directory: memori-python
           command: publish
           args: --non-interactive --skip-existing
-          manylinux: 2_28
+          manylinux: ${{ runner.os == 'Linux' && '2_28' || 'off' }}
+          before-script-linux: yum install -y openssl-devel pkgconfig
         env:
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
 
@@ -52,7 +55,7 @@ jobs:
     name: GitHub Release
     needs: [crates-io, pypi]
     runs-on: ubuntu-latest
-    if: always()
+    if: always() && startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
     steps:

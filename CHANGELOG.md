@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - README install instructions no longer require Rust toolchain — `pip install py-memori` works out of the box.
+- Linux `manylinux` wheel actually published — the release build container now installs `openssl-devel` before the first successful Linux upload.
 
 ## [0.6.0] — 2026-03
 
