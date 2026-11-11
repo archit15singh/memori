@@ -71,7 +71,7 @@ pub fn search(conn: &rusqlite::Connection, query: SearchQuery) -> Result<Vec<Mem
         (None, Some(text)) => {
             #[cfg(feature = "embeddings")]
             {
-                if query.text_only {
+                if query.text_only || query.limit == 0 {
                     text_search(conn, text, combined_filter.as_deref(), query.limit, now)?
                 } else {
                     let query_vec = crate::embed::embed_text(text);

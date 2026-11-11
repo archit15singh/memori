@@ -1,0 +1,7 @@
+{
+  "scenario": "zero-result query with deliberately unavailable model cache",
+  "returncode": 1,
+  "stdout": "",
+  "elapsed_seconds": 0.8295,
+  "error_tail": "\nthread '<unnamed>' (3307200) panicked at lorevell-core/src/embed.rs:13:45:\nfailed to initialize embedding model: Failed to retrieve model.onnx\n\nCaused by:\n    0: I/O error Not a directory (os error 20)\n    1: Not a directory (os error 20)\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    from lorevell import PyLorevell; import json; print(json.dumps(PyLorevell(\":memory:\").search(text=\"some query\",limit=0)))\n                                                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^\npyo3_runtime.PanicException: failed to initialize embedding model: Failed to retrieve model.onnx\n\nCaused by:\n    0: I/O error Not a directory (os error 20)\n    1: Not a directory (os error 20)\n"
+}

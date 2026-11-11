@@ -1,0 +1,7 @@
+{
+  "scenario": "zero-result query with deliberately unavailable model cache",
+  "returncode": 0,
+  "stdout": "[]",
+  "elapsed_seconds": 0.034,
+  "error_tail": ""
+}

@@ -1,0 +1,131 @@
+{
+  "description": "Additional frozen maintainer paraphrases, authored before candidate RRF experiments; same public corpus and manually labeled note IDs. Not an independent author or blind benchmark.",
+  "questions_sha256": "e311e04ac32606ac4dd6af705f7dc99eed6fbd80a41ff7032d1997b30ad6e2c3",
+  "mode": "text-only",
+  "questions": 10,
+  "top1": 9,
+  "hit_at_3": 9,
+  "mrr_at_3": 0.9,
+  "results": [
+    {
+      "query": "How can I read and correct knowledge without installing this tool?",
+      "expected": [
+        "markdown"
+      ],
+      "retrieved": [
+        "markdown",
+        "offline",
+        "backlinks"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "Can two notes use the same frontmatter ID?",
+      "expected": [
+        "identity"
+      ],
+      "retrieved": [
+        "metadata",
+        "skills",
+        "learning"
+      ],
+      "first_relevant_rank": null
+    },
+    {
+      "query": "What if a link uses a filename shared by two folders?",
+      "expected": [
+        "links"
+      ],
+      "retrieved": [
+        "links",
+        "release-status",
+        "identity"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "Where can I see incoming references to a note?",
+      "expected": [
+        "backlinks"
+      ],
+      "retrieved": [
+        "backlinks",
+        "markdown",
+        "metadata"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "Does consolidation destroy the original superseded procedure?",
+      "expected": [
+        "archive"
+      ],
+      "retrieved": [
+        "archive",
+        "release-status",
+        "dream-failure"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "Are edits made in my editor protected by the writer lock?",
+      "expected": [
+        "locking"
+      ],
+      "retrieved": [
+        "locking",
+        "links",
+        "dream-git"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "Can cached embeddings be kept when source Markdown is unchanged?",
+      "expected": [
+        "index"
+      ],
+      "retrieved": [
+        "index",
+        "markdown",
+        "similarity"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "How are sparse and dense search lists combined?",
+      "expected": [
+        "hybrid"
+      ],
+      "retrieved": [
+        "hybrid",
+        "fts",
+        "embeddings"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "What happens to the remaining files after a small dream batch?",
+      "expected": [
+        "dream-batch"
+      ],
+      "retrieved": [
+        "dream-batch",
+        "dream-failure",
+        "dream-validation"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "Will the consolidation log tell me why the agent failed?",
+      "expected": [
+        "dream-failure"
+      ],
+      "retrieved": [
+        "dream-failure",
+        "release-status",
+        "dream-git"
+      ],
+      "first_relevant_rank": 1
+    }
+  ]
+}
