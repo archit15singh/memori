@@ -16,7 +16,7 @@ pub mod util;
 
 use std::collections::HashMap;
 
-pub use types::{InsertResult, MemoriError, Memory, Result, SearchQuery, SortField};
+pub use types::{Freshness, InsertResult, MemoriError, Memory, Result, SearchQuery, SortField};
 
 pub struct Memori {
     conn: rusqlite::Connection,
@@ -78,6 +78,34 @@ impl Memori {
             Err(e) => return Err(e),
         };
         storage::get(&self.conn, &full_id)
+    }
+
+    /// Restore backup clocks without treating an import as factual revalidation.
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_with_id_and_freshness(
+        &self,
+        id: &str,
+        content: &str,
+        vector: Option<&[f32]>,
+        metadata: Option<serde_json::Value>,
+        created_at: f64,
+        updated_at: f64,
+        freshness: Freshness,
+    ) -> Result<String> {
+        storage::insert_with_id_and_freshness(
+            &self.conn, id, content, vector, metadata, created_at, updated_at, freshness,
+        )
+    }
+
+    /// Record a caller's explicit validation of the current content.
+    pub fn revalidate(&self, id: &str) -> Result<()> {
+        let full_id = storage::resolve_prefix(&self.conn, id)?;
+        storage::revalidate(&self.conn, &full_id)
+    }
+
+    /// Records whose content has not changed or been revalidated before a cutoff.
+    pub fn stale(&self, before: f64, limit: usize) -> Result<Vec<Memory>> {
+        storage::stale(&self.conn, before, limit)
     }
 
     pub fn update(

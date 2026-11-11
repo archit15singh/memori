@@ -49,7 +49,7 @@ Memori is a persistent memory system for AI coding agents. Single-binary, SQLite
 ```
 User/Agent
     |
-memori CLI (Python argparse, 18 subcommands)
+memori CLI (Python argparse)
     |
 PyMemori (PyO3 bindings, Mutex<Memori>)
     |
@@ -58,7 +58,7 @@ Memori struct (lib.rs -- thin facade with prefix ID resolution)
 +-- storage.rs  CRUD, prefix resolution, list, dedup, metadata merge
 +-- search.rs   4 search modes, RRF hybrid fusion, decay scoring
 +-- embed.rs    fastembed AllMiniLM-L6-V2 (lazy OnceLock singleton)
-+-- schema.rs   DDL, FTS5 virtual table, triggers, 3 migration versions
++-- schema.rs   DDL, FTS5 virtual table, triggers, 4 migration versions
 +-- types.rs    Memory, SearchQuery, MemoriError, SortField, InsertResult
 +-- util.rs     cosine_similarity, vec<->blob conversion
 ```
@@ -70,7 +70,7 @@ Memori struct (lib.rs -- thin facade with prefix ID resolution)
 - RRF hybrid fusion (k=60) -- rank-based, not score-based, because cosine similarity and BM25 ranks are on incompatible scales
 - `Mutex<Memori>` in Python bindings because `rusqlite::Connection` is `!Sync` and `py.allow_threads()` releases the GIL during `search()`, `insert()`, `backfill_embeddings()`, and `related()`
 
-**Schema migrations** are tracked via `PRAGMA user_version` (v0 through v3). Each migration is an `if version < N` block in `schema.rs::init_db()`. v0->1: FTS5 + metadata-aware triggers; v1->2: `last_accessed`/`access_count` columns; v2->3: expression index on `json_extract(metadata, '$.type')`.
+**Schema migrations** are tracked via `PRAGMA user_version` (v0 through v4). Each migration is an `if version < N` block in `schema.rs::init_db()`. v0->1: FTS5 + metadata-aware triggers; v1->2: `last_accessed`/`access_count` columns; v2->3: expression index on `json_extract(metadata, '$.type')`; v3->4: content/revalidation clocks. All migrations run in an immediate transaction; newer schemas are rejected. See `docs/freshness.md` for legacy-clock approximation and rollback constraints.
 
 ## Non-Obvious Constraints
 
@@ -79,7 +79,7 @@ Memori struct (lib.rs -- thin facade with prefix ID resolution)
 - **FTS5 delete syntax**: `INSERT INTO memories_fts(memories_fts, rowid, content) VALUES('delete', ...)` -- FTS5's documented removal mechanism
 - **Metadata filter is flat equality only**: `build_filter_clause()` in `search.rs` converts JSON to `json_extract()` WHERE clauses -- no nested paths, no operators. Filter keys are validated by `is_valid_filter_key()` against `[a-zA-Z_][a-zA-Z0-9_]*` -- rejects nested paths and prevents SQL injection.
 - **Prefix ID resolution**: `LIKE prefix%` on UUID primary key maps to a B-tree range scan. The facade in `lib.rs` wraps get/get_readonly/update/delete/touch/set_access_stats/related with prefix resolution. Note: 8-char hex prefixes collide above ~100K UUIDs (birthday paradox on 16^8 space); use longer prefixes at scale
-- **Decay scoring**: logarithmic access boost + exponential time decay (~69 day half-life). `access_count == 0` guard prevents penalizing newly-stored memories
+- **Decay scoring**: popularity is capped at 1.5x. Age decay (~69-day half-life) follows content changes or explicit revalidation, including never-accessed records. Reads and tag edits do not renew factual age. FTS scoring now applies before candidate truncation. See `docs/freshness.md`.
 - **Dedup threshold**: cosine similarity > 0.92 between same-type memories triggers update instead of insert (strictly greater-than -- equality does not trigger dedup)
 - **Dedup drift after tagging**: tagging or updating metadata re-embeds from `content + scalar metadata values`, shifting the vector. Storing identical content later may NOT dedup against the tagged original because the vectors diverged. This is expected -- the vectors represent different information now. Workaround: if you need to dedup after heavy tagging, the content similarity is still captured by FTS5.
 - **FTS5 vs vector embedding asymmetry**: FTS5 indexes `content || ' ' || COALESCE(metadata, '')` (raw JSON with keys/braces). Vector embedding uses `content + metadata_values_text()` (top-level scalar values only). On initial insert, auto-embed uses content only; on metadata update, re-embeds from `content + scalar metadata values`. FTS5 can match JSON keys, vector search cannot.
@@ -102,7 +102,7 @@ Memori struct (lib.rs -- thin facade with prefix ID resolution)
 ## Common Change Workflows
 
 ### Adding a column to the memories table
-1. Add column to `CREATE TABLE` in `schema.rs` + add `ALTER TABLE ADD COLUMN` migration at the next user_version
+1. Add an `ALTER TABLE ADD COLUMN` migration at the next user_version in `schema.rs`; fresh databases also run the migration chain, so keep the base table at its original version. Update SCHEMA_VERSION and preserve transaction/rollback tests.
 2. Update `Memory` struct in `types.rs`
 3. Update `row_to_memory()` in `storage.rs` (column index changes)
 4. Update `memory_to_dict()` in `memori-python/src/lib.rs`
@@ -119,8 +119,9 @@ Add a `cmd_<name>()` function and wire it into the argparse subparser in `memori
 - **Python**: 37 pytest tests in `memori-python/tests/test_memori.py` using `tmp_path` fixture for DB files (PyMemori API level)
 - **CLI**: 91 pytest tests in `memori-python/tests/test_cli.py` using `subprocess.run()` against temp DBs -- full command matrix covering all 18 subcommands, output modes, error cases, and regression tests for fixed bugs
 - **Relevance**: 4 Rust regressions (also tested without embeddings) and 14 native Python/CLI/HTTP cases; see `docs/relevance.md`.
-- **Total: 216 tests** (74 Rust + 142 Python) -- no mocking, all real SQLite
-- Notable untested paths: `vacuum()`, schema migration upgrades
+- **Freshness**: 7 Rust migration/atomicity cases (also without embeddings) and 11 native Python/CLI cases.
+- **Total: 234 tests** (81 Rust + 153 Python) -- no mocking, all real SQLite
+- Notable untested paths: `vacuum()`, schema migration upgrades beyond the covered v3-to-current path
 
 ### E2E Agent Simulation Testing
 
@@ -157,7 +158,7 @@ When making changes to the codebase, always update `CLAUDE.md` and `README.md` t
 | `memori-core/src/storage.rs` | CRUD, dedup, metadata merge, list |
 | `memori-core/src/schema.rs` | DDL, migrations, FTS5 triggers |
 | `memori-python/src/lib.rs` | PyO3 bindings (PyMemori class) |
-| `memori-python/python/memori_cli/__init__.py` | CLI (argparse, 18 subcommands) |
+| `memori-python/python/memori_cli/__init__.py` | CLI (argparse) |
 | `memori-python/python/memori_cli/data/dashboard.html` | Single-file web dashboard (Chart.js + D3) |
 | `memori-python/pyproject.toml` | Maturin build config, version, CLI entry point |
 | `memori-core/src/embed.rs` | fastembed model init, lazy OnceLock singleton, `embed_text()` / `embed_batch()` |

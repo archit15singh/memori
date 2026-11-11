@@ -49,7 +49,9 @@ enabled by default; rank scores are not cosine thresholds or confidence values.
 
 - Search results are hybrid-ranked (RRF fusion) -- trust ordering, not absolute score values
 - Zero results? Broaden keywords, drop filters, or `memori list --type <type>` to browse
-- In `context` output: "Stale" = not accessed in 30+ days (review candidates), "Frequent" = high access count
+- In `context` output: "Stale" = content not changed or explicitly revalidated in 30+ days; reads and tags do not reset this clock. "Frequent" = high access count, not factual validity.
+
+After verifying a memory against its source, use `memori revalidate <id>`. This records your explicit check; it does not perform validation for you. Content edits clear previous validation. Age reduces rank but does not expire records.
 
 ### Self-Maintenance
 
@@ -66,6 +68,7 @@ Run `memori <cmd> --help` for full details and examples on any command.
 | `memori context "<topic>"` | Load relevant + recent + stale memories + stats |
 | `memori store "<text>" --meta '{"type": "..."}'` | Store with typed metadata (auto-embeds, auto-dedup) |
 | `memori search --text "<query>"` | Hybrid search (or `--filter`, `--text-only`, `--before/--after`) |
+| `memori revalidate <id>` | Record explicit verification of current content (no access bump) |
 | `memori tag <id> key=value ...` | Merge typed tags (int/float/bool auto-coerced) |
 | `memori update <id> --content/--meta` | Correct or enrich (merge default, `--replace` for full swap) |
 | `memori delete <id>` / `memori purge` | Remove single / bulk delete with preview |

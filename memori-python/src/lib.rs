@@ -4,7 +4,7 @@
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use memori_core::{InsertResult, Memori, Memory, SearchQuery, SortField};
+use memori_core::{Freshness, InsertResult, Memori, Memory, SearchQuery, SortField};
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
@@ -93,6 +93,8 @@ fn memory_to_dict(py: Python<'_>, mem: &Memory) -> PyResult<PyObject> {
     dict.set_item("updated_at", mem.updated_at)?;
     dict.set_item("last_accessed", mem.last_accessed)?;
     dict.set_item("access_count", mem.access_count)?;
+    dict.set_item("content_updated_at", mem.content_updated_at)?;
+    dict.set_item("validated_at", mem.validated_at)?;
 
     match &mem.vector {
         Some(v) => dict.set_item("vector", v.to_object(py))?,
@@ -272,7 +274,8 @@ impl PyMemori {
         self.inner.lock().unwrap().count().map_err(memori_err)
     }
 
-    #[pyo3(signature = (id, content, vector=None, metadata=None, created_at=None, updated_at=None))]
+    #[pyo3(signature = (id, content, vector=None, metadata=None, created_at=None, updated_at=None, content_updated_at=None, validated_at=None))]
+    #[allow(clippy::too_many_arguments)]
     fn insert_with_id(
         &self,
         id: &str,
@@ -281,6 +284,8 @@ impl PyMemori {
         metadata: Option<&Bound<'_, PyDict>>,
         created_at: Option<f64>,
         updated_at: Option<f64>,
+        content_updated_at: Option<f64>,
+        validated_at: Option<f64>,
     ) -> PyResult<String> {
         let meta = metadata.map(pydict_to_value).transpose()?;
         let now = SystemTime::now()
@@ -292,8 +297,41 @@ impl PyMemori {
         self.inner
             .lock()
             .unwrap()
-            .insert_with_id(id, content, vector.as_deref(), meta, ca, ua)
+            .insert_with_id_and_freshness(
+                id,
+                content,
+                vector.as_deref(),
+                meta,
+                ca,
+                ua,
+                Freshness {
+                    content_updated_at: content_updated_at.unwrap_or(ua),
+                    validated_at,
+                },
+            )
             .map_err(memori_err)
+    }
+
+    fn revalidate(&self, id: &str) -> PyResult<()> {
+        self.inner
+            .lock()
+            .unwrap()
+            .revalidate(id)
+            .map_err(memori_err)
+    }
+
+    #[pyo3(signature = (before, limit=5))]
+    fn stale(&self, py: Python<'_>, before: f64, limit: usize) -> PyResult<Vec<PyObject>> {
+        let results = self
+            .inner
+            .lock()
+            .unwrap()
+            .stale(before, limit)
+            .map_err(memori_err)?;
+        results
+            .iter()
+            .map(|memory| memory_to_dict(py, memory))
+            .collect()
     }
 
     fn vacuum(&self) -> PyResult<()> {

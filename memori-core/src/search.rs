@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::storage::{get_raw, row_to_memory};
 use crate::types::{MemoriError, Memory, Result, SearchQuery};
-use crate::util::{blob_to_vec, cosine_similarity};
+use crate::util::cosine_similarity;
 
 const RRF_K: f32 = 60.0;
 
@@ -97,19 +97,18 @@ pub fn search(conn: &rusqlite::Connection, query: SearchQuery) -> Result<Vec<Mem
     Ok(results)
 }
 
-/// Apply access frequency boost with recency decay.
-/// - boost: logarithmic amplification of access count (monotonic but sublinear)
-/// - decay: exponential time decay with ~69 day half-life
-/// - access_count==0 guard: never-accessed memories get no decay penalty
-fn apply_access_boost(base_score: f32, access_count: i64, last_accessed: f64, now: f64) -> f32 {
-    let boost = 1.0 + 0.1 * (1.0 + access_count as f32).ln();
-    let decay = if access_count == 0 || last_accessed <= 0.0 {
-        1.0f32 // never accessed: no decay penalty
+/// Bounded popularity plus factual age, independently of reads and tag changes.
+fn apply_access_boost(base_score: f32, access_count: i64, freshness_at: f64, now: f64) -> f32 {
+    let boost = 1.0 + (0.1 * (1.0 + access_count.max(0) as f32).ln()).min(0.5);
+    let days_since = ((now - freshness_at) / 86400.0).max(0.0) as f32;
+    let decay = (-0.01 * days_since).exp(); // half-life ~69 days
+    let adjustment = boost * decay;
+    if base_score >= 0.0 {
+        base_score * adjustment
     } else {
-        let days_since = ((now - last_accessed) / 86400.0) as f32;
-        (-0.01 * days_since.max(0.0)).exp() // half-life ~69 days
-    };
-    base_score * boost * decay
+        // Multiplying a negative cosine by decay would improve an old match.
+        base_score / adjustment.max(f32::MIN_POSITIVE)
+    }
 }
 
 fn vector_search(
@@ -127,7 +126,7 @@ fn vector_search(
     }
     let where_clause = filter.map_or(String::new(), |f| format!("WHERE {}", f));
     let sql = format!(
-        "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count
+        "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count, content_updated_at, validated_at
          FROM memories {} ORDER BY rowid",
         where_clause
     );
@@ -147,7 +146,7 @@ fn vector_search(
             } else {
                 cosine_similarity(query_vec, vec)
             };
-            let boosted = apply_access_boost(sim, mem.access_count, mem.last_accessed, now);
+            let boosted = apply_access_boost(sim, mem.access_count, mem.freshness_at(), now);
             scored.push((mem, boosted));
         }
     }
@@ -186,59 +185,52 @@ fn text_search(
 
     // Empty query (whitespace-only or blank input) produces no tokens -- return
     // early instead of passing an empty string to FTS5 MATCH which would error.
-    if safe_query.is_empty() {
+    if safe_query.is_empty() || limit == 0 {
         return Ok(Vec::new());
     }
 
     let sql = if let Some(f) = filter {
         format!(
             "SELECT m.id, m.content, m.vector, m.metadata, m.created_at, m.updated_at,
-                    m.last_accessed, m.access_count, fts.rank
+                    m.last_accessed, m.access_count, m.content_updated_at, m.validated_at, fts.rank
              FROM memories_fts fts
              JOIN memories m ON m.rowid = fts.rowid
              WHERE memories_fts MATCH ?1 AND {}
-             ORDER BY fts.rank
-             LIMIT ?2",
+             ORDER BY fts.rank",
             f.replace("metadata", "m.metadata")
         )
     } else {
         "SELECT m.id, m.content, m.vector, m.metadata, m.created_at, m.updated_at,
-                m.last_accessed, m.access_count, fts.rank
+                m.last_accessed, m.access_count, m.content_updated_at, m.validated_at, fts.rank
          FROM memories_fts fts
          JOIN memories m ON m.rowid = fts.rowid
          WHERE memories_fts MATCH ?1
-         ORDER BY fts.rank
-         LIMIT ?2"
+         ORDER BY fts.rank"
             .to_string()
     };
 
     let mut stmt = conn.prepare(&sql)?;
-    let mut rows = stmt.query(params![safe_query, limit as i64])?;
+    let mut rows = stmt.query(params![safe_query])?;
     let mut results = Vec::new();
 
     while let Some(row) = rows.next()? {
-        let rank: f64 = row.get(8)?;
-        let vector_blob: Option<Vec<u8>> = row.get(2)?;
-        let metadata_str: Option<String> = row.get(3)?;
-        let access_count: i64 = row.get(7)?;
-        let last_accessed: f64 = row.get(6)?;
-
-        let base_score = -rank as f32;
-        let boosted = apply_access_boost(base_score, access_count, last_accessed, now);
-
-        let mem = Memory {
-            id: row.get(0)?,
-            content: row.get(1)?,
-            vector: vector_blob.map(|b| blob_to_vec(&b)),
-            metadata: metadata_str.and_then(|s| serde_json::from_str(&s).ok()),
-            created_at: row.get(4)?,
-            updated_at: row.get(5)?,
-            last_accessed,
-            access_count,
-            score: Some(boosted),
-        };
-        results.push(mem);
+        let rank: f64 = row.get(10)?;
+        let mut memory = row_to_memory(row)?;
+        memory.score = Some(apply_access_boost(
+            -rank as f32,
+            memory.access_count,
+            memory.freshness_at(),
+            now,
+        ));
+        results.push(memory);
     }
+    // Age and popularity must affect membership before truncation, including FTS-only.
+    results.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    results.truncate(limit);
 
     Ok(results)
 }
@@ -318,7 +310,7 @@ fn recent_search(
 ) -> Result<Vec<Memory>> {
     let where_clause = filter.map_or(String::new(), |f| format!("WHERE {}", f));
     let sql = format!(
-        "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count
+        "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count, content_updated_at, validated_at
          FROM memories {} ORDER BY updated_at DESC LIMIT ?1",
         where_clause
     );

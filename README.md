@@ -78,18 +78,19 @@ Memori runs FTS5 full-text (BM25) and cosine vector similarity independently, th
 | `--vector [...]` | Vector only | Brute-force cosine similarity |
 | neither | Recent | Returns most recently updated memories |
 
-### 2. Access-weighted decay scoring
+### 2. Factual freshness with bounded popularity
 
-Every memory carries `access_count` and `last_accessed`. Search results are boosted by usage:
+Memori tracks content changes and explicit validation separately from access. Nonnegative candidate scores combine factual age with a bounded popularity boost:
 
 ```
 final_score = base_score × boost × decay
 
-boost = 1 + 0.1 × ln(1 + access_count)           # logarithmic, sublinear
-decay = exp(−0.01 × days_since_last_access)      # ~69-day half-life
+freshness_at = max(content_updated_at, validated_at if present)
+boost = 1 + min(0.5, 0.1 × ln(1 + max(access_count, 0)))
+decay = exp(−0.01 × days_since_freshness)       # ~69-day half-life
 ```
 
-Frequently-accessed memories surface first; stale ones fade. New memories carry no decay penalty until accessed.
+Old memories decay even if never accessed. Reads, tags and unchanged-content writes do not refresh factual age. After checking a fact, run `memori revalidate <id>` to record explicit validation. Popularity is capped at 1.5x. Negative cosine uses an inverse adjustment so age cannot improve its rank. See [freshness, migration and backup semantics](docs/freshness.md).
 
 ### 3. Cosine-similarity deduplication
 
@@ -173,7 +174,7 @@ $ memori context "sqlite architecture" --limit 3
 
 ## Recent Memories (by last update)
 ## Frequently Accessed
-## Stale Memories (30+ days, never accessed)
+## Stale Memories (content not changed or revalidated in 30+ days)
 ## Stats
 Total: 12 memories
 Types: debugging: 4, decision: 4, architecture: 2, fact: 1, preference: 1
@@ -264,6 +265,8 @@ Dark-themed dashboard: memory list (search, type filter, sort, date range), type
 
 ## Performance
 
+> These benchmark results predate factual-age ranking. FTS now evaluates all matching candidates before truncation; rerun the benchmarks before relying on these timings.
+
 > Benchmarked on Apple M4 Pro (14-core, 48 GB RAM), macOS Sequoia. Latency benchmarks use in-memory SQLite — no disk I/O variance. Measured with [Criterion.rs](https://github.com/bheisler/criterion.rs) on pre-computed 384-dim vectors (embedding latency excluded except in dedicated embed benchmarks).
 
 ### Search & CRUD latency
@@ -337,9 +340,9 @@ open target/criterion/report/index.html
 
 ### Storage
 
-Single SQLite file with WAL journaling. One table with 8 columns: `id` (UUID v4), `content`, `vector` (f32 BLOB), `metadata` (JSON), `created_at`, `updated_at`, `last_accessed`, `access_count`. An FTS5 external-content virtual table indexes `content || ' ' || metadata` via sync triggers — full-text search covers both memory text and metadata values, with no text duplication.
+Single SQLite file with WAL journaling. One table with 10 columns: `id` (UUID v4), `content`, `vector` (f32 BLOB), `metadata` (JSON), `created_at`, `updated_at`, `last_accessed`, `access_count`, `content_updated_at`, `validated_at`. An FTS5 external-content virtual table indexes `content || ' ' || metadata` via sync triggers — full-text search covers both memory text and metadata values, with no text duplication.
 
-Schema migrations via `PRAGMA user_version` (v0–v3): FTS5 virtual table + triggers → access tracking columns → expression index on `json_extract(metadata, '$.type')` for fast type-filtered queries.
+Schema migrations via `PRAGMA user_version` (v0–v4): FTS5 + triggers → access tracking → type index → factual clocks. Upgrades are transactional. Legacy freshness starts from `updated_at`, an approximation because old records did not distinguish tag edits. Back up before upgrading; older binaries do not maintain the new clocks. See [migration details](docs/freshness.md).
 
 ### Embeddings
 
@@ -365,7 +368,7 @@ All ID-based commands accept 6+ character prefixes. Resolution uses `WHERE id LI
 memori-core/  (Rust library, published to crates.io as memori-ai-core, v0.7.1)
   lib.rs        Memori facade — prefix-resolving API over storage + search
   types.rs      Memory, SearchQuery, InsertResult, MemoriError, SortField
-  schema.rs     SQLite DDL, migration versions v0–v3 (PRAGMA user_version)
+  schema.rs     SQLite DDL, migration versions v0–v4 (PRAGMA user_version)
   storage.rs    CRUD, prefix resolution, list, bulk ops, dedup, metadata merge
   search.rs     Vector/text/hybrid/recent search, RRF fusion, decay scoring
   embed.rs      fastembed AllMiniLM-L6-V2 (lazy singleton, feature-gated)
@@ -373,7 +376,7 @@ memori-core/  (Rust library, published to crates.io as memori-ai-core, v0.7.1)
 
 memori-python/  (PyO3 bindings + CLI, published to PyPI as py-memori, v0.7.1)
   src/lib.rs          PyMemori class (Mutex<Memori>, GIL release on search/insert/embed)
-  python/memori_cli/  Argparse CLI (18 subcommands, --json/--raw on all)
+  python/memori_cli/  Argparse CLI (--json/--raw on all subcommands)
     data/             claude_snippet.md, dashboard.html (single-file web UI)
 ```
 
@@ -425,6 +428,7 @@ memori search --text "query" --include-vectors
 
 ```bash
 memori context "topic"                # relevant + recent + frequent + stale + stats
+memori revalidate <id>                 # after explicitly checking the current fact
 memori context "topic" --limit 5
 memori context "topic" --project app  # scoped to metadata.project
 memori context "topic" --compact      # minimal flat JSON for agent pipelines
@@ -526,6 +530,10 @@ results = db.search(text="database architecture", min_similarity=0.4)  # example
 mem = db.get("abc123")
 mem = db.get_readonly("abc123")  # read without bumping access stats
 
+# Explicit factual validation (does not count as access)
+db.revalidate("abc123")
+review = db.stale(before=cutoff_epoch_seconds, limit=5)
+
 # Related
 similar = db.related("abc123", limit=5)
 similar = db.related("abc123", limit=5, min_similarity=0.4)
@@ -584,11 +592,12 @@ See [`docs/packaging_dev.md`](docs/packaging_dev.md) for the full open-source pa
 
 ## Testing
 
-216 tests across Rust, Python, CLI and HTTP — all real SQLite, no mocking:
+234 tests across Rust, Python, CLI and HTTP — all real SQLite, no mocking:
 
 - **Rust integration** (`memori-core/tests/integration_test.rs`): 63 tests using in-memory SQLite via `open_temp()`. Covers CRUD, dedup, all four search modes, decay scoring, prefix resolution, embedding backfill, export/import.
 - **Python API** (`memori-python/tests/test_memori.py`): 37 pytest tests via `tmp_path` fixture. Covers PyMemori bindings end-to-end.
 - **CLI** (`memori-python/tests/test_cli.py`): 91 subprocess-based tests. Full command matrix: all 18 subcommands, output modes, error cases, date filtering, dedup behavior, typed tag coercion, purge AND logic.
+- **Freshness**: 7 Rust migration/atomicity regressions (also without embeddings) and 11 Python/API/CLI cases covering factual clocks, bounded popularity, stale review and backup roundtrips.
 - **Relevance**: 4 Rust regressions in `memori-core/tests/relevance_test.rs` (also run without embeddings) and 14 native Python/CLI/HTTP cases in `memori-python/tests/test_relevance.py`. Rust also has 7 vector utility unit tests.
 
 ```bash

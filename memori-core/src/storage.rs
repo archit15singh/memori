@@ -1,9 +1,9 @@
-use rusqlite::params;
+use rusqlite::{params, Transaction, TransactionBehavior};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::types::{InsertResult, MemoriError, Memory, Result, SortField};
+use crate::types::{Freshness, InsertResult, MemoriError, Memory, Result, SortField};
 use crate::util::{blob_to_vec, cosine_similarity, vec_to_blob};
 
 fn now() -> f64 {
@@ -112,8 +112,8 @@ pub fn insert(
     let metadata_str = metadata.map(|m| m.to_string());
 
     conn.execute(
-        "INSERT INTO memories (id, content, vector, metadata, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        "INSERT INTO memories (id, content, vector, metadata, created_at, updated_at, content_updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
         params![id, content, vector_blob, metadata_str, ts, ts],
     )?;
 
@@ -129,6 +129,47 @@ pub fn insert_with_id(
     created_at: f64,
     updated_at: f64,
 ) -> Result<String> {
+    insert_with_id_and_freshness(
+        conn,
+        id,
+        content,
+        vector,
+        metadata,
+        created_at,
+        updated_at,
+        Freshness {
+            content_updated_at: updated_at,
+            validated_at: None,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn insert_with_id_and_freshness(
+    conn: &rusqlite::Connection,
+    id: &str,
+    content: &str,
+    vector: Option<&[f32]>,
+    metadata: Option<Value>,
+    created_at: f64,
+    updated_at: f64,
+    freshness: Freshness,
+) -> Result<String> {
+    for timestamp in [
+        Some(created_at),
+        Some(updated_at),
+        Some(freshness.content_updated_at),
+        freshness.validated_at,
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if !timestamp.is_finite() {
+            return Err(MemoriError::InvalidTimestamp(
+                "backup clocks must be finite epoch seconds".into(),
+            ));
+        }
+    }
     // Auto-embed if no explicit vector
     let auto_vec = auto_embed(content, vector);
     let effective_vec = vector.or(auto_vec.as_deref());
@@ -137,15 +178,17 @@ pub fn insert_with_id(
     let metadata_str = metadata.map(|m| m.to_string());
 
     conn.execute(
-        "INSERT INTO memories (id, content, vector, metadata, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        "INSERT INTO memories (id, content, vector, metadata, created_at, updated_at, content_updated_at, validated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![
             id,
             content,
             vector_blob,
             metadata_str,
             created_at,
-            updated_at
+            updated_at,
+            freshness.content_updated_at,
+            freshness.validated_at
         ],
     )?;
 
@@ -154,7 +197,7 @@ pub fn insert_with_id(
 
 pub fn get(conn: &rusqlite::Connection, id: &str) -> Result<Option<Memory>> {
     let mut stmt = conn.prepare(
-        "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count
+        "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count, content_updated_at, validated_at
          FROM memories WHERE id = ?1",
     )?;
 
@@ -216,6 +259,7 @@ pub fn update(
     metadata: Option<Value>,
     merge_metadata: bool,
 ) -> Result<()> {
+    let transaction = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
     let existing = get_raw(conn, id)?;
     let existing = existing.ok_or_else(|| MemoriError::NotFound(id.to_string()))?;
 
@@ -223,7 +267,10 @@ pub fn update(
 
     if let Some(content) = content {
         conn.execute(
-            "UPDATE memories SET content = ?1, updated_at = ?2 WHERE id = ?3",
+            "UPDATE memories SET
+                content_updated_at = CASE WHEN content != ?1 THEN ?2 ELSE content_updated_at END,
+                validated_at = CASE WHEN content != ?1 THEN NULL ELSE validated_at END,
+                content = ?1, updated_at = ?2 WHERE id = ?3",
             params![content, ts, id],
         )?;
 
@@ -287,13 +334,42 @@ pub fn update(
         }
     }
 
+    transaction.commit()?;
     Ok(())
+}
+
+pub fn revalidate(conn: &rusqlite::Connection, id: &str) -> Result<()> {
+    let ts = now();
+    if conn.execute(
+        "UPDATE memories SET validated_at = ?1, updated_at = ?1 WHERE id = ?2",
+        params![ts, id],
+    )? == 0
+    {
+        return Err(MemoriError::NotFound(id.to_string()));
+    }
+    Ok(())
+}
+
+pub fn stale(conn: &rusqlite::Connection, before: f64, limit: usize) -> Result<Vec<Memory>> {
+    if !before.is_finite() {
+        return Err(MemoriError::InvalidTimestamp(
+            "stale cutoff must be finite epoch seconds".into(),
+        ));
+    }
+    let mut stmt = conn.prepare(
+        "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count, content_updated_at, validated_at
+         FROM memories
+         WHERE max(content_updated_at, coalesce(validated_at, content_updated_at)) < ?1
+         ORDER BY max(content_updated_at, coalesce(validated_at, content_updated_at)), id LIMIT ?2",
+    )?;
+    let rows = stmt.query_map(params![before, limit as i64], row_to_memory)?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
 /// Raw get without touching access count (avoids infinite recursion in update path)
 pub fn get_raw(conn: &rusqlite::Connection, id: &str) -> Result<Option<Memory>> {
     let mut stmt = conn.prepare(
-        "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count
+        "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count, content_updated_at, validated_at
          FROM memories WHERE id = ?1",
     )?;
 
@@ -367,7 +443,7 @@ pub fn list(
 
     let sql =
         format!(
-        "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count
+        "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count, content_updated_at, validated_at
          FROM memories {} ORDER BY {} DESC LIMIT ?{} OFFSET ?{}",
         where_clause, sort.sql_column(), limit_idx, offset_idx
     );
@@ -548,6 +624,8 @@ pub fn row_to_memory(row: &rusqlite::Row) -> rusqlite::Result<Memory> {
         updated_at: row.get(5)?,
         last_accessed: row.get(6)?,
         access_count: row.get(7)?,
+        content_updated_at: row.get(8)?,
+        validated_at: row.get(9)?,
         score: None,
     })
 }
