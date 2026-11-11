@@ -85,7 +85,17 @@ impl SortField {
         }
     }
 
+    // Retain the existing public API while also supporting standard string parsing.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> std::result::Result<Self, String> {
+        <Self as std::str::FromStr>::from_str(s)
+    }
+}
+
+impl std::str::FromStr for SortField {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s {
             "created" => Ok(SortField::Created),
             "updated" => Ok(SortField::Updated),

@@ -1,4 +1,4 @@
-/// Shared low-level utilities for vector serialization and similarity.
+//! Shared low-level utilities for vector serialization and similarity.
 
 /// Convert a float vector to a raw byte slice for SQLite BLOB storage.
 ///
@@ -60,7 +60,7 @@ mod tests {
 
     #[test]
     fn test_vec_blob_roundtrip() {
-        let original = vec![1.0f32, -2.5, 3.14, 0.0];
+        let original = vec![1.0f32, -2.5, 2.75, 0.0];
         let blob = vec_to_blob(&original);
         let restored = blob_to_vec(blob);
         assert_eq!(original, restored);

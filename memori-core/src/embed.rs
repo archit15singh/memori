@@ -8,10 +8,9 @@ mod inner {
 
     fn get_model() -> &'static TextEmbedding {
         MODEL.get_or_init(|| {
-            let options = InitOptions::new(EmbeddingModel::AllMiniLML6V2)
-                .with_show_download_progress(false);
-            TextEmbedding::try_new(options)
-                .expect("failed to initialize embedding model")
+            let options =
+                InitOptions::new(EmbeddingModel::AllMiniLML6V2).with_show_download_progress(false);
+            TextEmbedding::try_new(options).expect("failed to initialize embedding model")
         })
     }
 

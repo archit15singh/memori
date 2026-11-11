@@ -1,9 +1,9 @@
 mod common;
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
-use memori_core::util::{cosine_similarity, vec_to_blob, blob_to_vec};
-use memori_core::storage::find_duplicate;
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use memori_core::schema;
+use memori_core::storage::find_duplicate;
+use memori_core::util::{blob_to_vec, cosine_similarity, vec_to_blob};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 

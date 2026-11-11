@@ -31,7 +31,9 @@ fn bench_embed_batch(c: &mut Criterion) {
     let mut rng = StdRng::seed_from_u64(42);
 
     for &batch_size in &[10usize, 100] {
-        let texts: Vec<String> = (0..batch_size).map(|_| common::random_content(&mut rng)).collect();
+        let texts: Vec<String> = (0..batch_size)
+            .map(|_| common::random_content(&mut rng))
+            .collect();
         let text_refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
 
         group.bench_function(format!("{}", batch_size), |bencher| {

@@ -16,7 +16,7 @@ pub mod util;
 
 use std::collections::HashMap;
 
-pub use types::{InsertResult, Memory, MemoriError, Result, SearchQuery, SortField};
+pub use types::{InsertResult, MemoriError, Memory, Result, SearchQuery, SortField};
 
 pub struct Memori {
     conn: rusqlite::Connection,
@@ -46,7 +46,14 @@ impl Memori {
         dedup_threshold: Option<f32>,
         no_embed: bool,
     ) -> Result<InsertResult> {
-        storage::insert(&self.conn, content, vector, metadata, dedup_threshold, no_embed)
+        storage::insert(
+            &self.conn,
+            content,
+            vector,
+            metadata,
+            dedup_threshold,
+            no_embed,
+        )
     }
 
     pub fn insert_with_id(
@@ -58,7 +65,9 @@ impl Memori {
         created_at: f64,
         updated_at: f64,
     ) -> Result<String> {
-        storage::insert_with_id(&self.conn, id, content, vector, metadata, created_at, updated_at)
+        storage::insert_with_id(
+            &self.conn, id, content, vector, metadata, created_at, updated_at,
+        )
     }
 
     pub fn get(&self, id: &str) -> Result<Option<Memory>> {
@@ -80,7 +89,14 @@ impl Memori {
         merge_metadata: bool,
     ) -> Result<()> {
         let full_id = storage::resolve_prefix(&self.conn, id)?;
-        storage::update(&self.conn, &full_id, content, vector, metadata, merge_metadata)
+        storage::update(
+            &self.conn,
+            &full_id,
+            content,
+            vector,
+            metadata,
+            merge_metadata,
+        )
     }
 
     pub fn delete(&self, id: &str) -> Result<()> {
