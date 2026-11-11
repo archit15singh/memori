@@ -51,8 +51,13 @@ SNIPPET_REFERENCE_START = "<!-- memori:reference -->"
 SNIPPET_REFERENCE_END = "<!-- memori:reference:end -->"
 
 
-def _get_db(path=None):
-  return PyMemori(path or DEFAULT_DB)
+def _get_db(path=None, use_json=False):
+  try:
+    return PyMemori(path or DEFAULT_DB)
+  except RuntimeError as e:
+    if "unsupported database schema version" in str(e):
+      _err("unsupported_schema", str(e), exit_code=2, use_json=use_json)
+    raise
 
 
 def _err(error_type, message, exit_code=1, use_json=False, input_id=None):
@@ -220,7 +225,7 @@ def _warn_unknown_type(meta):
 
 
 def cmd_store(args):
-  db = _get_db(args.db)
+  db = _get_db(args.db, use_json=args.json)
   meta = _parse_json(args.meta, "--meta", use_json=args.json) if args.meta else None
   _warn_unknown_type(meta)
   vector = _parse_json(args.vector, "--vector", use_json=args.json) if args.vector else None
@@ -251,7 +256,7 @@ def cmd_store(args):
 
 
 def cmd_search(args):
-  db = _get_db(args.db)
+  db = _get_db(args.db, use_json=args.json)
   vector = _parse_json(args.vector, "--vector", use_json=args.json) if args.vector else None
   filt = _parse_json(args.filter, "--filter", use_json=args.json) if args.filter else None
   text_only = getattr(args, "text_only", False)
@@ -295,7 +300,7 @@ def cmd_search(args):
 
 
 def cmd_get(args):
-  db = _get_db(args.db)
+  db = _get_db(args.db, use_json=args.json)
   mem = db.get(args.id)
   if mem:
     if not getattr(args, "include_vectors", False):
@@ -307,7 +312,7 @@ def cmd_get(args):
 
 
 def cmd_update(args):
-  db = _get_db(args.db)
+  db = _get_db(args.db, use_json=args.json)
   content = args.content
   meta = _parse_json(args.meta, "--meta", use_json=args.json) if args.meta else None
   vector = _parse_json(args.vector, "--vector", use_json=args.json) if args.vector else None
@@ -351,7 +356,7 @@ def _parse_tag_value(v):
 
 
 def cmd_tag(args):
-  db = _get_db(args.db)
+  db = _get_db(args.db, use_json=args.json)
 
   # Parse key=value pairs with type coercion
   tags = {}
@@ -382,7 +387,7 @@ def cmd_tag(args):
 
 
 def cmd_list(args):
-  db = _get_db(args.db)
+  db = _get_db(args.db, use_json=args.json)
   include_vectors = getattr(args, "include_vectors", False)
 
   # Parse date range filters
@@ -408,6 +413,8 @@ def cmd_list(args):
         "created_at": r.get("created_at"),
         "updated_at": r.get("updated_at"),
         "last_accessed": r.get("last_accessed"),
+        "content_updated_at": r.get("content_updated_at"),
+        "validated_at": r.get("validated_at"),
         "access_count": r.get("access_count", 0),
       }
       if include_vectors:
@@ -431,7 +438,7 @@ def cmd_list(args):
 
 def cmd_context(args):
   import time
-  db = _get_db(args.db)
+  db = _get_db(args.db, use_json=args.json)
   topic = args.topic
   limit = args.limit
 
@@ -450,10 +457,9 @@ def cmd_context(args):
   # Frequently accessed (only show if any have been accessed)
   frequent = db.list(sort="count", limit=3)
   frequent = [r for r in frequent if r.get("access_count", 0) > 0]
-  # Stale memories (created 30+ days ago, never accessed)
+  # Reads and metadata edits cannot hide factually old memories from review.
   thirty_days_ago = time.time() - 30 * 86400
-  stale_candidates = db.list(sort="created", limit=20, before=thirty_days_ago)
-  stale = [r for r in stale_candidates if r.get("access_count", 0) == 0][:5]
+  stale = db.stale(before=thirty_days_ago, limit=5)
   # Type distribution
   type_dist = db.type_distribution()
 
@@ -497,7 +503,8 @@ def cmd_context(args):
         for r in frequent
       ],
       "stale": [
-        {"id": r["id"], "content": r["content"], "created_at": r.get("created_at")}
+        {"id": r["id"], "content": r["content"], "created_at": r.get("created_at"),
+         "content_updated_at": r.get("content_updated_at"), "validated_at": r.get("validated_at")}
         for r in stale
       ],
       "types": type_dist,
@@ -535,7 +542,7 @@ def cmd_context(args):
         print(f"- {r['id'][:8]} ({hits} hits) {content}")
 
     if stale:
-      print(f"\n## Stale Memories (30+ days, never accessed)\n")
+      print(f"\n## Stale Memories (content not changed or revalidated in 30+ days)\n")
       for r in stale:
         content = r["content"][:100] + ("..." if len(r["content"]) > 100 else "")
         print(f"- {r['id'][:8]} {content}")
@@ -547,8 +554,22 @@ def cmd_context(args):
       print(f"Types: {', '.join(parts)}")
 
 
+def cmd_revalidate(args):
+  db = _get_db(args.db, use_json=args.json)
+  try:
+    db.revalidate(args.id)
+  except RuntimeError as e:
+    message = str(e)
+    kind = "ambiguous_prefix" if "ambiguous" in message else "not_found" if "not found" in message else "database_error"
+    _err(kind, message, use_json=args.json, input_id=args.id)
+  if args.json:
+    print(json.dumps({"id": args.id, "action": "revalidated"}))
+  else:
+    print(f"Revalidated {args.id}")
+
+
 def cmd_embed(args):
-  db = _get_db(args.db)
+  db = _get_db(args.db, use_json=args.json)
   stats = db.embedding_stats()
   total = stats["total"]
   already_embedded = stats["embedded"]
@@ -577,7 +598,7 @@ def cmd_embed(args):
 
 
 def cmd_export(args):
-  db = _get_db(args.db)
+  db = _get_db(args.db, use_json=args.json)
   include_vectors = args.include_vectors
   batch_size = 100
   offset = 0
@@ -593,6 +614,8 @@ def cmd_export(args):
         "metadata": r.get("metadata"),
         "created_at": r.get("created_at"),
         "updated_at": r.get("updated_at"),
+        "content_updated_at": r.get("content_updated_at"),
+        "validated_at": r.get("validated_at"),
         "last_accessed": r.get("last_accessed"),
         "access_count": r.get("access_count", 0),
         "vector": r.get("vector") if include_vectors else None,
@@ -604,7 +627,7 @@ def cmd_export(args):
 
 
 def cmd_import(args):
-  db = _get_db(args.db)
+  db = _get_db(args.db, use_json=args.json)
   new_ids = args.new_ids
   imported = 0
   errors = 0
@@ -624,15 +647,14 @@ def cmd_import(args):
       last_accessed = entry.get("last_accessed")
       access_count = entry.get("access_count", 0)
 
-      if new_ids:
-        result = db.insert(content, vector=vector, metadata=metadata, no_embed=False)
-        mem_id = result["id"]
-      else:
-        mem_id = db.insert_with_id(
-          entry["id"], content,
-          vector=vector, metadata=metadata,
-          created_at=created_at, updated_at=updated_at,
-        )
+      import uuid
+      mem_id = db.insert_with_id(
+        str(uuid.uuid4()) if new_ids else entry["id"], content,
+        vector=vector, metadata=metadata,
+        created_at=created_at, updated_at=updated_at,
+        content_updated_at=entry.get("content_updated_at"),
+        validated_at=entry.get("validated_at"),
+      )
 
       # Restore access stats if present in export
       if last_accessed is not None or access_count > 0:
@@ -651,7 +673,7 @@ def cmd_import(args):
 
 
 def cmd_purge(args):
-  db = _get_db(args.db)
+  db = _get_db(args.db, use_json=args.json)
 
   if not args.before and not args.type:
     _err("missing_argument", "At least one of --before or --type is required.",
@@ -712,7 +734,7 @@ def cmd_purge(args):
 
 
 def cmd_related(args):
-  db = _get_db(args.db)
+  db = _get_db(args.db, use_json=args.json)
   include_vectors = getattr(args, "include_vectors", False)
   min_similarity = _cli_similarity(args)
   try:
@@ -759,7 +781,7 @@ def cmd_related(args):
 
 
 def cmd_delete(args):
-  db = _get_db(args.db)
+  db = _get_db(args.db, use_json=args.json)
   full_id = _resolve_id(db, args.id)
   try:
     db.delete(args.id)
@@ -773,7 +795,7 @@ def cmd_delete(args):
 
 
 def cmd_count(args):
-  db = _get_db(args.db)
+  db = _get_db(args.db, use_json=args.json)
   count = db.count()
   if args.json:
     print(json.dumps({"count": count}))
@@ -1059,7 +1081,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
 
 def cmd_ui(args):
-  db = _get_db(args.db)
+  db = _get_db(args.db, use_json=args.json)
   DashboardHandler.db = db
   port = args.port
   server = HTTPServer(("127.0.0.1", port), DashboardHandler)
@@ -1154,6 +1176,10 @@ def main():
   p_get.add_argument("--include-vectors", action="store_true",
                       help="Include vector data in output (omitted by default to save tokens)")
   p_get.set_defaults(func=cmd_get)
+
+  p_revalidate = sub.add_parser("revalidate", help="Record explicit verification of a memory's current content", parents=[output_parser])
+  p_revalidate.add_argument("id", help="Memory ID or unique prefix; caller must verify the fact first")
+  p_revalidate.set_defaults(func=cmd_revalidate)
 
   # update
   p_update = sub.add_parser("update", help="Update an existing memory", parents=[output_parser],

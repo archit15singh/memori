@@ -7,7 +7,7 @@ fn threshold_is_applied_before_popularity_and_limit() {
         .insert("best", Some(&[1.0, 0.0]), None, None, true)
         .unwrap();
     let weak = db
-        .insert("weak", Some(&[0.6, 0.8]), None, None, true)
+        .insert("weak", Some(&[0.8, 0.6]), None, None, true)
         .unwrap();
     db.set_access_stats(weak.id(), Some(2_000_000_000.0), 1_000_000)
         .unwrap();

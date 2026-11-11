@@ -29,6 +29,9 @@ jobs:
       - name: Relevance without embeddings
         run: cargo test -p memori-ai-core --no-default-features --release --test relevance_test
 
+      - name: Freshness without embeddings
+        run: cargo test -p memori-ai-core --no-default-features --release --test freshness_test
+
   python:
     name: Python (maturin build + pytest)
     runs-on: ubuntu-latest

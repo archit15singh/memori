@@ -20,7 +20,7 @@ def db(tmp_path):
 
 def test_vector_threshold_precedes_access_boost_and_limit(db):
     best = db.insert('best', vector=[1., 0.])['id']
-    weak = db.insert('weak', vector=[0.6, 0.8])['id']
+    weak = db.insert('weak', vector=[0.8, 0.6])['id']
     db.set_access_stats(weak, access_count=1000000, last_accessed=2000000000.)
     assert db.search(vector=[1., 0.], limit=1)[0]['id'] == weak
     assert [m['id'] for m in db.search(vector=[1., 0.], min_similarity=0.9, limit=1)] == [best]

@@ -923,6 +923,8 @@ async function openDetail(id) {
   };
   addMeta('Created', new Date(data.created_at * 1000).toLocaleString());
   addMeta('Updated', new Date(data.updated_at * 1000).toLocaleString());
+  addMeta('Content Changed', new Date(data.content_updated_at * 1000).toLocaleString());
+  addMeta('Explicitly Validated', data.validated_at == null ? 'Never' : new Date(data.validated_at * 1000).toLocaleString());
   addMeta('Last Accessed', data.last_accessed ? new Date(data.last_accessed * 1000).toLocaleString() : 'Never');
   addMeta('Access Count', data.access_count || 0);
   if (data.metadata) {

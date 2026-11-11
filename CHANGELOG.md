@@ -8,11 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Factual freshness clocks (`content_updated_at`, `validated_at`), explicit
+  `revalidate` in Rust/Python/CLI, and stale review independent of reads/tags.
+  Schema v4 migrates atomically and preserves legacy last-write clocks as an
+  approximation. Export/import preserves freshness, including new-ID imports.
 - Optional `min_similarity` on Python search/related, Rust search/related APIs,
   CLI search/context/related and dashboard search. Gates semantic candidates
   before access weighting and RRF; preserves hybrid literal matches and defaults
   to no threshold. Includes validation, real HTTP/CLI regressions and a small
   labeled calibration fixture with measured recall/precision tradeoffs.
+
+### Changed
+- Age decay follows content changes or explicit validation, including unread old
+  records; popularity is capped at 1.5x. FTS ranks adjusted candidates before
+  truncation. These ranking changes can reorder existing results.
 
 ## [0.7.0] — 2026-07-18
 

@@ -1098,7 +1098,7 @@ fn test_prefix_ambiguous() {
 // -- v0.5 tests: decay-aware scoring --
 
 #[test]
-fn test_decay_recently_accessed_ranks_first() {
+fn test_decay_follows_content_age_not_recent_reads() {
     let db = open_temp();
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1106,23 +1106,22 @@ fn test_decay_recently_accessed_ranks_first() {
         .as_secs_f64();
 
     let v = vec![1.0, 0.0, 0.0]; // identical vectors
-    let r1 = db
-        .insert("old accessed", Some(&v), None, None, false)
-        .unwrap();
-    let r2 = db
-        .insert("recently accessed", Some(&v), None, None, false)
+    db.insert_with_id(
+        "old-content",
+        "old content",
+        Some(&v),
+        None,
+        ts - 200.0 * 86400.0,
+        ts - 200.0 * 86400.0,
+    )
+    .unwrap();
+    db.insert_with_id("new-content", "new content", Some(&v), None, ts, ts)
         .unwrap();
 
-    // Both get accessed a few times
-    for _ in 0..3 {
-        let _ = db.get(r1.id());
-        let _ = db.get(r2.id());
-    }
-
-    // Set r1's last_accessed to 200 days ago, r2 to just now
-    db.set_access_stats(r1.id(), Some(ts - 200.0 * 86400.0), 3)
+    // Recent reads of the old fact cannot renew its factual age.
+    db.set_access_stats("old-content", Some(ts), 3).unwrap();
+    db.set_access_stats("new-content", Some(ts - 200.0 * 86400.0), 3)
         .unwrap();
-    db.set_access_stats(r2.id(), Some(ts), 3).unwrap();
 
     let query = SearchQuery {
         vector: Some(vec![1.0, 0.0, 0.0]),
@@ -1132,8 +1131,8 @@ fn test_decay_recently_accessed_ranks_first() {
 
     let results = db.search(query).unwrap();
     assert_eq!(results.len(), 2);
-    // Recently accessed should rank first due to less decay
-    assert_eq!(results[0].id, r2.id().to_string());
+    // Content freshness wins even when its most recent access is older.
+    assert_eq!(results[0].id, "new-content");
 }
 
 // -- v0.5 tests: related command --

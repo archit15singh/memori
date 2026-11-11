@@ -1,11 +1,18 @@
-use rusqlite::Connection;
+use crate::types::{MemoriError, Result};
+use rusqlite::{Connection, Transaction, TransactionBehavior};
 
-pub fn init_db(conn: &Connection) -> rusqlite::Result<()> {
+pub const SCHEMA_VERSION: i32 = 4;
+
+pub fn init_db(conn: &Connection) -> Result<()> {
+    conn.pragma_update(None, "journal_mode", "WAL")?;
+    let transaction = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
+    let version: i32 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
+    if version > SCHEMA_VERSION {
+        return Err(MemoriError::UnsupportedSchema(version));
+    }
     // Base table and WAL mode (always idempotent)
     conn.execute_batch(
         "
-    PRAGMA journal_mode=WAL;
-
     CREATE TABLE IF NOT EXISTS memories (
         id          TEXT PRIMARY KEY,
         content     TEXT NOT NULL,
@@ -93,5 +100,17 @@ pub fn init_db(conn: &Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    let version: i32 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
+    if version < 4 {
+        // Legacy databases cannot distinguish content writes from tag edits.
+        // Preserve their last known write as an approximate initial clock.
+        conn.execute_batch(
+            "ALTER TABLE memories ADD COLUMN content_updated_at REAL NOT NULL DEFAULT 0;
+             ALTER TABLE memories ADD COLUMN validated_at REAL;
+             UPDATE memories SET content_updated_at = updated_at;
+             PRAGMA user_version = 4;",
+        )?;
+    }
+    transaction.commit()?;
     Ok(())
 }

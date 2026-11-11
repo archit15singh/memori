@@ -23,6 +23,14 @@ pub enum MemoriError {
 
     #[error("invalid similarity threshold: {0}")]
     InvalidSimilarity(String),
+
+    #[error("invalid timestamp: {0}")]
+    InvalidTimestamp(String),
+
+    #[error(
+        "unsupported database schema version {0}; upgrade Memori before opening this database"
+    )]
+    UnsupportedSchema(i32),
 }
 
 pub type Result<T> = std::result::Result<T, MemoriError>;
@@ -37,7 +45,24 @@ pub struct Memory {
     pub updated_at: f64,
     pub last_accessed: f64,
     pub access_count: i64,
+    pub content_updated_at: f64,
+    pub validated_at: Option<f64>,
     pub score: Option<f32>,
+}
+
+impl Memory {
+    pub fn freshness_at(&self) -> f64 {
+        self.validated_at.map_or(self.content_updated_at, |value| {
+            value.max(self.content_updated_at)
+        })
+    }
+}
+
+/// Clocks carried by backups separately from access and metadata edits.
+#[derive(Clone, Copy, Debug)]
+pub struct Freshness {
+    pub content_updated_at: f64,
+    pub validated_at: Option<f64>,
 }
 
 #[derive(Clone, Debug)]

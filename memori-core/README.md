@@ -38,7 +38,7 @@ for m in hits { println!("{}", m.content); }
   hybrid literal FTS matches remain eligible. Default `None`; calibrate for your data.
 - **Built-in embeddings** via `fastembed` (AllMiniLM-L6-V2, 384-dim, ~9ms/memory)
 - **Cosine-similarity deduplication** (configurable threshold, default 0.92)
-- **Access-weighted decay scoring** — frequently-used recent memories surface first
+- **Factual-age scoring** — bounded popularity (max 1.5x) plus age since content change or explicit revalidation; reads/tags do not renew freshness
 - **Prefix ID resolution** — 6+ char UUID prefixes in every ID-based command
 
 ## Design notes
@@ -47,7 +47,7 @@ for m in hits { println!("{}", m.content); }
   as a drop-in seam for a future HNSW replacement. Adequate to ~100K vectors at 384 dims.
 - FTS5 uses an external-content virtual table (no text duplication); triggers in `schema.rs`
   keep the index in sync.
-- Schema migrations are tracked via `PRAGMA user_version` (v0→v3).
+- Schema migrations are tracked via `PRAGMA user_version` (v0→v4), atomically. Legacy clocks use the last known update; see `docs/freshness.md` in the repository for upgrade and backup details.
 
 ## License
 
