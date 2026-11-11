@@ -166,12 +166,12 @@ fn vector_search(
 /// Sanitize user input for FTS5 MATCH queries. FTS5 has its own query syntax
 /// where `-` means NOT, `:` means column filter, `*` means prefix, etc.
 /// Wrapping each token in double quotes forces literal matching.
-fn sanitize_fts_query(query: &str) -> String {
+fn sanitize_fts_query(query: &str, separator: &str) -> String {
     query
         .split_whitespace()
         .map(|term| format!("\"{}\"", term.replace('"', "\"\"")))
         .collect::<Vec<_>>()
-        .join(" ")
+        .join(separator)
 }
 
 fn text_search(
@@ -181,7 +181,22 @@ fn text_search(
     limit: usize,
     now: f64,
 ) -> Result<Vec<Memory>> {
-    let safe_query = sanitize_fts_query(query_text);
+    let strict = text_search_terms(conn, query_text, filter, limit, now, false)?;
+    if !strict.is_empty() || query_text.split_whitespace().count() < 2 {
+        return Ok(strict);
+    }
+    text_search_terms(conn, query_text, filter, limit, now, true)
+}
+
+fn text_search_terms(
+    conn: &rusqlite::Connection,
+    query_text: &str,
+    filter: Option<&str>,
+    limit: usize,
+    now: f64,
+    any_term: bool,
+) -> Result<Vec<Memory>> {
+    let safe_query = sanitize_fts_query(query_text, if any_term { " OR " } else { " " });
 
     // Empty query (whitespace-only or blank input) produces no tokens -- return
     // early instead of passing an empty string to FTS5 MATCH which would error.
