@@ -1,7 +1,8 @@
 """A zero-result request must not depend on an available embedding model."""
 import json
 import os
-import shutil
+from pathlib import Path
+import sysconfig
 import subprocess
 import sys
 
@@ -17,8 +18,8 @@ assert PyLorevell(':memory:').search(text='some query', limit=0) == []
     native = subprocess.run([sys.executable, '-c', code], cwd=tmp_path,
                             env=env, text=True, capture_output=True, timeout=15)
     assert native.returncode == 0, native.stderr
-    cli = shutil.which('lorevell')
-    assert cli
+    cli = Path(sysconfig.get_path('scripts')) / ('lorevell.exe' if os.name == 'nt' else 'lorevell')
+    assert cli.is_file()
     vault = tmp_path / 'vault'
     subprocess.run([cli, '--vault', str(vault), 'add', 'Unembedded procedure',
                     '--text-only'], cwd=tmp_path, env=env, check=True,
