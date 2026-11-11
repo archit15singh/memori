@@ -11,7 +11,6 @@ documentation = "https://docs.rs/lorevell-core"
 readme = "README.md"
 keywords = ["sqlite", "vector-search", "ai-agent", "memory", "fts5"]
 categories = ["database", "science"]
-rust-version = "1.74"
 
 [lib]
 name = "lorevell_core"

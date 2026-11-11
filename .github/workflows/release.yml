@@ -2,73 +2,150 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'scripts/smoke-wheel.py'
+      - 'lorevell-python/pyproject.toml'
+      - 'lorevell-python/Cargo.toml'
+      - 'lorevell-core/Cargo.toml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  crates-io:
-    name: Publish lorevell-core to crates.io
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-latest
+  validate:
+    name: Validate release source
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify versions and tag
+        run: |
+          python - <<'PY'
+          import os, pathlib, tomllib
+          manifests = ['lorevell-core/Cargo.toml', 'lorevell-python/Cargo.toml', 'lorevell-python/pyproject.toml']
+          versions = [tomllib.loads(pathlib.Path(p).read_text()).get('package', tomllib.loads(pathlib.Path(p).read_text()).get('project'))['version'] for p in manifests]
+          assert len(set(versions)) == 1, versions
+          if os.environ['GITHUB_REF'].startswith('refs/tags/'):
+              assert os.environ['GITHUB_REF_NAME'] == 'v' + versions[0]
+          print('Validated release version', versions[0])
+          PY
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test -p lorevell-core --release
+      - run: cargo test -p lorevell-core --no-default-features --release --test vault_test --test relevance_test --test freshness_test
+      - run: cargo publish -p lorevell-core --dry-run --locked
+      - name: Build and test Python source
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install maturin pytest
+          VIRTUAL_ENV="$GITHUB_WORKSPACE/.venv" .venv/bin/maturin develop --release --manifest-path lorevell-python/Cargo.toml
+          PATH="$GITHUB_WORKSPACE/.venv/bin:$PATH" .venv/bin/python -m pytest lorevell-python/tests -q
+          python scripts/sync-skills.py --check
 
-      - name: cargo publish --dry-run
-        run: cargo publish -p lorevell-core --dry-run
+  wheels:
+    name: Verify wheel (${{ matrix.os }})
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15-intel, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: lorevell-python
+          command: build
+          args: --release --out dist
+          manylinux: ${{ runner.os == 'Linux' && '2_28' || 'off' }}
+          before-script-linux: yum install -y openssl-devel pkgconfig
+      - name: Install exact built wheel
+        shell: bash
+        run: python -m pip install lorevell-python/dist/*.whl
+      - name: Smoke test installed wheel
+        run: python scripts/smoke-wheel.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.os }}
+          path: lorevell-python/dist/*.whl
+          if-no-files-found: error
 
-      - name: cargo publish
-        run: cargo publish -p lorevell-core
+  source:
+    name: Verify source distribution
+    needs: validate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install maturin
+      - name: Build wheel from source distribution
+        run: maturin build --release --sdist --manifest-path lorevell-python/Cargo.toml --out dist
+      - run: python -m pip install dist/*.whl
+      - run: python scripts/smoke-wheel.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-dist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  crates-io:
+    name: Publish lorevell-core
+    needs: [validate, wheels, source]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo publish -p lorevell-core --locked
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   pypi:
-    name: Build wheels for ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-13, macos-14, windows-latest]
-    runs-on: ${{ matrix.os }}
+    name: Publish verified Python artifacts
+    needs: [validate, wheels, source]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
-
-      - uses: dtolnay/rust-toolchain@stable
-
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-
-      - name: Build and publish wheels
-        uses: PyO3/maturin-action@v1
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
         with:
-          working-directory: lorevell-python
-          command: publish
-          args: --non-interactive --skip-existing
-          manylinux: ${{ runner.os == 'Linux' && '2_28' || 'off' }}
-          before-script-linux: yum install -y openssl-devel pkgconfig
+          path: dist
+          merge-multiple: true
+      - run: python -m pip install maturin
+      - run: maturin upload --non-interactive --skip-existing dist/*
         env:
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
 
   github-release:
-    name: GitHub Release
+    name: Announce successful release
     needs: [crates-io, pypi]
-    runs-on: ubuntu-latest
-    if: always() && startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v5
-
-      - name: Extract tag name
-        id: tag
-        run: echo "name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
-      - name: Create release even if registry jobs had failures
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
-          name: ${{ steps.tag.outputs.name }}
-          tag_name: ${{ steps.tag.outputs.name }}
+          name: Lorevell ${{ github.ref_name }}
           generate_release_notes: true
           body_path: CHANGELOG.md
