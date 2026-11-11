@@ -1,55 +1,24 @@
-# memori-ai-core
+# memori-ai-core 2.0
 
-Persistent memory for AI coding agents — SQLite + FTS5 + vector search in a single binary.
+Rust implementation of a Markdown-first knowledge vault and its rebuildable SQLite retrieval index.
 
-This is the Rust engine behind the **[`py-memori`](https://pypi.org/project/py-memori/)** Python package
-and the `memori` CLI. Most users want the Python package:
+```rust,no_run
+use memori_core::{Vault, SearchQuery};
+use std::path::Path;
 
-```bash
-pip install py-memori
-```
-
-## Rust usage
-
-```toml
-# Cargo.toml
-[dependencies]
-memori-ai-core = { version = "0.7", features = ["embeddings"] }
-```
-
-```rust
-use memori_core::{Memori, SearchQuery, SortField};
-
-let db = Memori::open("memories.db")?;
-let id = db.insert("Chose SQLite over Postgres for zero-config portability.",
-                   None, None, None, false)?;
-let hits = db.search(SearchQuery {
-    text: Some("sqlite".into()),
+let vault = Vault::open(Path::new("memory"))?;
+vault.add("# Procedure\nUse transactions for atomic multi-statement writes.",
+          serde_json::json!({"type":"procedure", "tags":["sqlite"]}))?;
+vault.index(true)?;
+let results = vault.search(SearchQuery {
+    text: Some("atomic database writes".into()),
     ..Default::default()
-})?;
-for m in hits { println!("{}", m.content); }
+}, 3)?;
+# Ok::<(), memori_core::MemoriError>(())
 ```
 
-## Features
+`Vault` owns Markdown parsing, atomic writes, archives, source hashes and explicit wiki links/backlinks. Indexing validates the source set before changing cached rows. Graph expansion is one hop with an overall extra-note limit. Use `index(false)` plus `SearchQuery { text_only: true, .. }` for literal-only operation.
 
-- **Single SQLite file** with WAL journaling — no external services, no config
-- **Hybrid search**: FTS5 full-text + cosine vector fused with Reciprocal Rank Fusion (k=60)
-- **Optional semantic floor**: `SearchQuery.min_similarity` filters raw cosine before scoring;
-  hybrid literal FTS matches remain eligible. Default `None`; calibrate for your data.
-- **Built-in embeddings** via `fastembed` (AllMiniLM-L6-V2, 384-dim, ~9ms/memory)
-- **Cosine-similarity deduplication** (configurable threshold, default 0.92)
-- **Factual-age scoring** — bounded popularity (max 1.5x) plus age since content change or explicit revalidation; reads/tags do not renew freshness
-- **Prefix ID resolution** — 6+ char UUID prefixes in every ID-based command
+The existing `Memori` SQLite engine remains available for low-level consumers. It provides FTS5, cosine vectors, RRF hybrid ranking, metadata filters and detailed database clocks. It is retrieval plumbing for a vault, not a second authoritative store for the same knowledge. Native vectors are f32 BLOBs; default model embeddings have 384 dimensions. Disable the default `embeddings` feature for a no-model build.
 
-## Design notes
-
-- `vector_search()` is the sole hot path and the only place vectors are touched — designed
-  as a drop-in seam for a future HNSW replacement. Adequate to ~100K vectors at 384 dims.
-- FTS5 uses an external-content virtual table (no text duplication); triggers in `schema.rs`
-  keep the index in sync.
-- Schema migrations are tracked via `PRAGMA user_version` (v0→v4), atomically. Legacy clocks use the last known update; see `docs/freshness.md` in the repository for upgrade and backup details.
-
-## License
-
-MIT. See the [project repo](https://github.com/archit15singh/memori) for full documentation,
-benchmarks, CLI reference, and design blog posts.
+See the [repository README](https://github.com/archit15singh/memori), `docs/v2.md`, and the Rust integration tests for the complete product contract. MIT licensed.

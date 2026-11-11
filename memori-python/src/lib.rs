@@ -445,5 +445,128 @@ impl PyMemori {
 #[pymodule]
 fn memori(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyMemori>()?;
+    m.add_class::<PyVault>()?;
     Ok(())
+}
+
+fn serialized_to_python(py: Python<'_>, value: impl serde::Serialize) -> PyResult<PyObject> {
+    let value = serde_json::to_value(value).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+    py_value(py, &value)
+}
+
+/// Product interface: authoritative Markdown plus a rebuildable search index.
+#[pyclass]
+struct PyVault {
+    inner: Mutex<memori_core::Vault>,
+}
+
+#[pymethods]
+impl PyVault {
+    #[new]
+    fn new(path: &str) -> PyResult<Self> {
+        Ok(Self {
+            inner: Mutex::new(
+                memori_core::Vault::open(std::path::Path::new(path)).map_err(memori_err)?,
+            ),
+        })
+    }
+
+    #[pyo3(signature = (embeddings=true))]
+    fn index(&self, py: Python<'_>, embeddings: bool) -> PyResult<PyObject> {
+        let report = py.allow_threads(|| {
+            self.inner
+                .lock()
+                .unwrap()
+                .index(embeddings)
+                .map_err(memori_err)
+        })?;
+        serialized_to_python(py, report)
+    }
+
+    #[pyo3(signature = (content, metadata=None))]
+    fn add(
+        &self,
+        py: Python<'_>,
+        content: &str,
+        metadata: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<PyObject> {
+        let metadata = metadata
+            .map(pydict_to_value)
+            .transpose()?
+            .unwrap_or(serde_json::json!({}));
+        let note = self
+            .inner
+            .lock()
+            .unwrap()
+            .add(content, metadata)
+            .map_err(memori_err)?;
+        serialized_to_python(py, note)
+    }
+
+    #[pyo3(signature = (id, content=None, metadata=None))]
+    fn update(
+        &self,
+        py: Python<'_>,
+        id: &str,
+        content: Option<&str>,
+        metadata: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<PyObject> {
+        let metadata = metadata.map(pydict_to_value).transpose()?;
+        let note = self
+            .inner
+            .lock()
+            .unwrap()
+            .update(id, content, metadata)
+            .map_err(memori_err)?;
+        serialized_to_python(py, note)
+    }
+
+    fn archive(&self, id: &str) -> PyResult<String> {
+        let path = self.inner.lock().unwrap().archive(id).map_err(memori_err)?;
+        Ok(path.to_string_lossy().into_owned())
+    }
+
+    #[pyo3(signature = (id, neighbor_limit=5))]
+    fn show(&self, py: Python<'_>, id: &str, neighbor_limit: usize) -> PyResult<PyObject> {
+        let view = self
+            .inner
+            .lock()
+            .unwrap()
+            .show(id, neighbor_limit)
+            .map_err(memori_err)?;
+        serialized_to_python(py, view)
+    }
+
+    #[pyo3(signature = (text, limit=5, graph_limit=3, text_only=false, filter=None, min_similarity=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn search(
+        &self,
+        py: Python<'_>,
+        text: String,
+        limit: usize,
+        graph_limit: usize,
+        text_only: bool,
+        filter: Option<&Bound<'_, PyDict>>,
+        min_similarity: Option<f64>,
+    ) -> PyResult<PyObject> {
+        if text.trim().is_empty() {
+            return Err(PyRuntimeError::new_err("search text must not be empty"));
+        }
+        let query = SearchQuery {
+            text: Some(text),
+            limit,
+            text_only,
+            filter: filter.map(pydict_to_value).transpose()?,
+            min_similarity: similarity_from_python(min_similarity)?,
+            ..Default::default()
+        };
+        let results = py.allow_threads(|| {
+            self.inner
+                .lock()
+                .unwrap()
+                .search(query, graph_limit)
+                .map_err(memori_err)
+        })?;
+        serialized_to_python(py, results)
+    }
 }

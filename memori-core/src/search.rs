@@ -33,7 +33,7 @@ pub fn search(conn: &rusqlite::Connection, query: SearchQuery) -> Result<Vec<Mem
 
     if let Some(ref filter) = query.filter {
         let meta_clause = build_filter_clause(filter)?;
-        if meta_clause != "1=1" {
+        if !meta_clause.is_empty() && meta_clause != "1=1" {
             conditions.push(meta_clause);
         }
     }
@@ -127,7 +127,7 @@ fn vector_search(
     let where_clause = filter.map_or(String::new(), |f| format!("WHERE {}", f));
     let sql = format!(
         "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count, content_updated_at, validated_at
-         FROM memories {} ORDER BY rowid",
+         FROM memories AS m {} ORDER BY rowid",
         where_clause
     );
 
@@ -197,7 +197,7 @@ fn text_search(
              JOIN memories m ON m.rowid = fts.rowid
              WHERE memories_fts MATCH ?1 AND {}
              ORDER BY fts.rank",
-            f.replace("metadata", "m.metadata")
+            f
         )
     } else {
         "SELECT m.id, m.content, m.vector, m.metadata, m.created_at, m.updated_at,
@@ -311,7 +311,7 @@ fn recent_search(
     let where_clause = filter.map_or(String::new(), |f| format!("WHERE {}", f));
     let sql = format!(
         "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count, content_updated_at, validated_at
-         FROM memories {} ORDER BY updated_at DESC LIMIT ?1",
+         FROM memories AS m {} ORDER BY updated_at DESC LIMIT ?1",
         where_clause
     );
 
@@ -416,6 +416,10 @@ fn build_filter_clause(filter: &Value) -> Result<String> {
                         key
                     )));
                 }
+                if val.is_null() {
+                    conditions.push(format!("json_type(m.metadata, '$.{}') = 'null'", key));
+                    continue;
+                }
                 let json_val = match val {
                     Value::String(s) => format!("'{}'", s.replace('\'', "''")),
                     Value::Number(n) => n.to_string(),
@@ -429,7 +433,7 @@ fn build_filter_clause(filter: &Value) -> Result<String> {
                     _ => format!("'{}'", val.to_string().replace('\'', "''")),
                 };
                 conditions.push(format!(
-                    "json_extract(metadata, '$.{}') = {}",
+                    "json_extract(m.metadata, '$.{}') = {}",
                     key, json_val
                 ));
             }

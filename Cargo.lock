@@ -804,6 +804,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs2"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9564fc758e15025b46aa6643b1b77d047d1a56a1aea6e01002ac0c7026876213"
+dependencies = [
+ "libc",
+ "winapi",
+]
+
+[[package]]
 name = "futures-channel"
 version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1533,24 +1543,29 @@ dependencies = [
 
 [[package]]
 name = "memori-ai-core"
-version = "0.7.1"
+version = "2.0.0"
 dependencies = [
  "criterion",
  "fastembed",
+ "fs2",
  "rand 0.8.5",
+ "regex",
  "rusqlite",
  "serde",
  "serde_json",
+ "serde_yaml_ng",
+ "sha2",
  "thiserror 1.0.69",
  "uuid",
 ]
 
 [[package]]
 name = "memori-ai-py"
-version = "0.7.1"
+version = "2.0.0"
 dependencies = [
  "memori-ai-core",
  "pyo3",
+ "serde",
  "serde_json",
  "uuid",
 ]
@@ -2541,6 +2556,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_yaml_ng"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b4db627b98b36d4203a7b458cf3573730f2bb591b28871d916dfa9efabfd41f"
+dependencies = [
+ "indexmap",
+ "itoa",
+ "ryu",
+ "serde",
+ "unsafe-libyaml",
+]
+
+[[package]]
 name = "sha2"
 version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2997,6 +3025,12 @@ name = "unindent"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7264e107f553ccae879d21fbea1d6724ac785e8c3bfc762137959b5802826ef3"
+
+[[package]]
+name = "unsafe-libyaml"
+version = "0.2.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
 
 [[package]]
 name = "untrusted"

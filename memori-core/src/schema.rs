@@ -114,3 +114,18 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     transaction.commit()?;
     Ok(())
 }
+
+/// Vault-only cache tables. They carry no canonical knowledge and can be rebuilt.
+pub fn init_vault_index(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS note_sources (
+            note_id TEXT PRIMARY KEY, path TEXT NOT NULL, hash TEXT NOT NULL
+         );
+         CREATE TABLE IF NOT EXISTS note_links (
+            source_id TEXT NOT NULL, target TEXT NOT NULL, target_id TEXT,
+            PRIMARY KEY(source_id, target)
+         );
+         CREATE INDEX IF NOT EXISTS note_links_target ON note_links(target_id);",
+    )?;
+    Ok(())
+}

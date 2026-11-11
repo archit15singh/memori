@@ -1,7 +1,4 @@
-"""Memori -- embedded AI agent memory (SQLite + vector search + FTS5).
+"""Markdown-first knowledge vault with a rebuildable Rust retrieval index."""
+from .memori import PyMemori, PyVault
 
-This package re-exports the native Rust extension's PyMemori class.
-"""
-from .memori import PyMemori
-
-__all__ = ["PyMemori"]
+__all__ = ["PyVault", "PyMemori"]

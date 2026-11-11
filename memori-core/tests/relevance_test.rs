@@ -137,3 +137,56 @@ fn inclusive_boundaries_related_prefixes_and_invalid_vectors() {
         })
         .is_err());
 }
+
+#[test]
+fn empty_filters_and_literal_metadata_values_have_the_same_meaning_in_fts() {
+    let db = Memori::open(":memory:").unwrap();
+    db.insert(
+        "literal needle",
+        Some(&[1.0, 0.0]),
+        Some(serde_json::json!({"type":"metadata"})),
+        None,
+        true,
+    )
+    .unwrap();
+    for filter in [
+        serde_json::json!({}),
+        serde_json::json!({"type":"metadata"}),
+    ] {
+        let results = db
+            .search(SearchQuery {
+                text: Some("needle".into()),
+                text_only: true,
+                filter: Some(filter),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(results.len(), 1);
+    }
+}
+
+#[test]
+fn metadata_values_are_never_rewritten_as_sql_column_aliases() {
+    let db = Memori::open(":memory:").unwrap();
+    let metadata = serde_json::json!({"type":"json_extract(metadata,", "optional":null});
+    db.insert(
+        "literal needle",
+        Some(&[1.0, 0.0]),
+        Some(metadata.clone()),
+        None,
+        true,
+    )
+    .unwrap();
+    for text_only in [false, true] {
+        let hits = db
+            .search(SearchQuery {
+                text: Some("needle".into()),
+                vector: Some(vec![1.0, 0.0]),
+                text_only,
+                filter: Some(metadata.clone()),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(hits.len(), 1);
+    }
+}
