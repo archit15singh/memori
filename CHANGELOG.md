@@ -1,3 +1,11 @@
+# 2.0.0 — Markdown knowledge vault
+
+Breaking vault-first release: Markdown notes are authoritative; SQLite is a rebuildable hybrid retrieval index. Adds explicit wiki links/backlinks, bounded one-hop context, shared learning/consolidation skills, and a thin headless dream launcher with incremental batches, byte-preserving archives, scoped Git snapshots/commits and failure-safe acknowledgement. Replaces the 1.x database CLI, dashboard and setup snippet. The existing Rust retrieval engine and low-level Python database binding remain. No automatic 1.x database migration or registry publication is performed by this change.
+
+See README.md and docs/v2.md for usage, and docs/v2-verification.md for observed evidence and limitations.
+
+---
+
 # Changelog
 
 All notable changes to this project will be documented in this file.

@@ -3,6 +3,15 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum MemoriError {
+    #[error("filesystem error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("invalid note: {0}")]
+    InvalidNote(String),
+
+    #[error("vault is busy; another Memori operation holds the lock")]
+    VaultBusy,
+
     #[error("database error: {0}")]
     Sqlite(#[from] rusqlite::Error),
 

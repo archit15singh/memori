@@ -10,7 +10,6 @@ from urllib.request import urlopen
 
 import pytest
 from memori import PyMemori
-from memori_cli import DashboardHandler
 
 
 @pytest.fixture
@@ -63,73 +62,3 @@ def test_threshold_requires_a_vector_search(db):
         db.search(min_similarity=0.5)
     with pytest.raises(RuntimeError, match='similarity'):
         db.search(text='hello', text_only=True, min_similarity=0.5)
-
-
-def test_cli_search_and_related_threshold(tmp_path):
-    path = str(tmp_path / 'cli.db')
-    db = PyMemori(path)
-    mid = db.insert('one', vector=[1., 0.])['id']
-    db.insert('two', vector=[0., 1.])
-    cli = str(Path(sys.executable).parent / 'memori')
-    def run(*args):
-        return subprocess.run([cli, '--db', path, '--json', *args], capture_output=True, text=True, timeout=120)
-    result = run('search', '--vector', '[1,0]', '--min-similarity', '0.9')
-    assert result.returncode == 0, result.stderr
-    assert [m['id'] for m in json.loads(result.stdout)] == [mid]
-    result = run('related', mid, '--min-similarity', '0.9')
-    assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout) == []
-    result = run('search', '--vector', '[1,0]', '--min-similarity', 'nan')
-    assert result.returncode == 2
-    assert json.loads(result.stderr)['error'] == 'invalid_similarity'
-    result = run('search', '--text', 'hello', '--text-only', '--min-similarity', '0.5')
-    assert result.returncode == 2
-    assert json.loads(result.stderr)['error'] == 'invalid_similarity'
-
-
-def test_cli_context_rejects_unrelated_semantic_matches(tmp_path):
-    path = str(tmp_path / 'context.db')
-    db = PyMemori(path)
-    mid = db.insert('PostgreSQL stores application data in a relational database')['id']
-    cli = str(Path(sys.executable).parent / 'memori')
-    def run(*extra):
-        return subprocess.run([cli, '--db', path, '--json', 'context', 'banana bread recipe', *extra], capture_output=True, text=True, timeout=120)
-    before = run()
-    assert before.returncode == 0, before.stderr
-    assert json.loads(before.stdout)['matches'][0]['id'] == mid
-    after = run('--min-similarity', '1')
-    assert after.returncode == 0, after.stderr
-    data = json.loads(after.stdout)
-    assert data['matches'] == []
-    assert data['recent'][0]['id'] == mid  # contextual browsing is separate from search relevance
-
-
-def test_dashboard_http_threshold_and_errors(db):
-    source = db.insert('PostgreSQL relational database')['id']
-    other = db.insert('Relational database query indexing')['id']
-    class Handler(DashboardHandler):
-        pass
-    Handler.db = db
-    server = HTTPServer(('127.0.0.1', 0), Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    base = f'http://127.0.0.1:{server.server_port}'
-    def get(path):
-        with urlopen(base + path, timeout=30) as response:
-            return json.load(response)
-    try:
-        assert get('/api/search?text=banana%20bread')
-        assert get('/api/search?text=banana%20bread&min_similarity=1') == []
-        assert get('/api/search?text=PostgreSQL&min_similarity=1')[0]['id'] == source
-        assert get(f'/api/related/{source}')[0]['id'] == other
-        assert get(f'/api/related/{source}?min_similarity=1') == []
-        for path in ['/api/search?text=test&min_similarity=nan', '/api/search?min_similarity=0.5', '/api/search?text=test&text_only=true&min_similarity=0.5', f'/api/related/{source}?min_similarity=1.1']:
-            with pytest.raises(HTTPError) as exc:
-                get(path)
-            assert exc.value.code == 400
-            assert json.load(exc.value)['error']
-        assert get('/api/stats')['count'] == 2  # server remains healthy after invalid input
-    finally:
-        server.shutdown()
-        thread.join(timeout=5)
-        server.server_close()

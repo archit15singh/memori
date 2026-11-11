@@ -13,6 +13,8 @@ pub mod search;
 pub mod storage;
 pub mod types;
 pub mod util;
+pub mod vault;
+pub use vault::{IndexReport, Note, NoteView, Vault, VaultSearch};
 
 use std::collections::HashMap;
 

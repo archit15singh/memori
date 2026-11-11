@@ -1,6 +1,6 @@
 [package]
 name = "memori-ai-py"
-version = "0.7.1"
+version = "2.0.0"
 edition = "2021"
 description = "PyO3 bindings + CLI for memori-ai-core (published to PyPI as py-memori)"
 license = "MIT"
@@ -20,4 +20,5 @@ embeddings = ["memori-ai-core/embeddings"]
 memori-ai-core = { path = "../memori-core" }
 pyo3 = { version = "0.22", features = ["abi3-py39"] }
 serde_json = "1"
+serde = "1"
 uuid = { version = "1", features = ["v4"] }
