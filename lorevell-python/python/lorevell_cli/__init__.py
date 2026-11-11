@@ -119,7 +119,7 @@ def cmd_index(args):
 
 def cmd_search(args):
     vault = PyVault(str(Path(args.vault).expanduser()))
-    vault.index(embeddings=not args.text_only and args.limit > 0)
+    vault.index(embeddings=not args.text_only and args.limit > 0 and bool(args.query.strip()))
     result = vault.search(args.query, limit=args.limit, graph_limit=args.graph_limit,
                           text_only=args.text_only, filter={"type": args.type} if args.type else None,
                           min_similarity=args.min_similarity)

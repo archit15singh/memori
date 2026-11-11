@@ -1,0 +1,20 @@
+{
+  "accepted": true,
+  "before": {
+    "blank_query_returned_unrelated_matches": 1,
+    "cold_model_regression": "1 failed, 1 passed"
+  },
+  "after": {
+    "blank_query_matches": 0,
+    "no_query_recent_browsing_preserved": true,
+    "cold_model_regression": "2 passed",
+    "vault_cli_empty_query_contract": "reject with clear search-text validation error, without initializing the model"
+  },
+  "positive_limit_reports_identical": [
+    "main-hybrid",
+    "shadow-hybrid",
+    "main-text",
+    "shadow-text"
+  ],
+  "limitations": "Functional regression probes and a small self-authored retrieval set; not a performance benchmark."
+}
