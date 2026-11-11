@@ -1,0 +1,6 @@
+{
+  "accepted": true,
+  "measured_gain": "cold model-unavailable zero-limit request changes failure to empty success; native and CLI regression test passed",
+  "positive_limit_reports_identical": true,
+  "failures": []
+}

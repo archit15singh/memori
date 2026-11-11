@@ -50,3 +50,9 @@ Repeated runs exposed a second reproducible issue: `HashMap` iteration fed equal
 Against the Porter migration reports, main hybrid top-1 moves 17→18/20 and MRR .8917→.9167, with top-3 remaining 19/20. Both shadow hybrid and both keyword-mode reports are unchanged. All four pairs pass the same fail-closed gate. Ten repeated runs return identical ranked ID sequences for every main and shadow question; the preceding Porter-only repeat report varied on four main queries and one shadow query. This establishes repeatability on the exercised inputs, not general quality or significance.
 
 The accepted combination gives main hybrid 18/20 top-1 and 19/20 top-3, main keyword 18/20 and 19/20, shadow hybrid 9/10 and 10/10, and shadow keyword 9/10 and 9/10. Local follow-up validation: 98 Rust tests, 26 no-embedding checks (including the explicit-vector stability test) and 87 Python tests, plus formatting and Clippy.
+
+## Follow-up loop: zero-result requests without model initialization
+
+An actual cold subprocess requested `limit=0` with `FASTEMBED_CACHE_DIR` deliberately pointing to a regular file. Before the fix the native API panicked while trying to initialize embeddings, even though no result could be returned. After the fix it returns `[]`. The CLI now indexes without embeddings for a zero-result request as well. Two production lines change; existing query-option validation still runs.
+
+A cold-process regression exercises both the native API and CLI with an unembedded note and the blocked model cache. All four positive-limit main/shadow hybrid/keyword reports are byte-equivalent JSON objects to the preceding accepted reports. The functional gate accepts the reproduced failure→success while requiring ranking non-regression; it does not pretend that an unchanged ranking is a quality gain. Raw single-probe elapsed times are retained for provenance, not a performance benchmark. Local checks: 98 Rust, 26 no-embedding, 88 Python, formatting and Clippy.
