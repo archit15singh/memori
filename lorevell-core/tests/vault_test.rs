@@ -55,6 +55,77 @@ fn listing_reads_active_sources_without_requiring_an_index() {
 }
 
 #[test]
+fn retrieval_snapshot_is_fresh_for_each_operation_and_preserves_lookup_precedence() {
+    let t = Temp::new();
+    t.note("first.md", "first", "quasar [[target]]");
+    t.note("target.md", "target", "Original evidence");
+    t.note("other.md", "first-longer", "Unrelated");
+    let v = t.vault();
+    v.index(false).unwrap();
+    assert_eq!(v.show("first", 5).unwrap().note.id, "first");
+    assert_eq!(v.show("target", 5).unwrap().backlinks[0].id, "first");
+    t.note("target.md", "target", "Edited outside Lorevell");
+    // No retained parsed-note cache may hide a native edit, even before indexing.
+    assert!(v.show("first", 5).unwrap().outgoing[0]
+        .content
+        .contains("Edited outside"));
+    assert!(v.search(query("quasar"), 3).unwrap().context[0]
+        .note
+        .content
+        .contains("Edited outside"));
+    assert!(v
+        .show("fir", 5)
+        .unwrap_err()
+        .to_string()
+        .contains("ambiguous"));
+    t.note("bad.md", "broken", "Otherwise valid");
+    fs::write(t.0.join("bad.md"), "malformed").unwrap();
+    assert!(v.show("first", 5).is_err());
+    assert!(v.search(query("quasar"), 3).is_err());
+}
+
+#[test]
+fn unchanged_index_is_read_only_but_renames_and_resolved_links_still_refresh() {
+    let t = Temp::new();
+    t.note(
+        "first.md",
+        "first",
+        "quasar [[destination]] [[missing]] [[first]]",
+    );
+    t.note("destination.md", "stable", "Retain this evidence");
+    let v = t.vault();
+    let first = v.index(false).unwrap();
+    assert_eq!(first.links, 1);
+    let observer = rusqlite::Connection::open(t.0.join(".lorevell/index.sqlite")).unwrap();
+    let version = || {
+        observer
+            .query_row("PRAGMA data_version", [], |r| r.get::<_, i64>(0))
+            .unwrap()
+    };
+    let before = version();
+    let again = v.index(false).unwrap();
+    assert_eq!(
+        version(),
+        before,
+        "unchanged indexing must not write the database"
+    );
+    assert_eq!(again.unchanged, 2);
+    assert_eq!(again.links, first.links);
+    assert_eq!(again.unresolved, first.unresolved);
+    fs::rename(t.0.join("destination.md"), t.0.join("renamed.md")).unwrap();
+    let renamed = v.index(false).unwrap();
+    assert_eq!(renamed.unchanged, 2);
+    assert_eq!(renamed.links, 0);
+    assert!(renamed.unresolved.iter().any(|s| s.contains("destination")));
+    t.note("replacement.md", "destination", "Exact ID now resolves");
+    assert_eq!(v.index(false).unwrap().links, 1);
+    assert_eq!(v.show("first", 5).unwrap().outgoing[0].id, "destination");
+    fs::remove_file(t.0.join("replacement.md")).unwrap();
+    assert_eq!(v.index(false).unwrap().removed, 1);
+    assert!(v.show("first", 5).unwrap().outgoing.is_empty());
+}
+
+#[test]
 fn manual_edits_renames_removals_and_cache_loss_rebuild_from_markdown() {
     let t = Temp::new();
     t.note("first.md", "first", "# Diagnose\nUse canary tests.");

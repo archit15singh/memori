@@ -1,0 +1,1537 @@
+{
+  "identical_reports": true,
+  "reports": {
+    "baseline-questions-keyword": {
+      "description": "Frozen maintainer questions for Lorevell public project knowledge; manually labeled relevant note IDs, not model judgments. Queries held outside consolidation vault.",
+      "questions_sha256": "e84a271c211623f587894480694227f48259e5acca728ece66efcae381fe0985",
+      "mode": "text-only",
+      "questions": 20,
+      "top1": 18,
+      "hit_at_3": 19,
+      "mrr_at_3": 0.9167,
+      "results": [
+        {
+          "query": "Can I delete the database without losing my notes?",
+          "expected": [
+            "markdown",
+            "index"
+          ],
+          "retrieved": [
+            "markdown",
+            "locking",
+            "backlinks"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How do I make a note keep its identity after renaming the file?",
+          "expected": [
+            "identity"
+          ],
+          "retrieved": [
+            "identity",
+            "metadata",
+            "rollback"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "What happens when a wiki link matches multiple filenames?",
+          "expected": [
+            "links"
+          ],
+          "retrieved": [
+            "links",
+            "identity",
+            "backlinks"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How do I find notes that point to this procedure?",
+          "expected": [
+            "backlinks"
+          ],
+          "retrieved": [
+            "release-status",
+            "similarity",
+            "437fbf7d-859a-4e15-8def-6f4a1f14f6a4"
+          ],
+          "first_relevant_rank": null
+        },
+        {
+          "query": "How do I remove obsolete knowledge but keep its original evidence?",
+          "expected": [
+            "archive"
+          ],
+          "retrieved": [
+            "archive",
+            "dream-validation",
+            "release-status"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Will a malformed Markdown file leave a half updated search index?",
+          "expected": [
+            "index"
+          ],
+          "retrieved": [
+            "index",
+            "markdown",
+            "rollback"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Can I search entirely offline without downloading a model?",
+          "expected": [
+            "offline"
+          ],
+          "retrieved": [
+            "offline",
+            "embeddings",
+            "markdown"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "What combines keyword and semantic retrieval rankings?",
+          "expected": [
+            "hybrid"
+          ],
+          "retrieved": [
+            "hybrid",
+            "fts",
+            "backlinks"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Why does a similarity threshold not exclude literal keyword hits?",
+          "expected": [
+            "similarity"
+          ],
+          "retrieved": [
+            "similarity",
+            "fts",
+            "archive"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Which embedding model and vector size does Lorevell use?",
+          "expected": [
+            "embeddings"
+          ],
+          "retrieved": [
+            "embeddings",
+            "offline",
+            "dream-preview"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How do I configure a different vault directory?",
+          "expected": [
+            "vault-config"
+          ],
+          "retrieved": [
+            "dream-git",
+            "fts",
+            "vault-config"
+          ],
+          "first_relevant_rank": 3
+        },
+        {
+          "query": "How do I install the memory skill for Claude and Codex?",
+          "expected": [
+            "skills"
+          ],
+          "retrieved": [
+            "skills",
+            "dream-preview",
+            "packaging"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Why must dream run at the root of its own Git repository?",
+          "expected": [
+            "dream-git"
+          ],
+          "retrieved": [
+            "dream-git",
+            "markdown",
+            "437fbf7d-859a-4e15-8def-6f4a1f14f6a4"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Does a failed consolidation acknowledge the processed batch?",
+          "expected": [
+            "dream-failure"
+          ],
+          "retrieved": [
+            "dream-failure",
+            "dream-batch",
+            "dream-preview"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How can I preview consolidation without starting an agent?",
+          "expected": [
+            "dream-preview"
+          ],
+          "retrieved": [
+            "dream-preview",
+            "dream-batch",
+            "markdown"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "What stops a consolidation from deleting evidence or changing unrelated files?",
+          "expected": [
+            "dream-validation"
+          ],
+          "retrieved": [
+            "dream-validation",
+            "archive",
+            "dream-batch"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How do I undo a consolidation and refresh search?",
+          "expected": [
+            "rollback"
+          ],
+          "retrieved": [
+            "rollback",
+            "offline",
+            "dream-git"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How can I verify the installed package rather than an editable source checkout?",
+          "expected": [
+            "packaging"
+          ],
+          "retrieved": [
+            "packaging",
+            "learning",
+            "metadata"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Should a GitHub release be created when publishing a registry package fails?",
+          "expected": [
+            "release-status"
+          ],
+          "retrieved": [
+            "release-status",
+            "437fbf7d-859a-4e15-8def-6f4a1f14f6a4",
+            "packaging"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Where should registry credentials be used without exposing tokens locally?",
+          "expected": [
+            "release-status"
+          ],
+          "retrieved": [
+            "release-status",
+            "offline",
+            "dream-preview"
+          ],
+          "first_relevant_rank": 1
+        }
+      ]
+    },
+    "baseline-questions-hybrid": {
+      "description": "Frozen maintainer questions for Lorevell public project knowledge; manually labeled relevant note IDs, not model judgments. Queries held outside consolidation vault.",
+      "questions_sha256": "e84a271c211623f587894480694227f48259e5acca728ece66efcae381fe0985",
+      "mode": "hybrid",
+      "questions": 20,
+      "top1": 18,
+      "hit_at_3": 19,
+      "mrr_at_3": 0.9167,
+      "results": [
+        {
+          "query": "Can I delete the database without losing my notes?",
+          "expected": [
+            "markdown",
+            "index"
+          ],
+          "retrieved": [
+            "markdown",
+            "locking",
+            "metadata"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How do I make a note keep its identity after renaming the file?",
+          "expected": [
+            "identity"
+          ],
+          "retrieved": [
+            "identity",
+            "metadata",
+            "locking"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "What happens when a wiki link matches multiple filenames?",
+          "expected": [
+            "links"
+          ],
+          "retrieved": [
+            "links",
+            "identity",
+            "backlinks"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How do I find notes that point to this procedure?",
+          "expected": [
+            "backlinks"
+          ],
+          "retrieved": [
+            "learning",
+            "locking",
+            "metadata"
+          ],
+          "first_relevant_rank": null
+        },
+        {
+          "query": "How do I remove obsolete knowledge but keep its original evidence?",
+          "expected": [
+            "archive"
+          ],
+          "retrieved": [
+            "archive",
+            "dream-validation",
+            "markdown"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Will a malformed Markdown file leave a half updated search index?",
+          "expected": [
+            "index"
+          ],
+          "retrieved": [
+            "index",
+            "rollback",
+            "markdown"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Can I search entirely offline without downloading a model?",
+          "expected": [
+            "offline"
+          ],
+          "retrieved": [
+            "offline",
+            "embeddings",
+            "fts"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "What combines keyword and semantic retrieval rankings?",
+          "expected": [
+            "hybrid"
+          ],
+          "retrieved": [
+            "hybrid",
+            "similarity",
+            "fts"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Why does a similarity threshold not exclude literal keyword hits?",
+          "expected": [
+            "similarity"
+          ],
+          "retrieved": [
+            "similarity",
+            "fts",
+            "hybrid"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Which embedding model and vector size does Lorevell use?",
+          "expected": [
+            "embeddings"
+          ],
+          "retrieved": [
+            "embeddings",
+            "offline",
+            "hybrid"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How do I configure a different vault directory?",
+          "expected": [
+            "vault-config"
+          ],
+          "retrieved": [
+            "vault-config",
+            "dream-git",
+            "locking"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How do I install the memory skill for Claude and Codex?",
+          "expected": [
+            "skills"
+          ],
+          "retrieved": [
+            "skills",
+            "dream-preview",
+            "learning"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Why must dream run at the root of its own Git repository?",
+          "expected": [
+            "dream-git"
+          ],
+          "retrieved": [
+            "dream-git",
+            "vault-config",
+            "dream-validation"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Does a failed consolidation acknowledge the processed batch?",
+          "expected": [
+            "dream-failure"
+          ],
+          "retrieved": [
+            "dream-failure",
+            "dream-batch",
+            "dream-git"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How can I preview consolidation without starting an agent?",
+          "expected": [
+            "dream-preview"
+          ],
+          "retrieved": [
+            "dream-preview",
+            "dream-batch",
+            "dream-git"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "What stops a consolidation from deleting evidence or changing unrelated files?",
+          "expected": [
+            "dream-validation"
+          ],
+          "retrieved": [
+            "archive",
+            "locking",
+            "dream-validation"
+          ],
+          "first_relevant_rank": 3
+        },
+        {
+          "query": "How do I undo a consolidation and refresh search?",
+          "expected": [
+            "rollback"
+          ],
+          "retrieved": [
+            "rollback",
+            "dream-git",
+            "archive"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How can I verify the installed package rather than an editable source checkout?",
+          "expected": [
+            "packaging"
+          ],
+          "retrieved": [
+            "packaging",
+            "learning",
+            "metadata"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Should a GitHub release be created when publishing a registry package fails?",
+          "expected": [
+            "release-status"
+          ],
+          "retrieved": [
+            "release-status",
+            "437fbf7d-859a-4e15-8def-6f4a1f14f6a4",
+            "packaging"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Where should registry credentials be used without exposing tokens locally?",
+          "expected": [
+            "release-status"
+          ],
+          "retrieved": [
+            "release-status",
+            "437fbf7d-859a-4e15-8def-6f4a1f14f6a4",
+            "dream-preview"
+          ],
+          "first_relevant_rank": 1
+        }
+      ]
+    },
+    "baseline-shadow-questions-keyword": {
+      "description": "Additional frozen maintainer paraphrases, authored before candidate RRF experiments; same public corpus and manually labeled note IDs. Not an independent author or blind benchmark.",
+      "questions_sha256": "e311e04ac32606ac4dd6af705f7dc99eed6fbd80a41ff7032d1997b30ad6e2c3",
+      "mode": "text-only",
+      "questions": 10,
+      "top1": 9,
+      "hit_at_3": 9,
+      "mrr_at_3": 0.9,
+      "results": [
+        {
+          "query": "How can I read and correct knowledge without installing this tool?",
+          "expected": [
+            "markdown"
+          ],
+          "retrieved": [
+            "markdown",
+            "offline",
+            "backlinks"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Can two notes use the same frontmatter ID?",
+          "expected": [
+            "identity"
+          ],
+          "retrieved": [
+            "metadata",
+            "skills",
+            "learning"
+          ],
+          "first_relevant_rank": null
+        },
+        {
+          "query": "What if a link uses a filename shared by two folders?",
+          "expected": [
+            "links"
+          ],
+          "retrieved": [
+            "links",
+            "release-status",
+            "identity"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Where can I see incoming references to a note?",
+          "expected": [
+            "backlinks"
+          ],
+          "retrieved": [
+            "backlinks",
+            "markdown",
+            "metadata"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Does consolidation destroy the original superseded procedure?",
+          "expected": [
+            "archive"
+          ],
+          "retrieved": [
+            "archive",
+            "release-status",
+            "dream-failure"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Are edits made in my editor protected by the writer lock?",
+          "expected": [
+            "locking"
+          ],
+          "retrieved": [
+            "locking",
+            "links",
+            "dream-git"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Can cached embeddings be kept when source Markdown is unchanged?",
+          "expected": [
+            "index"
+          ],
+          "retrieved": [
+            "index",
+            "markdown",
+            "similarity"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How are sparse and dense search lists combined?",
+          "expected": [
+            "hybrid"
+          ],
+          "retrieved": [
+            "hybrid",
+            "fts",
+            "embeddings"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "What happens to the remaining files after a small dream batch?",
+          "expected": [
+            "dream-batch"
+          ],
+          "retrieved": [
+            "dream-batch",
+            "dream-failure",
+            "dream-validation"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Will the consolidation log tell me why the agent failed?",
+          "expected": [
+            "dream-failure"
+          ],
+          "retrieved": [
+            "dream-failure",
+            "release-status",
+            "dream-git"
+          ],
+          "first_relevant_rank": 1
+        }
+      ]
+    },
+    "baseline-shadow-questions-hybrid": {
+      "description": "Additional frozen maintainer paraphrases, authored before candidate RRF experiments; same public corpus and manually labeled note IDs. Not an independent author or blind benchmark.",
+      "questions_sha256": "e311e04ac32606ac4dd6af705f7dc99eed6fbd80a41ff7032d1997b30ad6e2c3",
+      "mode": "hybrid",
+      "questions": 10,
+      "top1": 9,
+      "hit_at_3": 10,
+      "mrr_at_3": 0.95,
+      "results": [
+        {
+          "query": "How can I read and correct knowledge without installing this tool?",
+          "expected": [
+            "markdown"
+          ],
+          "retrieved": [
+            "markdown",
+            "skills",
+            "backlinks"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Can two notes use the same frontmatter ID?",
+          "expected": [
+            "identity"
+          ],
+          "retrieved": [
+            "metadata",
+            "identity",
+            "markdown"
+          ],
+          "first_relevant_rank": 2
+        },
+        {
+          "query": "What if a link uses a filename shared by two folders?",
+          "expected": [
+            "links"
+          ],
+          "retrieved": [
+            "links",
+            "identity",
+            "backlinks"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Where can I see incoming references to a note?",
+          "expected": [
+            "backlinks"
+          ],
+          "retrieved": [
+            "backlinks",
+            "metadata",
+            "markdown"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Does consolidation destroy the original superseded procedure?",
+          "expected": [
+            "archive"
+          ],
+          "retrieved": [
+            "archive",
+            "rollback",
+            "locking"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Are edits made in my editor protected by the writer lock?",
+          "expected": [
+            "locking"
+          ],
+          "retrieved": [
+            "locking",
+            "dream-failure",
+            "markdown"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Can cached embeddings be kept when source Markdown is unchanged?",
+          "expected": [
+            "index"
+          ],
+          "retrieved": [
+            "index",
+            "markdown",
+            "embeddings"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How are sparse and dense search lists combined?",
+          "expected": [
+            "hybrid"
+          ],
+          "retrieved": [
+            "hybrid",
+            "fts",
+            "similarity"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "What happens to the remaining files after a small dream batch?",
+          "expected": [
+            "dream-batch"
+          ],
+          "retrieved": [
+            "dream-batch",
+            "dream-failure",
+            "dream-validation"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Will the consolidation log tell me why the agent failed?",
+          "expected": [
+            "dream-failure"
+          ],
+          "retrieved": [
+            "dream-failure",
+            "dream-git",
+            "dream-batch"
+          ],
+          "first_relevant_rank": 1
+        }
+      ]
+    },
+    "candidate-questions-keyword": {
+      "description": "Frozen maintainer questions for Lorevell public project knowledge; manually labeled relevant note IDs, not model judgments. Queries held outside consolidation vault.",
+      "questions_sha256": "e84a271c211623f587894480694227f48259e5acca728ece66efcae381fe0985",
+      "mode": "text-only",
+      "questions": 20,
+      "top1": 18,
+      "hit_at_3": 19,
+      "mrr_at_3": 0.9167,
+      "results": [
+        {
+          "query": "Can I delete the database without losing my notes?",
+          "expected": [
+            "markdown",
+            "index"
+          ],
+          "retrieved": [
+            "markdown",
+            "locking",
+            "backlinks"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How do I make a note keep its identity after renaming the file?",
+          "expected": [
+            "identity"
+          ],
+          "retrieved": [
+            "identity",
+            "metadata",
+            "rollback"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "What happens when a wiki link matches multiple filenames?",
+          "expected": [
+            "links"
+          ],
+          "retrieved": [
+            "links",
+            "identity",
+            "backlinks"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How do I find notes that point to this procedure?",
+          "expected": [
+            "backlinks"
+          ],
+          "retrieved": [
+            "release-status",
+            "similarity",
+            "437fbf7d-859a-4e15-8def-6f4a1f14f6a4"
+          ],
+          "first_relevant_rank": null
+        },
+        {
+          "query": "How do I remove obsolete knowledge but keep its original evidence?",
+          "expected": [
+            "archive"
+          ],
+          "retrieved": [
+            "archive",
+            "dream-validation",
+            "release-status"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Will a malformed Markdown file leave a half updated search index?",
+          "expected": [
+            "index"
+          ],
+          "retrieved": [
+            "index",
+            "markdown",
+            "rollback"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Can I search entirely offline without downloading a model?",
+          "expected": [
+            "offline"
+          ],
+          "retrieved": [
+            "offline",
+            "embeddings",
+            "markdown"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "What combines keyword and semantic retrieval rankings?",
+          "expected": [
+            "hybrid"
+          ],
+          "retrieved": [
+            "hybrid",
+            "fts",
+            "backlinks"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Why does a similarity threshold not exclude literal keyword hits?",
+          "expected": [
+            "similarity"
+          ],
+          "retrieved": [
+            "similarity",
+            "fts",
+            "archive"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Which embedding model and vector size does Lorevell use?",
+          "expected": [
+            "embeddings"
+          ],
+          "retrieved": [
+            "embeddings",
+            "offline",
+            "dream-preview"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How do I configure a different vault directory?",
+          "expected": [
+            "vault-config"
+          ],
+          "retrieved": [
+            "dream-git",
+            "fts",
+            "vault-config"
+          ],
+          "first_relevant_rank": 3
+        },
+        {
+          "query": "How do I install the memory skill for Claude and Codex?",
+          "expected": [
+            "skills"
+          ],
+          "retrieved": [
+            "skills",
+            "dream-preview",
+            "packaging"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Why must dream run at the root of its own Git repository?",
+          "expected": [
+            "dream-git"
+          ],
+          "retrieved": [
+            "dream-git",
+            "markdown",
+            "437fbf7d-859a-4e15-8def-6f4a1f14f6a4"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Does a failed consolidation acknowledge the processed batch?",
+          "expected": [
+            "dream-failure"
+          ],
+          "retrieved": [
+            "dream-failure",
+            "dream-batch",
+            "dream-preview"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How can I preview consolidation without starting an agent?",
+          "expected": [
+            "dream-preview"
+          ],
+          "retrieved": [
+            "dream-preview",
+            "dream-batch",
+            "markdown"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "What stops a consolidation from deleting evidence or changing unrelated files?",
+          "expected": [
+            "dream-validation"
+          ],
+          "retrieved": [
+            "dream-validation",
+            "archive",
+            "dream-batch"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How do I undo a consolidation and refresh search?",
+          "expected": [
+            "rollback"
+          ],
+          "retrieved": [
+            "rollback",
+            "offline",
+            "dream-git"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How can I verify the installed package rather than an editable source checkout?",
+          "expected": [
+            "packaging"
+          ],
+          "retrieved": [
+            "packaging",
+            "learning",
+            "metadata"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Should a GitHub release be created when publishing a registry package fails?",
+          "expected": [
+            "release-status"
+          ],
+          "retrieved": [
+            "release-status",
+            "437fbf7d-859a-4e15-8def-6f4a1f14f6a4",
+            "packaging"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Where should registry credentials be used without exposing tokens locally?",
+          "expected": [
+            "release-status"
+          ],
+          "retrieved": [
+            "release-status",
+            "offline",
+            "dream-preview"
+          ],
+          "first_relevant_rank": 1
+        }
+      ]
+    },
+    "candidate-questions-hybrid": {
+      "description": "Frozen maintainer questions for Lorevell public project knowledge; manually labeled relevant note IDs, not model judgments. Queries held outside consolidation vault.",
+      "questions_sha256": "e84a271c211623f587894480694227f48259e5acca728ece66efcae381fe0985",
+      "mode": "hybrid",
+      "questions": 20,
+      "top1": 18,
+      "hit_at_3": 19,
+      "mrr_at_3": 0.9167,
+      "results": [
+        {
+          "query": "Can I delete the database without losing my notes?",
+          "expected": [
+            "markdown",
+            "index"
+          ],
+          "retrieved": [
+            "markdown",
+            "locking",
+            "metadata"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How do I make a note keep its identity after renaming the file?",
+          "expected": [
+            "identity"
+          ],
+          "retrieved": [
+            "identity",
+            "metadata",
+            "locking"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "What happens when a wiki link matches multiple filenames?",
+          "expected": [
+            "links"
+          ],
+          "retrieved": [
+            "links",
+            "identity",
+            "backlinks"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How do I find notes that point to this procedure?",
+          "expected": [
+            "backlinks"
+          ],
+          "retrieved": [
+            "learning",
+            "locking",
+            "metadata"
+          ],
+          "first_relevant_rank": null
+        },
+        {
+          "query": "How do I remove obsolete knowledge but keep its original evidence?",
+          "expected": [
+            "archive"
+          ],
+          "retrieved": [
+            "archive",
+            "dream-validation",
+            "markdown"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Will a malformed Markdown file leave a half updated search index?",
+          "expected": [
+            "index"
+          ],
+          "retrieved": [
+            "index",
+            "rollback",
+            "markdown"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Can I search entirely offline without downloading a model?",
+          "expected": [
+            "offline"
+          ],
+          "retrieved": [
+            "offline",
+            "embeddings",
+            "fts"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "What combines keyword and semantic retrieval rankings?",
+          "expected": [
+            "hybrid"
+          ],
+          "retrieved": [
+            "hybrid",
+            "similarity",
+            "fts"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Why does a similarity threshold not exclude literal keyword hits?",
+          "expected": [
+            "similarity"
+          ],
+          "retrieved": [
+            "similarity",
+            "fts",
+            "hybrid"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Which embedding model and vector size does Lorevell use?",
+          "expected": [
+            "embeddings"
+          ],
+          "retrieved": [
+            "embeddings",
+            "offline",
+            "hybrid"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How do I configure a different vault directory?",
+          "expected": [
+            "vault-config"
+          ],
+          "retrieved": [
+            "vault-config",
+            "dream-git",
+            "locking"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How do I install the memory skill for Claude and Codex?",
+          "expected": [
+            "skills"
+          ],
+          "retrieved": [
+            "skills",
+            "dream-preview",
+            "learning"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Why must dream run at the root of its own Git repository?",
+          "expected": [
+            "dream-git"
+          ],
+          "retrieved": [
+            "dream-git",
+            "vault-config",
+            "dream-validation"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Does a failed consolidation acknowledge the processed batch?",
+          "expected": [
+            "dream-failure"
+          ],
+          "retrieved": [
+            "dream-failure",
+            "dream-batch",
+            "dream-git"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How can I preview consolidation without starting an agent?",
+          "expected": [
+            "dream-preview"
+          ],
+          "retrieved": [
+            "dream-preview",
+            "dream-batch",
+            "dream-git"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "What stops a consolidation from deleting evidence or changing unrelated files?",
+          "expected": [
+            "dream-validation"
+          ],
+          "retrieved": [
+            "archive",
+            "locking",
+            "dream-validation"
+          ],
+          "first_relevant_rank": 3
+        },
+        {
+          "query": "How do I undo a consolidation and refresh search?",
+          "expected": [
+            "rollback"
+          ],
+          "retrieved": [
+            "rollback",
+            "dream-git",
+            "archive"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How can I verify the installed package rather than an editable source checkout?",
+          "expected": [
+            "packaging"
+          ],
+          "retrieved": [
+            "packaging",
+            "learning",
+            "metadata"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Should a GitHub release be created when publishing a registry package fails?",
+          "expected": [
+            "release-status"
+          ],
+          "retrieved": [
+            "release-status",
+            "437fbf7d-859a-4e15-8def-6f4a1f14f6a4",
+            "packaging"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Where should registry credentials be used without exposing tokens locally?",
+          "expected": [
+            "release-status"
+          ],
+          "retrieved": [
+            "release-status",
+            "437fbf7d-859a-4e15-8def-6f4a1f14f6a4",
+            "dream-preview"
+          ],
+          "first_relevant_rank": 1
+        }
+      ]
+    },
+    "candidate-shadow-questions-keyword": {
+      "description": "Additional frozen maintainer paraphrases, authored before candidate RRF experiments; same public corpus and manually labeled note IDs. Not an independent author or blind benchmark.",
+      "questions_sha256": "e311e04ac32606ac4dd6af705f7dc99eed6fbd80a41ff7032d1997b30ad6e2c3",
+      "mode": "text-only",
+      "questions": 10,
+      "top1": 9,
+      "hit_at_3": 9,
+      "mrr_at_3": 0.9,
+      "results": [
+        {
+          "query": "How can I read and correct knowledge without installing this tool?",
+          "expected": [
+            "markdown"
+          ],
+          "retrieved": [
+            "markdown",
+            "offline",
+            "backlinks"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Can two notes use the same frontmatter ID?",
+          "expected": [
+            "identity"
+          ],
+          "retrieved": [
+            "metadata",
+            "skills",
+            "learning"
+          ],
+          "first_relevant_rank": null
+        },
+        {
+          "query": "What if a link uses a filename shared by two folders?",
+          "expected": [
+            "links"
+          ],
+          "retrieved": [
+            "links",
+            "release-status",
+            "identity"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Where can I see incoming references to a note?",
+          "expected": [
+            "backlinks"
+          ],
+          "retrieved": [
+            "backlinks",
+            "markdown",
+            "metadata"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Does consolidation destroy the original superseded procedure?",
+          "expected": [
+            "archive"
+          ],
+          "retrieved": [
+            "archive",
+            "release-status",
+            "dream-failure"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Are edits made in my editor protected by the writer lock?",
+          "expected": [
+            "locking"
+          ],
+          "retrieved": [
+            "locking",
+            "links",
+            "dream-git"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Can cached embeddings be kept when source Markdown is unchanged?",
+          "expected": [
+            "index"
+          ],
+          "retrieved": [
+            "index",
+            "markdown",
+            "similarity"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How are sparse and dense search lists combined?",
+          "expected": [
+            "hybrid"
+          ],
+          "retrieved": [
+            "hybrid",
+            "fts",
+            "embeddings"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "What happens to the remaining files after a small dream batch?",
+          "expected": [
+            "dream-batch"
+          ],
+          "retrieved": [
+            "dream-batch",
+            "dream-failure",
+            "dream-validation"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Will the consolidation log tell me why the agent failed?",
+          "expected": [
+            "dream-failure"
+          ],
+          "retrieved": [
+            "dream-failure",
+            "release-status",
+            "dream-git"
+          ],
+          "first_relevant_rank": 1
+        }
+      ]
+    },
+    "candidate-shadow-questions-hybrid": {
+      "description": "Additional frozen maintainer paraphrases, authored before candidate RRF experiments; same public corpus and manually labeled note IDs. Not an independent author or blind benchmark.",
+      "questions_sha256": "e311e04ac32606ac4dd6af705f7dc99eed6fbd80a41ff7032d1997b30ad6e2c3",
+      "mode": "hybrid",
+      "questions": 10,
+      "top1": 9,
+      "hit_at_3": 10,
+      "mrr_at_3": 0.95,
+      "results": [
+        {
+          "query": "How can I read and correct knowledge without installing this tool?",
+          "expected": [
+            "markdown"
+          ],
+          "retrieved": [
+            "markdown",
+            "skills",
+            "backlinks"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Can two notes use the same frontmatter ID?",
+          "expected": [
+            "identity"
+          ],
+          "retrieved": [
+            "metadata",
+            "identity",
+            "markdown"
+          ],
+          "first_relevant_rank": 2
+        },
+        {
+          "query": "What if a link uses a filename shared by two folders?",
+          "expected": [
+            "links"
+          ],
+          "retrieved": [
+            "links",
+            "identity",
+            "backlinks"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Where can I see incoming references to a note?",
+          "expected": [
+            "backlinks"
+          ],
+          "retrieved": [
+            "backlinks",
+            "metadata",
+            "markdown"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Does consolidation destroy the original superseded procedure?",
+          "expected": [
+            "archive"
+          ],
+          "retrieved": [
+            "archive",
+            "rollback",
+            "locking"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Are edits made in my editor protected by the writer lock?",
+          "expected": [
+            "locking"
+          ],
+          "retrieved": [
+            "locking",
+            "dream-failure",
+            "markdown"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Can cached embeddings be kept when source Markdown is unchanged?",
+          "expected": [
+            "index"
+          ],
+          "retrieved": [
+            "index",
+            "markdown",
+            "embeddings"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "How are sparse and dense search lists combined?",
+          "expected": [
+            "hybrid"
+          ],
+          "retrieved": [
+            "hybrid",
+            "fts",
+            "similarity"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "What happens to the remaining files after a small dream batch?",
+          "expected": [
+            "dream-batch"
+          ],
+          "retrieved": [
+            "dream-batch",
+            "dream-failure",
+            "dream-validation"
+          ],
+          "first_relevant_rank": 1
+        },
+        {
+          "query": "Will the consolidation log tell me why the agent failed?",
+          "expected": [
+            "dream-failure"
+          ],
+          "retrieved": [
+            "dream-failure",
+            "dream-git",
+            "dream-batch"
+          ],
+          "first_relevant_rank": 1
+        }
+      ]
+    }
+  }
+}

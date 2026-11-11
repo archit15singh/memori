@@ -75,6 +75,8 @@ The local workspace opens in Brave on macOS and the default browser elsewhere. S
 
 **New note** saves a real Markdown file in the selected vault. External edits are picked up on the next search or refresh. The UI uses the same Rust retrieval engine as the CLI; it does not generate answers or add another database. It binds only to `127.0.0.1`; leave it on loopback. Stop the server with Ctrl+C. See [the workspace guide](docs/local-workspace.md) for scope and limitations.
 
+The [vault benchmark report](docs/benchmarks/README.md) records native, CLI and HTTP latency, CPU, memory, concurrency and storage measurements at 25–1,000 linked notes, with reproducible before/after data and retrieval-quality checks. First-time embedding work remains separate from warm recall latency.
+
 ## Recall and maintain
 
 | Command | Behavior |

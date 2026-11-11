@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use fs2::FileExt;
@@ -175,15 +176,18 @@ impl Vault {
         let _lock = self.lock()?;
         let sources = self.sources()?;
         let conn = &self.index.conn;
-        let transaction = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
         let mut report = IndexReport::default();
         let mut cached = BTreeMap::new();
         {
-            let mut stmt = conn.prepare("SELECT s.note_id, s.hash, m.vector IS NOT NULL FROM note_sources s JOIN memories m ON m.id=s.note_id")?;
+            let mut stmt = conn.prepare("SELECT s.note_id, s.hash, s.path, m.vector IS NOT NULL FROM note_sources s JOIN memories m ON m.id=s.note_id")?;
             let rows = stmt.query_map([], |r| {
                 Ok((
                     r.get::<_, String>(0)?,
-                    (r.get::<_, String>(1)?, r.get::<_, bool>(2)?),
+                    (
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                        r.get::<_, bool>(3)?,
+                    ),
                 ))
             })?;
             for row in rows {
@@ -191,11 +195,46 @@ impl Vault {
                 cached.insert(id, value);
             }
         }
+        // Validation and hashing above still observe every file. When identity,
+        // content, path and requested vectors match, derived links also match.
+        if sources.len() == cached.len()
+            && sources.iter().all(|source| {
+                cached
+                    .get(&source.note.id)
+                    .is_some_and(|(hash, path, vector)| {
+                        hash == &source.hash
+                            && path == &source.note.path
+                            && (!embeddings || *vector)
+                    })
+            })
+        {
+            report.unchanged = sources.len();
+            let mut stmt = conn.prepare("SELECT s.path, l.target, l.target_id FROM note_links l JOIN note_sources s ON s.note_id=l.source_id ORDER BY s.path, l.target")?;
+            let rows = stmt.query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, Option<String>>(2)?,
+                ))
+            })?;
+            for row in rows {
+                let (path, target, resolved) = row?;
+                if resolved.is_some() {
+                    report.links += 1;
+                } else {
+                    report
+                        .unresolved
+                        .push(format!("{}: [[{}]] is missing or ambiguous", path, target));
+                }
+            }
+            return Ok(report);
+        }
+        let transaction = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
         for source in &sources {
             let note = &source.note;
             let unchanged = cached
                 .get(&note.id)
-                .is_some_and(|(hash, vector)| hash == &source.hash && (!embeddings || *vector));
+                .is_some_and(|(hash, _, vector)| hash == &source.hash && (!embeddings || *vector));
             if unchanged {
                 report.unchanged += 1;
             } else {
@@ -288,31 +327,21 @@ impl Vault {
         Ok(note)
     }
 
+    /// A fresh operation-local view: never retain parsed files across requests.
+    fn note_map(&self) -> Result<BTreeMap<String, Note>> {
+        Ok(self
+            .notes()?
+            .into_iter()
+            .map(|note| (note.id.clone(), note))
+            .collect())
+    }
+
     /// Read from Markdown, so a stale or deleted cache never changes the source.
     pub fn get(&self, id: &str) -> Result<Note> {
         if id.trim().is_empty() {
             return Err(LorevellError::InvalidNote("id must not be empty".into()));
         }
-        let sources = self.sources()?;
-        if let Some(source) = sources.iter().find(|s| s.note.id == id) {
-            return Ok(source.note.clone());
-        }
-        if let Some(source) = sources
-            .iter()
-            .find(|s| s.note.path.trim_end_matches(".md") == id)
-        {
-            return Ok(source.note.clone());
-        }
-        let notes: Vec<&Note> = sources.iter().map(|s| &s.note).collect();
-        let found: Vec<_> = notes
-            .iter()
-            .filter(|n| n.id == id || n.id.starts_with(id) || n.path.trim_end_matches(".md") == id)
-            .collect();
-        match found.as_slice() {
-            [note] => Ok((***note).clone()),
-            [] => Err(LorevellError::NotFound(id.into())),
-            _ => Err(LorevellError::AmbiguousPrefix(id.into(), found.len())),
-        }
+        Ok(find_note(&self.note_map()?, id)?.clone())
     }
 
     pub fn update(&self, id: &str, content: Option<&str>, metadata: Option<Value>) -> Result<Note> {
@@ -372,7 +401,20 @@ impl Vault {
     }
 
     pub fn show(&self, id: &str, neighbor_limit: usize) -> Result<NoteView> {
-        let note = self.get(id)?;
+        if id.trim().is_empty() {
+            return Err(LorevellError::InvalidNote("id must not be empty".into()));
+        }
+        let notes = self.note_map()?;
+        let note = find_note(&notes, id)?;
+        self.show_from(note, neighbor_limit, &notes)
+    }
+
+    fn show_from(
+        &self,
+        note: &Note,
+        neighbor_limit: usize,
+        notes: &BTreeMap<String, Note>,
+    ) -> Result<NoteView> {
         let mut outgoing = Vec::new();
         let mut backlinks = Vec::new();
         let mut unresolved = Vec::new();
@@ -391,17 +433,17 @@ impl Vault {
             if source == note.id {
                 if let Some(target_id) = resolved {
                     if outgoing.len() < neighbor_limit && seen_out.insert(target_id.clone()) {
-                        outgoing.push(self.get(&target_id)?);
+                        outgoing.push(find_note(notes, &target_id)?.clone());
                     }
                 } else {
                     unresolved.push(target);
                 }
             } else if backlinks.len() < neighbor_limit && seen_back.insert(source.clone()) {
-                backlinks.push(self.get(&source)?);
+                backlinks.push(find_note(notes, &source)?.clone());
             }
         }
         Ok(NoteView {
-            note,
+            note: note.clone(),
             outgoing,
             backlinks,
             unresolved,
@@ -413,16 +455,21 @@ impl Vault {
         let mut matches = Vec::new();
         let mut context = Vec::new();
         let mut seen = HashSet::new();
-        for memory in self.index.search(query)? {
+        let memories = self.index.search(query)?;
+        if memories.is_empty() {
+            return Ok(VaultSearch { matches, context });
+        }
+        let notes = self.note_map()?;
+        for memory in memories {
             seen.insert(memory.id.clone());
             matches.push(VaultHit {
-                note: self.get(&memory.id)?,
+                note: find_note(&notes, &memory.id)?.clone(),
                 score: memory.score,
             });
         }
         if graph_limit > 0 {
             for hit in &matches {
-                let view = self.show(&hit.note.id, graph_limit)?;
+                let view = self.show_from(&hit.note, graph_limit, &notes)?;
                 for note in view.outgoing.into_iter().chain(view.backlinks) {
                     let eligible = filter
                         .as_ref()
@@ -438,6 +485,30 @@ impl Vault {
             }
         }
         Ok(VaultSearch { matches, context })
+    }
+}
+
+fn find_note<'a>(notes: &'a BTreeMap<String, Note>, id: &str) -> Result<&'a Note> {
+    if id.trim().is_empty() {
+        return Err(LorevellError::InvalidNote("id must not be empty".into()));
+    }
+    if let Some(note) = notes.get(id) {
+        return Ok(note);
+    }
+    if let Some(note) = notes
+        .values()
+        .find(|note| note.path.trim_end_matches(".md") == id)
+    {
+        return Ok(note);
+    }
+    let found: Vec<_> = notes
+        .values()
+        .filter(|note| note.id.starts_with(id))
+        .collect();
+    match found.as_slice() {
+        [note] => Ok(note),
+        [] => Err(LorevellError::NotFound(id.into())),
+        _ => Err(LorevellError::AmbiguousPrefix(id.into(), found.len())),
     }
 }
 
@@ -535,7 +606,8 @@ fn parse_note(raw: &str, path: &str) -> Result<Note> {
 }
 
 fn wiki_links(body: &str) -> Vec<String> {
-    let regex = Regex::new(r"\[\[([^\[\]\n]+)\]\]").unwrap();
+    static WIKI_LINKS: OnceLock<Regex> = OnceLock::new();
+    let regex = WIKI_LINKS.get_or_init(|| Regex::new(r"\[\[([^\[\]\n]+)\]\]").unwrap());
     let mut fence: Option<char> = None;
     let mut links = BTreeSet::new();
     for line in body.lines() {
