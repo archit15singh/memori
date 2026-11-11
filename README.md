@@ -105,7 +105,23 @@ A dream run processes a bounded batch of files changed since the last successful
 
 Failures and timeouts leave edits available for inspection and do not acknowledge the batch. Pending batches remain pending. `.lorevell/dream-last.log` records the child output locally. Concurrent dream runs are rejected. Run no other writers during consolidation: the MVP does not merge concurrent native edits.
 
-Successful changes are reversible with `git -C "$LOREVELL_VAULT" revert <consolidation-commit>`, followed by `lorevell index`. There is no scheduler service; invoke the command manually or through a scheduler you choose and authorize. Runtime authentication and normal agent permissions remain the responsibility of the existing installed CLI. Lorevell never passes bypass-permission flags.
+Successful changes are reversible with `git -C "$LOREVELL_VAULT" revert <consolidation-commit>`, followed by `lorevell index`. There is no scheduler service; invoke the command manually or through a scheduler you choose and authorize. Runtime authentication and normal agent permissions remain the responsibility of the existing installed CLI. A Codex sandbox must have writable access to the chosen vault because recall refreshes its index; for an external vault, pass that exact directory with Codex’s normal `--add-dir` option. Lorevell never passes bypass-permission flags.
+
+## Try the maintainer knowledge demo
+
+This public project is also a real Lorevell vault example. After installing from this checkout:
+
+```bash
+export LOREVELL_VAULT="$PWD/.venv/demo-vault"
+lorevell init
+cp docs/evals/real-project/before/*.md "$LOREVELL_VAULT/"
+lorevell index
+lorevell search "How do I undo a consolidation and refresh search?"
+python scripts/eval-project.py --vault "$LOREVELL_VAULT" \
+  --questions docs/evals/real-project/questions.json
+```
+
+The example has 24 source-grounded maintainer notes and 20 frozen questions. It measures ranked relevant note IDs, not generated-answer accuracy or general product quality. [The real-project report](docs/release-verification.md) records learning and recall in separate authenticated Codex sessions, consolidation, rollback, retrieval results and limitations.
 
 ## Architecture and verification
 

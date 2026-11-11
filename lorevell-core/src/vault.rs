@@ -418,9 +418,7 @@ impl Vault {
                     let eligible = filter
                         .as_ref()
                         .and_then(Value::as_object)
-                        .map_or(true, |f| {
-                            f.iter().all(|(k, v)| note.metadata.get(k) == Some(v))
-                        });
+                        .is_none_or(|f| f.iter().all(|(k, v)| note.metadata.get(k) == Some(v)));
                     if context.len() < graph_limit && eligible && seen.insert(note.id.clone()) {
                         context.push(LinkedNote {
                             note,

@@ -1404,3 +1404,48 @@ fn test_fts5_empty_query() {
     let results = db.search(query).unwrap();
     assert!(results.is_empty());
 }
+
+#[test]
+fn literal_search_relaxes_only_empty_all_word_matches_and_keeps_filters() {
+    let db = open_temp();
+    let wanted = db
+        .insert(
+            "SQLite backups",
+            Some(&[1.0, 0.0]),
+            Some(json!({"scope":"local"})),
+            None,
+            false,
+        )
+        .unwrap();
+    db.insert(
+        "SQLite elsewhere",
+        Some(&[0.0, 1.0]),
+        Some(json!({"scope":"other"})),
+        None,
+        false,
+    )
+    .unwrap();
+    let results = db
+        .search(SearchQuery {
+            text: Some("How do I repair SQLite backups?".into()),
+            filter: Some(json!({"scope":"local"})),
+            text_only: true,
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].id, wanted.id());
+    let strict = db
+        .search(SearchQuery {
+            text: Some("SQLite backups".into()),
+            text_only: true,
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(
+        strict.len(),
+        1,
+        "partial matches must not dilute successful strict results"
+    );
+    assert_eq!(strict[0].id, wanted.id());
+}

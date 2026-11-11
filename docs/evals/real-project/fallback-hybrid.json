@@ -1,0 +1,252 @@
+{
+  "description": "Frozen maintainer questions for Lorevell public project knowledge; manually labeled relevant note IDs, not model judgments. Queries held outside consolidation vault.",
+  "questions_sha256": "e84a271c211623f587894480694227f48259e5acca728ece66efcae381fe0985",
+  "mode": "hybrid",
+  "questions": 20,
+  "top1": 16,
+  "hit_at_3": 19,
+  "mrr_at_3": 0.8667,
+  "results": [
+    {
+      "query": "Can I delete the database without losing my notes?",
+      "expected": [
+        "markdown",
+        "index"
+      ],
+      "retrieved": [
+        "markdown",
+        "metadata",
+        "locking"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "How do I make a note keep its identity after renaming the file?",
+      "expected": [
+        "identity"
+      ],
+      "retrieved": [
+        "identity",
+        "metadata",
+        "locking"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "What happens when a wiki link matches multiple filenames?",
+      "expected": [
+        "links"
+      ],
+      "retrieved": [
+        "identity",
+        "links",
+        "backlinks"
+      ],
+      "first_relevant_rank": 2
+    },
+    {
+      "query": "How do I find notes that point to this procedure?",
+      "expected": [
+        "backlinks"
+      ],
+      "retrieved": [
+        "learning",
+        "locking",
+        "release-status"
+      ],
+      "first_relevant_rank": null
+    },
+    {
+      "query": "How do I remove obsolete knowledge but keep its original evidence?",
+      "expected": [
+        "archive"
+      ],
+      "retrieved": [
+        "archive",
+        "dream-validation",
+        "markdown"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "Will a malformed Markdown file leave a half updated search index?",
+      "expected": [
+        "index"
+      ],
+      "retrieved": [
+        "index",
+        "markdown",
+        "rollback"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "Can I search entirely offline without downloading a model?",
+      "expected": [
+        "offline"
+      ],
+      "retrieved": [
+        "offline",
+        "embeddings",
+        "fts"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "What combines keyword and semantic retrieval rankings?",
+      "expected": [
+        "hybrid"
+      ],
+      "retrieved": [
+        "hybrid",
+        "similarity",
+        "fts"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "Why does a similarity threshold not exclude literal keyword hits?",
+      "expected": [
+        "similarity"
+      ],
+      "retrieved": [
+        "similarity",
+        "fts",
+        "offline"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "Which embedding model and vector size does Lorevell use?",
+      "expected": [
+        "embeddings"
+      ],
+      "retrieved": [
+        "embeddings",
+        "offline",
+        "fts"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "How do I configure a different vault directory?",
+      "expected": [
+        "vault-config"
+      ],
+      "retrieved": [
+        "dream-git",
+        "vault-config",
+        "locking"
+      ],
+      "first_relevant_rank": 2
+    },
+    {
+      "query": "How do I install the memory skill for Claude and Codex?",
+      "expected": [
+        "skills"
+      ],
+      "retrieved": [
+        "skills",
+        "dream-preview",
+        "dream-git"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "Why must dream run at the root of its own Git repository?",
+      "expected": [
+        "dream-git"
+      ],
+      "retrieved": [
+        "dream-git",
+        "vault-config",
+        "dream-validation"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "Does a failed consolidation acknowledge the processed batch?",
+      "expected": [
+        "dream-failure"
+      ],
+      "retrieved": [
+        "dream-failure",
+        "dream-batch",
+        "dream-git"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "How can I preview consolidation without starting an agent?",
+      "expected": [
+        "dream-preview"
+      ],
+      "retrieved": [
+        "dream-preview",
+        "dream-batch",
+        "dream-git"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "What stops a consolidation from deleting evidence or changing unrelated files?",
+      "expected": [
+        "dream-validation"
+      ],
+      "retrieved": [
+        "archive",
+        "rollback",
+        "dream-validation"
+      ],
+      "first_relevant_rank": 3
+    },
+    {
+      "query": "How do I undo a consolidation and refresh search?",
+      "expected": [
+        "rollback"
+      ],
+      "retrieved": [
+        "rollback",
+        "dream-git",
+        "archive"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "How can I verify the installed package rather than an editable source checkout?",
+      "expected": [
+        "packaging"
+      ],
+      "retrieved": [
+        "packaging",
+        "learning",
+        "metadata"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "Should a GitHub release be created when publishing a registry package fails?",
+      "expected": [
+        "release-status"
+      ],
+      "retrieved": [
+        "release-status",
+        "dream-git",
+        "rollback"
+      ],
+      "first_relevant_rank": 1
+    },
+    {
+      "query": "Where should registry credentials be used without exposing tokens locally?",
+      "expected": [
+        "release-status"
+      ],
+      "retrieved": [
+        "release-status",
+        "dream-preview",
+        "vault-config"
+      ],
+      "first_relevant_rank": 1
+    }
+  ]
+}

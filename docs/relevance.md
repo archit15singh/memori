@@ -15,3 +15,7 @@ The native low-level `PyLorevell.search(vector=..., min_similarity=...)` and rel
 Vault search returns explicit linked `context` separately from ranked `matches`. A linked neighbor is not a cosine-qualified result. Graph expansion is one hop and bounded by an overall note count; metadata filters still apply.
 
 The old native engine calibration remains runnable with `scripts/eval-relevance.py`. The 2.0 experiment uses `scripts/eval-vault.py` and [v2-held-out.json](evals/v2-held-out.json) to measure the required-fact completeness of top retrieved notes before and after consolidation. These are small synthetic fixtures, not held-out production benchmarks. See [the verification report](v2-verification.md) for actual results and limitations.
+
+## Natural-language keyword queries
+
+Literal FTS5 first requires all quoted query terms. If no filtered rows match and there is more than one term, it retries with quoted terms joined by OR, retaining the same metadata filter and ranking. This deterministic fallback applies to the text leg of hybrid retrieval too. It never interprets user tokens as FTS operators. Successful all-term results keep precedence; fallback scores are still rankings, not truth or confidence.
