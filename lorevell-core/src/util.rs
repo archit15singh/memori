@@ -18,7 +18,10 @@ pub fn vec_to_blob(v: &[f32]) -> &[u8] {
 /// # Panics
 /// Panics if `b.len()` is not a multiple of 4.
 pub fn blob_to_vec(b: &[u8]) -> Vec<f32> {
-    assert!(b.len() % 4 == 0, "blob length must be a multiple of 4");
+    assert!(
+        b.len().is_multiple_of(4),
+        "blob length must be a multiple of 4"
+    );
     let mut v = vec![0.0f32; b.len() / 4];
     // SAFETY: We verified the length is a multiple of 4. copy_nonoverlapping
     // is safe here because src (b) and dst (v) don't overlap (v is freshly
