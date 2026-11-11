@@ -1,0 +1,8 @@
+{
+  "accepted": false,
+  "failures": [
+    "docs/evals/real-project/after-hybrid.json: hit_at_3 regressed 19 -> 18",
+    "docs/evals/real-project/after-hybrid.json: mrr_at_3 regressed 0.8917 -> 0.875",
+    "No measured improvement"
+  ]
+}

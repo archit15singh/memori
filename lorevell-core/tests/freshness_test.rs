@@ -238,3 +238,96 @@ fn old_negative_similarity_does_not_receive_an_age_boost() {
     assert!(results[1].score.unwrap().is_finite());
     assert!(results[1].score < results[0].score);
 }
+
+#[test]
+fn v4_stemming_migration_preserves_metadata_vectors_and_update_triggers() {
+    let file = DatabaseFile::new();
+    let db = Lorevell::open(file.path()).unwrap();
+    let inserted = db
+        .insert(
+            "Run migrations safely",
+            Some(&[1.0, 0.0]),
+            Some(serde_json::json!({"tag":"backups"})),
+            None,
+            false,
+        )
+        .unwrap();
+    let id = inserted.id().to_owned();
+    let before = db.get_readonly(&id).unwrap().unwrap();
+    drop(db);
+    let conn = Connection::open(file.path()).unwrap();
+    conn.execute_batch("DROP TABLE memories_fts;
+        CREATE VIRTUAL TABLE memories_fts USING fts5(content,content=memories,content_rowid=rowid);
+        INSERT INTO memories_fts(rowid,content) SELECT rowid,content || ' ' || coalesce(metadata,'') FROM memories;
+        PRAGMA user_version=4;").unwrap();
+    let old_matches: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM memories_fts WHERE memories_fts MATCH 'backup'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        old_matches, 0,
+        "the old literal tokenizer does not stem metadata"
+    );
+    drop(conn);
+    for _ in 0..2 {
+        let db = Lorevell::open(file.path()).unwrap();
+        let after = db.get_readonly(&id).unwrap().unwrap();
+        assert_eq!(after.vector, before.vector);
+        assert_eq!(after.metadata, before.metadata);
+        assert_eq!(after.created_at, before.created_at);
+        assert_eq!(after.content_updated_at, before.content_updated_at);
+        assert_eq!(after.access_count, before.access_count);
+        for text in ["migrating", "backup"] {
+            let matches = db
+                .search(SearchQuery {
+                    text: Some(text.into()),
+                    text_only: true,
+                    ..Default::default()
+                })
+                .unwrap();
+            assert_eq!(matches.len(), 1);
+            assert_eq!(matches[0].id, id);
+        }
+    }
+    let db = Lorevell::open(file.path()).unwrap();
+    db.update(
+        &id,
+        Some("Record decisions"),
+        None,
+        Some(serde_json::json!({"tag":"reviews"})),
+        false,
+    )
+    .unwrap();
+    assert!(
+        db.search(SearchQuery {
+            text: Some("migrating backup".into()),
+            text_only: true,
+            ..Default::default()
+        })
+        .unwrap()
+        .is_empty(),
+        "old body and metadata tokens must be removed"
+    );
+    assert_eq!(
+        db.search(SearchQuery {
+            text: Some("review".into()),
+            text_only: true,
+            ..Default::default()
+        })
+        .unwrap()[0]
+            .id,
+        id
+    );
+    db.delete(&id).unwrap();
+    assert!(db
+        .search(SearchQuery {
+            text: Some("review".into()),
+            text_only: true,
+            ..Default::default()
+        })
+        .unwrap()
+        .is_empty());
+}
