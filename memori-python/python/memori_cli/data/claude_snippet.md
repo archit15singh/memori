@@ -40,7 +40,7 @@ enabled by default; rank scores are not cosine thresholds or confidence values.
 
 ### Side Effects
 
-- `get` bumps access_count; search/context/related do not (use `touch` explicitly when appropriate)
+- `get` bumps access_count; search/context/related do not
 - `tag` and `update --meta` re-embed the vector (may prevent future dedup against this memory)
 - `purge --confirm` and `delete` are irreversible
 - `store` with dedup match updates existing memory's content but not access_count
