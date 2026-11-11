@@ -177,4 +177,15 @@ impl Memori {
         let full_id = storage::resolve_prefix(&self.conn, id)?;
         search::related(&self.conn, &full_id, limit)
     }
+
+    /// Related memories with an inclusive raw cosine threshold.
+    pub fn related_with_min_similarity(
+        &self,
+        id: &str,
+        limit: usize,
+        min_similarity: Option<f32>,
+    ) -> Result<Vec<Memory>> {
+        let full_id = storage::resolve_prefix(&self.conn, id)?;
+        search::related_with_min_similarity(&self.conn, &full_id, limit, min_similarity)
+    }
 }

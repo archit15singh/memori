@@ -3,8 +3,8 @@ name: CI
 on:
   push:
     branches: [main]
+  # Include stacked feature PRs targeting prerequisite branches.
   pull_request:
-    branches: [main]
 
 jobs:
   rust:
@@ -25,6 +25,9 @@ jobs:
 
       - name: cargo test
         run: cargo test -p memori-ai-core --release
+
+      - name: Relevance without embeddings
+        run: cargo test -p memori-ai-core --no-default-features --release --test relevance_test
 
   python:
     name: Python (maturin build + pytest)

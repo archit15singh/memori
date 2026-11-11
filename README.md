@@ -520,6 +520,7 @@ results = db.search(text="dark mode", text_only=True)  # FTS5-only
 results = db.search(vector=[1.0, 0.0, ...], limit=5)
 results = db.search(filter={"type": "preference"})
 results = db.search(text="query", before=1772000000.0, after=1771000000.0)
+results = db.search(text="database architecture", min_similarity=0.4)  # example floor; calibrate for your data
 
 # Get (prefix IDs supported; bumps access_count)
 mem = db.get("abc123")
@@ -527,6 +528,7 @@ mem = db.get_readonly("abc123")  # read without bumping access stats
 
 # Related
 similar = db.related("abc123", limit=5)
+similar = db.related("abc123", limit=5, min_similarity=0.4)
 
 # Update (metadata merged by default)
 db.update("abc123", content="updated text")
@@ -582,11 +584,12 @@ See [`docs/packaging_dev.md`](docs/packaging_dev.md) for the full open-source pa
 
 ## Testing
 
-~190 tests across three layers — all real SQLite, no mocking:
+216 tests across Rust, Python, CLI and HTTP — all real SQLite, no mocking:
 
 - **Rust integration** (`memori-core/tests/integration_test.rs`): 63 tests using in-memory SQLite via `open_temp()`. Covers CRUD, dedup, all four search modes, decay scoring, prefix resolution, embedding backfill, export/import.
 - **Python API** (`memori-python/tests/test_memori.py`): 37 pytest tests via `tmp_path` fixture. Covers PyMemori bindings end-to-end.
 - **CLI** (`memori-python/tests/test_cli.py`): 91 subprocess-based tests. Full command matrix: all 18 subcommands, output modes, error cases, date filtering, dedup behavior, typed tag coercion, purge AND logic.
+- **Relevance**: 4 Rust regressions in `memori-core/tests/relevance_test.rs` (also run without embeddings) and 14 native Python/CLI/HTTP cases in `memori-python/tests/test_relevance.py`. Rust also has 7 vector utility unit tests.
 
 ```bash
 python3 -m venv .venv
@@ -602,6 +605,8 @@ cargo test -p memori-ai-core --release
 ---
 
 ## Non-obvious behaviors
+
+- **Optional semantic floor** — `--min-similarity` on `search`, `context`, and `related` rejects weak vector candidates before popularity and RRF. Hybrid literal FTS matches remain eligible; context's browsing sections are unaffected. No cutoff is enabled by default. The dashboard has a Search cosine field. See [semantics, validation and measured calibration tradeoffs](docs/relevance.md).
 
 - **Dedup drift after tagging** — Tagging re-embeds the vector (content + scalar metadata values), shifting it. Storing identical content later may not dedup against a heavily-tagged original because the vectors diverged. FTS5 still finds both.
 - **Purge uses AND logic** — `--before` and `--type` together delete only the intersection.

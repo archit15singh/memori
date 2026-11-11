@@ -84,6 +84,7 @@ Memori struct (lib.rs -- thin facade with prefix ID resolution)
 - **Dedup drift after tagging**: tagging or updating metadata re-embeds from `content + scalar metadata values`, shifting the vector. Storing identical content later may NOT dedup against the tagged original because the vectors diverged. This is expected -- the vectors represent different information now. Workaround: if you need to dedup after heavy tagging, the content similarity is still captured by FTS5.
 - **FTS5 vs vector embedding asymmetry**: FTS5 indexes `content || ' ' || COALESCE(metadata, '')` (raw JSON with keys/braces). Vector embedding uses `content + metadata_values_text()` (top-level scalar values only). On initial insert, auto-embed uses content only; on metadata update, re-embeds from `content + scalar metadata values`. FTS5 can match JSON keys, vector search cannot.
 - **Hybrid search over-fetches**: RRF fusion retrieves `3 * limit` candidates from each sub-search before rank fusion and truncation.
+- **Semantic relevance floor**: optional `min_similarity` / `--min-similarity` gates raw cosine before boosts and RRF. Hybrid literal matches remain eligible; context browsing sections are unaffected. No default cutoff. See [docs/relevance.md](docs/relevance.md) for validation, Rust source compatibility and calibration. Run all Python test modules, including `test_relevance.py`, against the source-built extension.
 - **List sort is always DESC**: `storage::list()` hardcodes `ORDER BY ... DESC` -- no ASC option.
 - **FTS5 query sanitization**: `sanitize_fts_query()` in `search.rs` wraps each token in double quotes to force literal matching, preventing FTS5 operator injection (hyphens, colons, asterisks). Empty/whitespace-only queries return empty results (guard in `text_search()`).
 - **CLI exit codes**: 0 = success, 1 = not found, 2 = user input error (invalid JSON, bad date, missing args).
@@ -117,7 +118,8 @@ Add a `cmd_<name>()` function and wire it into the argparse subparser in `memori
 - **Rust**: 63 integration tests in `memori-core/tests/integration_test.rs` using in-memory SQLite (`:memory:`) via `open_temp()` helper, plus 7 unit tests in `util.rs` (cosine similarity, vec/blob roundtrip)
 - **Python**: 37 pytest tests in `memori-python/tests/test_memori.py` using `tmp_path` fixture for DB files (PyMemori API level)
 - **CLI**: 91 pytest tests in `memori-python/tests/test_cli.py` using `subprocess.run()` against temp DBs -- full command matrix covering all 18 subcommands, output modes, error cases, and regression tests for fixed bugs
-- **Total: ~190 tests** (70 Rust + 128 Python) -- no mocking, all real SQLite
+- **Relevance**: 4 Rust regressions (also tested without embeddings) and 14 native Python/CLI/HTTP cases; see `docs/relevance.md`.
+- **Total: 216 tests** (74 Rust + 142 Python) -- no mocking, all real SQLite
 - Notable untested paths: `vacuum()`, schema migration upgrades
 
 ### E2E Agent Simulation Testing

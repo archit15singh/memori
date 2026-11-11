@@ -32,9 +32,15 @@ Types: `debugging`, `decision`, `architecture`, `pattern`, `preference`, `fact`,
 - **Before designing**: `memori search --text "<component>"` or `--filter '{"type": "architecture"}'`
 - **Before deep-diving into unfamiliar code**: `memori search --text "<subsystem>"`
 
+Use `--min-similarity <floor>` on search/context/related when a cutoff has been
+calibrated for this project's data. It gates semantic candidates before ranking;
+hybrid literal matches remain eligible. Empty matches are a valid outcome. The
+context recent/frequent/stale sections are separate browsing aids. No floor is
+enabled by default; rank scores are not cosine thresholds or confidence values.
+
 ### Side Effects
 
-- `get`, `search`, `context`, `related` bump access_count on returned memories (affects decay ranking)
+- `get` bumps access_count; search/context/related do not (use `touch` explicitly when appropriate)
 - `tag` and `update --meta` re-embed the vector (may prevent future dedup against this memory)
 - `purge --confirm` and `delete` are irreversible
 - `store` with dedup match updates existing memory's content but not access_count

@@ -21,6 +21,7 @@ Usage:
 """
 import argparse
 import json
+import math
 import os
 import sys
 import threading
@@ -72,6 +73,34 @@ def _parse_json(value, flag_name, use_json=False):
     return json.loads(value)
   except json.JSONDecodeError as e:
     _err("invalid_json", f"Invalid JSON for {flag_name}: {e}", exit_code=2, use_json=use_json)
+
+
+def _similarity_value(value):
+  if value is None:
+    return None
+  try:
+    value = float(value)
+  except (ValueError, TypeError):
+    raise ValueError("min_similarity must be a finite number between -1 and 1") from None
+  if not math.isfinite(value) or not -1 <= value <= 1:
+    raise ValueError("min_similarity must be a finite number between -1 and 1")
+  return value
+
+
+def _cli_similarity(args):
+  try:
+    return _similarity_value(getattr(args, "min_similarity", None))
+  except ValueError as e:
+    _err("invalid_similarity", str(e), exit_code=2, use_json=args.json)
+
+
+def _search_or_error(db, use_json=False, **kwargs):
+  try:
+    return db.search(**kwargs)
+  except RuntimeError as e:
+    if "similarity" in str(e):
+      _err("invalid_similarity", str(e), exit_code=2, use_json=use_json)
+    raise
 
 
 def _snippet_text():
@@ -232,9 +261,10 @@ def cmd_search(args):
   before_ts = _parse_date_arg(args.before, use_json=args.json) if getattr(args, "before", None) else None
   after_ts = _parse_date_arg(args.after, use_json=args.json) if getattr(args, "after", None) else None
 
-  results = db.search(
+  results = _search_or_error(db, use_json=args.json,
     vector=vector, text=args.text, filter=filt, limit=args.limit,
     text_only=text_only, before=before_ts, after=after_ts,
+    min_similarity=_cli_similarity(args),
   )
 
   if args.json:
@@ -413,7 +443,8 @@ def cmd_context(args):
     search_filter = {"project": args.project}
 
   # Relevant matches (always hybrid search -- let Rust handle efficiency)
-  matches = db.search(text=topic, filter=search_filter, limit=limit)
+  matches = _search_or_error(db, use_json=args.json, text=topic, filter=search_filter, limit=limit,
+                             min_similarity=_cli_similarity(args))
   # Recent memories (by last update, not creation)
   recent = db.list(sort="updated", limit=5)
   # Frequently accessed (only show if any have been accessed)
@@ -683,11 +714,14 @@ def cmd_purge(args):
 def cmd_related(args):
   db = _get_db(args.db)
   include_vectors = getattr(args, "include_vectors", False)
+  min_similarity = _cli_similarity(args)
   try:
-    results = db.related(args.id, limit=args.limit)
+    results = db.related(args.id, limit=args.limit, min_similarity=min_similarity)
   except RuntimeError as e:
     err_msg = str(e)
-    if "no embedding" in err_msg:
+    if "similarity" in err_msg:
+      _err("invalid_similarity", err_msg, exit_code=2, use_json=args.json)
+    elif "no embedding" in err_msg:
       error_type = "no_embedding"
       hint = " (run 'memori embed' to generate embeddings)"
     elif "ambiguous" in err_msg:
@@ -987,10 +1021,16 @@ class DashboardHandler(BaseHTTPRequestHandler):
       text_only = qfirst("text_only", "false") == "true"
       before = float(qfirst("before")) if qfirst("before") else None
       after = float(qfirst("after")) if qfirst("after") else None
-      results = db.search(
-        text=text, filter=filt, limit=limit,
-        text_only=text_only, before=before, after=after,
-      )
+      try:
+        min_similarity = _similarity_value(qfirst("min_similarity"))
+        results = db.search(
+          text=text, filter=filt, limit=limit,
+          text_only=text_only, before=before, after=after,
+          min_similarity=min_similarity,
+        )
+      except (ValueError, RuntimeError) as e:
+        self._json_response({"error": "invalid_search", "message": str(e)}, 400)
+        return
       out = []
       for r in results:
         r.pop("vector", None)
@@ -1001,14 +1041,17 @@ class DashboardHandler(BaseHTTPRequestHandler):
       mem_id = path[len("/api/related/"):]
       limit = int(qfirst("limit", "5"))
       try:
-        results = self.db.related(mem_id, limit=limit)
+        min_similarity = _similarity_value(qfirst("min_similarity"))
+        results = self.db.related(mem_id, limit=limit, min_similarity=min_similarity)
         out = []
         for r in results:
           r.pop("vector", None)
           out.append(r)
         self._json_response(out)
+      except ValueError as e:
+        self._json_response({"error": "invalid_similarity", "message": str(e)}, 400)
       except RuntimeError as e:
-        self._json_response({"error": str(e)}, 404)
+        self._json_response({"error": str(e)}, 400 if "similarity" in str(e) else 404)
 
     else:
       self.send_response(404)
@@ -1100,6 +1143,7 @@ def main():
                          help="Include vector data in JSON output (omitted by default)")
   p_search.add_argument("--before", help="Only memories created before this ISO date")
   p_search.add_argument("--after", help="Only memories created after this ISO date")
+  p_search.add_argument("--min-similarity", help="Inclusive cosine floor (-1..1) for semantic candidates; literal hybrid matches remain")
   p_search.set_defaults(func=cmd_search)
 
   # get
@@ -1153,6 +1197,7 @@ def main():
       formatter_class=_F)
   p_related.add_argument("id", help="Memory ID (or unique prefix)")
   p_related.add_argument("--limit", type=int, default=5, help="Max results (default: 5)")
+  p_related.add_argument("--min-similarity", help="Inclusive cosine floor (-1..1); omitted means no threshold")
   p_related.add_argument("--include-vectors", action="store_true",
                           help="Include vector data in JSON output")
   p_related.set_defaults(func=cmd_related)
@@ -1182,6 +1227,7 @@ def main():
       formatter_class=_F)
   p_context.add_argument("topic", help="Topic to search for")
   p_context.add_argument("--limit", type=int, default=10, help="Max relevant matches")
+  p_context.add_argument("--min-similarity", help="Cosine floor (-1..1) for semantic matches; recent/frequent/stale sections are unchanged")
   p_context.add_argument("--project", help="Scope search to a project (filters by metadata.project)")
   p_context.add_argument("--compact", action="store_true",
                           help="Minimal flat JSON for agent consumption (implies --json)")

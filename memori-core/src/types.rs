@@ -20,6 +20,9 @@ pub enum MemoriError {
 
     #[error("invalid filter key: {0}")]
     InvalidFilter(String),
+
+    #[error("invalid similarity threshold: {0}")]
+    InvalidSimilarity(String),
 }
 
 pub type Result<T> = std::result::Result<T, MemoriError>;
@@ -49,6 +52,9 @@ pub struct SearchQuery {
     pub before: Option<f64>,
     /// Filter: only return memories created after this timestamp (epoch seconds).
     pub after: Option<f64>,
+    /// Inclusive raw cosine floor for semantic candidates, before boost and RRF.
+    /// Literal FTS matches remain eligible in hybrid search. None preserves recall.
+    pub min_similarity: Option<f32>,
 }
 
 impl Default for SearchQuery {
@@ -61,6 +67,7 @@ impl Default for SearchQuery {
             text_only: false,
             before: None,
             after: None,
+            min_similarity: None,
         }
     }
 }

@@ -17,6 +17,15 @@ fn now_secs() -> f64 {
 }
 
 pub fn search(conn: &rusqlite::Connection, query: SearchQuery) -> Result<Vec<Memory>> {
+    validate_min_similarity(query.min_similarity)?;
+    if query.min_similarity.is_some()
+        && (query.text_only
+            || (query.vector.is_none() && (query.text.is_none() || !cfg!(feature = "embeddings"))))
+    {
+        return Err(MemoriError::InvalidSimilarity(
+                "requires a vector query or text search with embeddings; not text_only or recent browsing".into(),
+            ));
+    }
     let now = now_secs();
 
     // Build combined filter: metadata filter AND date range filters
@@ -49,10 +58,16 @@ pub fn search(conn: &rusqlite::Connection, query: SearchQuery) -> Result<Vec<Mem
             combined_filter.as_deref(),
             query.limit,
             now,
+            query.min_similarity,
         )?,
-        (Some(vec), None) => {
-            vector_search(conn, vec, combined_filter.as_deref(), query.limit, now)?
-        }
+        (Some(vec), None) => vector_search(
+            conn,
+            vec,
+            combined_filter.as_deref(),
+            query.limit,
+            now,
+            query.min_similarity,
+        )?,
         (None, Some(text)) => {
             #[cfg(feature = "embeddings")]
             {
@@ -67,6 +82,7 @@ pub fn search(conn: &rusqlite::Connection, query: SearchQuery) -> Result<Vec<Mem
                         combined_filter.as_deref(),
                         query.limit,
                         now,
+                        query.min_similarity,
                     )?
                 }
             }
@@ -102,7 +118,13 @@ fn vector_search(
     filter: Option<&str>,
     limit: usize,
     now: f64,
+    min_similarity: Option<f32>,
 ) -> Result<Vec<Memory>> {
+    if min_similarity.is_some() && checked_cosine(query_vec, query_vec).is_none() {
+        return Err(MemoriError::InvalidVector(
+            "similarity filtering requires a finite, nonzero query vector".into(),
+        ));
+    }
     let where_clause = filter.map_or(String::new(), |f| format!("WHERE {}", f));
     let sql = format!(
         "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count
@@ -117,7 +139,14 @@ fn vector_search(
     while let Some(row) = rows.next()? {
         let mem = row_to_memory(row)?;
         if let Some(ref vec) = mem.vector {
-            let sim = cosine_similarity(query_vec, vec);
+            let sim = if let Some(threshold) = min_similarity {
+                match checked_cosine(query_vec, vec) {
+                    Some(sim) if sim >= threshold => sim,
+                    _ => continue,
+                }
+            } else {
+                cosine_similarity(query_vec, vec)
+            };
             let boosted = apply_access_boost(sim, mem.access_count, mem.last_accessed, now);
             scored.push((mem, boosted));
         }
@@ -221,11 +250,19 @@ fn hybrid_search(
     filter: Option<&str>,
     limit: usize,
     now: f64,
+    min_similarity: Option<f32>,
 ) -> Result<Vec<Memory>> {
     // Get more candidates from each source for better fusion
     let candidate_limit = limit * 3;
 
-    let vec_results = vector_search(conn, query_vec, filter, candidate_limit, now)?;
+    let vec_results = vector_search(
+        conn,
+        query_vec,
+        filter,
+        candidate_limit,
+        now,
+        min_similarity,
+    )?;
     let text_results = text_search(conn, query_text, filter, candidate_limit, now)?;
 
     // Build rank maps (1-indexed)
@@ -300,6 +337,16 @@ fn recent_search(
 /// Find memories similar to a given memory by its ID.
 /// Uses the source memory's vector to run a vector search, excluding itself.
 pub fn related(conn: &rusqlite::Connection, id: &str, limit: usize) -> Result<Vec<Memory>> {
+    related_with_min_similarity(conn, id, limit, None)
+}
+
+pub fn related_with_min_similarity(
+    conn: &rusqlite::Connection,
+    id: &str,
+    limit: usize,
+    min_similarity: Option<f32>,
+) -> Result<Vec<Memory>> {
+    validate_min_similarity(min_similarity)?;
     let source = get_raw(conn, id)?.ok_or_else(|| MemoriError::NotFound(id.to_string()))?;
 
     let source_vec = source
@@ -308,7 +355,47 @@ pub fn related(conn: &rusqlite::Connection, id: &str, limit: usize) -> Result<Ve
 
     let now = now_secs();
     let exclude_filter = format!("id != '{}'", id.replace('\'', "''"));
-    vector_search(conn, &source_vec, Some(&exclude_filter), limit, now)
+    vector_search(
+        conn,
+        &source_vec,
+        Some(&exclude_filter),
+        limit,
+        now,
+        min_similarity,
+    )
+}
+
+fn validate_min_similarity(threshold: Option<f32>) -> Result<()> {
+    if let Some(value) = threshold {
+        if !value.is_finite() || !(-1.0..=1.0).contains(&value) {
+            return Err(MemoriError::InvalidSimilarity(
+                "must be finite and between -1 and 1".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+// Invalid vectors must not become zero-similarity matches at a permissive floor.
+// Accumulate in f64 to avoid overflow for finite f32 inputs and clamp rounding.
+fn checked_cosine(a: &[f32], b: &[f32]) -> Option<f32> {
+    if a.is_empty() || a.len() != b.len() {
+        return None;
+    }
+    let (mut dot, mut norm_a, mut norm_b) = (0.0_f64, 0.0_f64, 0.0_f64);
+    for (&x, &y) in a.iter().zip(b) {
+        if !x.is_finite() || !y.is_finite() {
+            return None;
+        }
+        let (x, y) = (f64::from(x), f64::from(y));
+        dot += x * y;
+        norm_a += x * x;
+        norm_b += y * y;
+    }
+    if norm_a == 0.0 || norm_b == 0.0 {
+        return None;
+    }
+    Some((dot / (norm_a.sqrt() * norm_b.sqrt())).clamp(-1.0, 1.0) as f32)
 }
 
 /// Validate that a metadata filter key is a safe identifier.

@@ -1,0 +1,22 @@
+{
+  "description": "Small hand-labeled synthetic calibration fixture; not representative of production memory or a held-out benchmark.",
+  "memories": [
+    {"id": "database", "content": "The billing service stores invoices in PostgreSQL and uses SQL transactions."},
+    {"id": "retry", "content": "Retry transient HTTP failures using exponential backoff and jitter."},
+    {"id": "cache", "content": "A Redis cache keeps session tokens for fifteen minutes before expiration."},
+    {"id": "python", "content": "The Python package is built with maturin and a Rust extension using PyO3."},
+    {"id": "auth", "content": "Validate the JWT signature and issuer before accepting an authenticated request."},
+    {"id": "queue", "content": "Kafka consumers commit offsets only after successful message processing."}
+  ],
+  "queries": [
+    {"text": "Where are billing invoices persisted?", "relevant": ["database"]},
+    {"text": "How should we retry a temporarily failing web request?", "relevant": ["retry"]},
+    {"text": "When do cached sessions expire?", "relevant": ["cache"]},
+    {"text": "How is our native Python module compiled?", "relevant": ["python"]},
+    {"text": "What do we check before trusting a signed login token?", "relevant": ["auth"]},
+    {"text": "When should a message consumer acknowledge progress?", "relevant": ["queue"]},
+    {"text": "How do I bake banana bread?", "relevant": []},
+    {"text": "What is the best telescope for watching Saturn?", "relevant": []},
+    {"text": "When should I water my cactus?", "relevant": []}
+  ]
+}

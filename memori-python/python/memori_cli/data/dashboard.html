@@ -100,7 +100,7 @@ if (typeof Chart === 'undefined' || typeof d3 === 'undefined') {
     align-items: center;
     margin-left: auto;
   }
-  select, .date-input {
+  select, .date-input, .similarity-input {
     padding: 7px 10px;
     background: var(--bg);
     border: 1px solid var(--border);
@@ -114,6 +114,8 @@ if (typeof Chart === 'undefined' || typeof d3 === 'undefined') {
   }
   select:focus, .date-input:focus { border-color: var(--accent); }
   .date-input { width: 130px; }
+  .similarity-input { width: 95px; }
+  .similarity-label { color: var(--text-muted); font-size: 12px; }
   .date-input::-webkit-datetime-edit-text,
   .date-input::-webkit-datetime-edit-month-field,
   .date-input::-webkit-datetime-edit-day-field,
@@ -472,6 +474,9 @@ if (typeof Chart === 'undefined' || typeof d3 === 'undefined') {
     <input type="text" id="searchInput" placeholder="Search memories..." autocomplete="off">
   </div>
   <div class="filters">
+    <label class="similarity-label" for="minSimilarity" title="Search only: minimum cosine for semantic candidates. Literal matches remain eligible. Blank disables the threshold.">Search cosine
+      <input type="number" class="similarity-input" id="minSimilarity" min="-1" max="1" step="0.01" placeholder="No floor">
+    </label>
     <select id="typeFilter"><option value="">All types</option></select>
     <select id="sortFilter">
       <option value="created">Created</option>
@@ -816,6 +821,12 @@ async function doSearch(query) {
   const beforeDate = document.getElementById('beforeDate').value;
 
   let url = `/api/search?text=${encodeURIComponent(query)}&limit=10`;
+  const similarity = document.getElementById('minSimilarity');
+  if (!similarity.checkValidity()) {
+    list.textContent = 'Search cosine must be between -1 and 1.';
+    return;
+  }
+  if (similarity.value !== '') url += `&min_similarity=${encodeURIComponent(similarity.value)}`;
   if (typeF) url += `&filter=${encodeURIComponent(JSON.stringify({type: typeF}))}`;
   if (afterDate) {
     const ts = new Date(afterDate + 'T00:00:00Z').getTime() / 1000;
@@ -826,13 +837,17 @@ async function doSearch(query) {
     url += `&before=${ts}`;
   }
 
-  const data = await api(url);
-  state.memories = data;
-  state.searchMode = true;
-  state.offset = 0;
-  renderMemoryList(data);
-  updatePagination(data.length);
-  document.getElementById('listLabel').textContent = `Search: "${query}"`;
+  try {
+    const data = await api(url);
+    state.memories = data;
+    state.searchMode = true;
+    state.offset = 0;
+    renderMemoryList(data);
+    updatePagination(data.length);
+    document.getElementById('listLabel').textContent = `Search: "${query}"`;
+  } catch (error) {
+    list.textContent = `Search failed: ${error.message}`;
+  }
 }
 
 function renderMemoryList(memories) {
@@ -1103,6 +1118,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('sortFilter').addEventListener('change', onFilter);
   document.getElementById('afterDate').addEventListener('change', onFilter);
   document.getElementById('beforeDate').addEventListener('change', onFilter);
+  document.getElementById('minSimilarity').addEventListener('change', () => {
+    doSearch(document.getElementById('searchInput').value);
+  });
 
   // Pagination
   document.getElementById('prevBtn').addEventListener('click', () => {

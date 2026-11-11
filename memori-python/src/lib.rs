@@ -13,6 +13,18 @@ fn memori_err(e: memori_core::MemoriError) -> PyErr {
     PyRuntimeError::new_err(e.to_string())
 }
 
+fn similarity_from_python(value: Option<f64>) -> PyResult<Option<f32>> {
+    // Validate before narrowing: 1.00000001 would otherwise round to valid f32 1.0.
+    if let Some(value) = value {
+        if !value.is_finite() || !(-1.0..=1.0).contains(&value) {
+            return Err(memori_err(memori_core::MemoriError::InvalidSimilarity(
+                "must be finite and between -1 and 1".into(),
+            )));
+        }
+    }
+    Ok(value.map(|value| value as f32))
+}
+
 fn py_value(py: Python<'_>, val: &serde_json::Value) -> PyResult<PyObject> {
     match val {
         serde_json::Value::Null => Ok(py.None()),
@@ -200,7 +212,7 @@ impl PyMemori {
         self.inner.lock().unwrap().delete(id).map_err(memori_err)
     }
 
-    #[pyo3(signature = (vector=None, text=None, filter=None, limit=10, text_only=false, before=None, after=None))]
+    #[pyo3(signature = (vector=None, text=None, filter=None, limit=10, text_only=false, before=None, after=None, min_similarity=None))]
     // Arguments expose the existing Python keyword API.
     #[allow(clippy::too_many_arguments)]
     fn search(
@@ -213,7 +225,9 @@ impl PyMemori {
         text_only: bool,
         before: Option<f64>,
         after: Option<f64>,
+        min_similarity: Option<f64>,
     ) -> PyResult<Vec<PyObject>> {
+        let min_similarity = similarity_from_python(min_similarity)?;
         let filter_val = filter.map(pydict_to_value).transpose()?;
         let query = SearchQuery {
             vector,
@@ -223,6 +237,7 @@ impl PyMemori {
             text_only,
             before,
             after,
+            min_similarity,
         };
 
         let results =
@@ -355,14 +370,21 @@ impl PyMemori {
         })
     }
 
-    #[pyo3(signature = (id, limit=5))]
-    fn related(&self, py: Python<'_>, id: &str, limit: usize) -> PyResult<Vec<PyObject>> {
+    #[pyo3(signature = (id, limit=5, min_similarity=None))]
+    fn related(
+        &self,
+        py: Python<'_>,
+        id: &str,
+        limit: usize,
+        min_similarity: Option<f64>,
+    ) -> PyResult<Vec<PyObject>> {
+        let min_similarity = similarity_from_python(min_similarity)?;
         let id_owned = id.to_string();
         let results = py.allow_threads(|| {
             self.inner
                 .lock()
                 .unwrap()
-                .related(&id_owned, limit)
+                .related_with_min_similarity(&id_owned, limit, min_similarity)
                 .map_err(memori_err)
         })?;
         results.iter().map(|m| memory_to_dict(py, m)).collect()
