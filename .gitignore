@@ -16,3 +16,6 @@ memori_usage.md
 
 # publish tokens (never commit)
 .memori-publish-tokens/
+
+# Rebuildable Markdown vault caches
+.memori/

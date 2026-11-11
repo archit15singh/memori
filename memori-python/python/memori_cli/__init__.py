@@ -1,1325 +1,219 @@
-"""memori CLI -- store and search AI agent memories from the command line.
-
-Usage:
-  memori store "User prefers dark mode" --meta '{"type": "preference"}'
-  memori search --text "dark mode" --limit 5
-  memori search --text "preferences" --filter '{"type": "preference"}'
-  memori get <id>
-  memori update <id> --content "updated text" --meta '{"type": "fact"}'
-  memori tag <id> topic=testing verified=true
-  memori delete <id>
-  memori count
-  memori stats
-  memori context "kafka architecture"
-  memori embed               # backfill embeddings on old memories
-  memori export > backup.jsonl
-  memori import < backup.jsonl
-  memori purge --type temporary --confirm
-  memori setup          # auto-configure Claude Code
-  memori setup --show   # preview the CLAUDE.md snippet
-  memori setup --undo   # remove the snippet
-"""
+"""Memori 2: Markdown knowledge, explicit links, and existing agent intelligence."""
 import argparse
 import json
-import math
 import os
-import sys
-import threading
-import webbrowser
-from datetime import datetime, timezone
-from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+import subprocess
+import sys
 
-from memori import PyMemori
+from memori import PyVault
 
-__version__ = "0.7.1"
-
-DEFAULT_DB = os.path.expanduser("~/.claude/memori.db")
-DEFAULT_DEDUP_THRESHOLD = 0.92
-
-KNOWN_TYPES = frozenset([
-  "debugging", "decision", "architecture", "pattern",
-  "preference", "fact", "roadmap", "temporary",
-])
-
-SNIPPET_START_PREFIX = "<!-- memori:start"
-SNIPPET_END_PREFIX = "<!-- memori:end"
-SNIPPET_START = f"<!-- memori:start v{__version__} -->"
-SNIPPET_END = f"<!-- memori:end v{__version__} -->"
-SNIPPET_REFERENCE_START = "<!-- memori:reference -->"
-SNIPPET_REFERENCE_END = "<!-- memori:reference:end -->"
+__version__ = "2.0.0"
 
 
-def _get_db(path=None, use_json=False):
-  try:
-    return PyMemori(path or DEFAULT_DB)
-  except RuntimeError as e:
-    if "unsupported database schema version" in str(e):
-      _err("unsupported_schema", str(e), exit_code=2, use_json=use_json)
-    raise
+def _positive(value):
+    number = int(value)
+    if number < 0:
+        raise argparse.ArgumentTypeError("must be zero or greater")
+    return number
 
 
-def _err(error_type, message, exit_code=1, use_json=False, input_id=None):
-  """Print an error and exit. When use_json is True, emit structured JSON to stderr."""
-  if use_json:
-    obj = {"error": error_type, "message": message}
-    if input_id is not None:
-      obj["id"] = input_id
-    print(json.dumps(obj), file=sys.stderr)
-  else:
-    print(f"{message}", file=sys.stderr)
-  sys.exit(exit_code)
-
-
-def _parse_json(value, flag_name, use_json=False):
-  """Parse a JSON string from a CLI flag, exiting with a clean message on failure."""
-  try:
-    return json.loads(value)
-  except json.JSONDecodeError as e:
-    _err("invalid_json", f"Invalid JSON for {flag_name}: {e}", exit_code=2, use_json=use_json)
-
-
-def _similarity_value(value):
-  if value is None:
-    return None
-  try:
-    value = float(value)
-  except (ValueError, TypeError):
-    raise ValueError("min_similarity must be a finite number between -1 and 1") from None
-  if not math.isfinite(value) or not -1 <= value <= 1:
-    raise ValueError("min_similarity must be a finite number between -1 and 1")
-  return value
-
-
-def _cli_similarity(args):
-  try:
-    return _similarity_value(getattr(args, "min_similarity", None))
-  except ValueError as e:
-    _err("invalid_similarity", str(e), exit_code=2, use_json=args.json)
-
-
-def _search_or_error(db, use_json=False, **kwargs):
-  try:
-    return db.search(**kwargs)
-  except RuntimeError as e:
-    if "similarity" in str(e):
-      _err("invalid_similarity", str(e), exit_code=2, use_json=use_json)
-    raise
-
-
-def _snippet_text():
-  """Load the memori snippet from bundled data.
-
-  The bundled `claude_snippet.md` ships with version markers like
-  `<!-- memori:start v0.0.0 -->`. We rewrite both start and end markers
-  to the current `__version__` so the snippet on disk always carries the
-  installed package's version — independent of what version string is
-  committed in the data file.
-  """
-  data_dir = Path(__file__).parent / "data"
-  snippet_file = data_dir / "claude_snippet.md"
-  text = snippet_file.read_text()
-  import re
-  text = re.sub(
-    r"<!-- memori:start v[^\s>]+ -->",
-    f"<!-- memori:start v{__version__} -->",
-    text,
-  )
-  text = re.sub(
-    r"<!-- memori:end v[^\s>]+ -->",
-    f"<!-- memori:end v{__version__} -->",
-    text,
-  )
-  return text
-
-
-def _find_snippet_markers(text):
-  """Find version-marked snippet markers (<!-- memori:start v... --> ... <!-- memori:end v... -->).
-
-  Returns:
-    Tuple of (start_idx, end_idx, old_version) if markers found, None otherwise.
-  """
-  start_idx = text.find(SNIPPET_START_PREFIX)
-  if start_idx == -1:
-    return None
-  # Find end of start marker line
-  try:
-    start_line_end = text.index("-->", start_idx) + 3
-  except ValueError:
-    return None
-  # Extract version from start marker
-  marker_line = text[start_idx:start_line_end]
-  old_version = None
-  if " v" in marker_line:
-    old_version = marker_line.split(" v")[1].rstrip(" ->")
-  # Find end marker
-  end_idx = text.find(SNIPPET_END_PREFIX, start_line_end)
-  if end_idx == -1:
-    return None
-  try:
-    end_line_end = text.index("-->", end_idx) + 3
-  except ValueError:
-    return None
-  if end_line_end < len(text) and text[end_line_end] == "\n":
-    end_line_end += 1
-  return start_idx, end_line_end, old_version
-
-
-def _find_reference_markers(text):
-  """Find reference-style markers (<!-- memori:reference --> ... <!-- memori:reference:end -->).
-
-  Returns:
-    Tuple of (start_idx, end_idx) if markers found, None otherwise.
-  """
-  start_idx = text.find(SNIPPET_REFERENCE_START)
-  if start_idx == -1:
-    return None
-  start_line_end = start_idx + len(SNIPPET_REFERENCE_START)
-  # Skip to end of start line
-  if start_line_end < len(text) and text[start_line_end] == "\n":
-    start_line_end += 1
-  # Find end marker
-  end_idx = text.find(SNIPPET_REFERENCE_END, start_line_end)
-  if end_idx == -1:
-    return None
-  end_line_end = end_idx + len(SNIPPET_REFERENCE_END)
-  if end_line_end < len(text) and text[end_line_end] == "\n":
-    end_line_end += 1
-  return start_idx, end_line_end
-
-
-def _json_indent(args):
-  """Return indent level for JSON output: None for --raw, 2 otherwise."""
-  return None if getattr(args, "raw", False) else 2
-
-
-def _parse_date_arg(value, use_json=False):
-  """Parse an ISO date string to a Unix timestamp (float)."""
-  try:
-    dt = datetime.fromisoformat(value)
-    if dt.tzinfo is None:
-      dt = dt.replace(tzinfo=timezone.utc)
-    return dt.timestamp()
-  except ValueError:
-    _err("invalid_date", f"Invalid date: '{value}'. Expected ISO format like 2025-01-01 or 2025-01-01T12:00:00",
-         exit_code=2, use_json=use_json)
-
-
-def _resolve_id(db, prefix):
-  """Resolve a prefix to full UUID via get_readonly(). Returns the full ID or the prefix if unresolvable."""
-  mem = db.get_readonly(prefix)
-  return mem["id"] if mem else prefix
-
-
-# -- Commands --
-
-
-def _warn_unknown_type(meta):
-  """Warn if metadata has an unrecognized type value (never reject)."""
-  if meta and isinstance(meta, dict) and "type" in meta:
-    t = meta["type"]
-    if isinstance(t, str) and t not in KNOWN_TYPES:
-      known = ", ".join(sorted(KNOWN_TYPES))
-      print(f"Warning: unknown type '{t}'. Known types: {known}", file=sys.stderr)
-
-
-def cmd_store(args):
-  db = _get_db(args.db, use_json=args.json)
-  meta = _parse_json(args.meta, "--meta", use_json=args.json) if args.meta else None
-  _warn_unknown_type(meta)
-  vector = _parse_json(args.vector, "--vector", use_json=args.json) if args.vector else None
-
-  # Determine dedup threshold
-  dedup_threshold = None
-  if not args.no_dedup:
-    dedup_threshold = args.dedup_threshold
-
-  result = db.insert(
-    args.content,
-    vector=vector,
-    metadata=meta,
-    dedup_threshold=dedup_threshold,
-    no_embed=args.no_embed,
-  )
-
-  mid = result["id"]
-  action = result["action"]
-
-  if args.json:
-    print(json.dumps({"id": mid, "status": action}))
-  else:
-    if action == "deduplicated":
-      print(f"Deduplicated: {mid} (updated existing memory)")
+def _emit(value, as_json):
+    if as_json:
+        print(json.dumps(value, ensure_ascii=False, indent=2))
+    elif isinstance(value, dict) and "note" in value:
+        note = value["note"]
+        print(f"{note['id']}  {note['path']}\n\n{note['content']}")
+        for label in ("outgoing", "backlinks"):
+            if value.get(label):
+                print(f"\n{label.title()}:")
+                for neighbor in value[label]:
+                    print(f"  {neighbor['id']}  {neighbor['path']}")
+        for target in value.get("unresolved", []):
+            print(f"  Unresolved: [[{target}]]")
+    elif isinstance(value, dict) and "matches" in value:
+        if not value["matches"]:
+            print("No matches.")
+        for hit in value["matches"]:
+            note = hit["note"]
+            score = f" [{hit['score']:.4f}]" if hit.get("score") is not None else ""
+            print(f"{note['id']}{score}  {note['path']}\n  {note['content'][:240].replace(chr(10), ' ')}")
+        if value["context"]:
+            print("\nLinked context (one hop):")
+            for hit in value["context"]:
+                print(f"  {hit['note']['id']}  {hit['note']['path']}  via {hit['via']}")
     else:
-      print(f"Stored: {mid}")
+        print(json.dumps(value, ensure_ascii=False, indent=2))
 
 
-def cmd_search(args):
-  db = _get_db(args.db, use_json=args.json)
-  vector = _parse_json(args.vector, "--vector", use_json=args.json) if args.vector else None
-  filt = _parse_json(args.filter, "--filter", use_json=args.json) if args.filter else None
-  text_only = getattr(args, "text_only", False)
-  include_vectors = getattr(args, "include_vectors", False)
-
-  # Parse date range filters
-  before_ts = _parse_date_arg(args.before, use_json=args.json) if getattr(args, "before", None) else None
-  after_ts = _parse_date_arg(args.after, use_json=args.json) if getattr(args, "after", None) else None
-
-  results = _search_or_error(db, use_json=args.json,
-    vector=vector, text=args.text, filter=filt, limit=args.limit,
-    text_only=text_only, before=before_ts, after=after_ts,
-    min_similarity=_cli_similarity(args),
-  )
-
-  if args.json:
-    out = []
-    for r in results:
-      entry = {
-        "id": r["id"],
-        "content": r["content"],
-        "score": r.get("score"),
-        "metadata": r.get("metadata"),
-        "created_at": r.get("created_at"),
-        "access_count": r.get("access_count", 0),
-      }
-      if include_vectors:
-        entry["vector"] = r.get("vector")
-      out.append(entry)
-    print(json.dumps(out, indent=_json_indent(args), default=str))
-  else:
-    if not results:
-      print("No results.")
-      return
-    for r in results:
-      score = f"[{r['score']:.4f}]" if r.get("score") is not None else ""
-      meta = json.dumps(r.get("metadata") or {})
-      access = r.get("access_count", 0)
-      access_str = f" ({access} hits)" if access > 5 else ""
-      print(f"{r['id'][:8]} {score} {r['content']}  meta={meta}{access_str}")
+def _metadata(args):
+    value = json.loads(args.meta) if getattr(args, "meta", None) else {}
+    if not isinstance(value, dict):
+        raise ValueError("--meta must be a JSON object")
+    if getattr(args, "type", None):
+        value["type"] = args.type
+    if getattr(args, "tag", None):
+        value["tags"] = args.tag
+    return value
 
 
-def cmd_get(args):
-  db = _get_db(args.db, use_json=args.json)
-  mem = db.get(args.id)
-  if mem:
-    if not getattr(args, "include_vectors", False):
-      mem.pop("vector", None)
-    print(json.dumps(mem, indent=_json_indent(args), default=str))
-  else:
-    _err("not_found", f"No memory matching '{args.id}' (try 'memori list' to see available memories)",
-         exit_code=1, use_json=args.json, input_id=args.id)
+def _content(args):
+    if args.file:
+        return Path(args.file).read_text(encoding="utf-8")
+    if args.content is None:
+        return None
+    return sys.stdin.read() if args.content == "-" else args.content
+
+
+def cmd_init(args):
+    root = Path(args.vault).expanduser().resolve()
+    PyVault(str(root))
+    ignore = root / ".gitignore"
+    if ignore.is_symlink():
+        raise ValueError("vault .gitignore must not be a symlink")
+    existing = ignore.read_text() if ignore.exists() else ""
+    additions = [line for line in (".memori/", ".fastembed_cache/") if line not in existing.splitlines()]
+    if additions:
+        ignore.write_text(existing + ("\n" if existing and not existing.endswith("\n") else "") + "\n".join(additions) + "\n")
+    if not args.no_git:
+        subprocess.run(["git", "init", "--quiet", str(root)], check=True)
+    _emit({"vault": str(root), "git": not args.no_git}, args.json)
+
+
+def _index_after_write(vault, args, path):
+    try:
+        return vault.index(embeddings=not args.text_only)
+    except RuntimeError as error:
+        raise RuntimeError(f"Markdown was saved at {path}, but indexing failed: {error}. Repair the vault and run memori index; the file write is retained.") from None
+
+
+def cmd_add(args):
+    vault = PyVault(str(Path(args.vault).expanduser()))
+    note = vault.add(_content(args), metadata=_metadata(args))
+    report = _index_after_write(vault, args, note["path"])
+    _emit({"note": note, "index": report}, args.json)
 
 
 def cmd_update(args):
-  db = _get_db(args.db, use_json=args.json)
-  content = args.content
-  meta = _parse_json(args.meta, "--meta", use_json=args.json) if args.meta else None
-  vector = _parse_json(args.vector, "--vector", use_json=args.json) if args.vector else None
+    vault = PyVault(str(Path(args.vault).expanduser()))
+    content = _content(args)
+    meta = _metadata(args)
+    if content is None and not meta:
+        raise ValueError("provide --content, --file, --meta, --type or --tag")
+    note = vault.update(args.id, content=content, metadata=meta or None)
+    report = _index_after_write(vault, args, note["path"])
+    _emit({"note": note, "index": report}, args.json)
 
-  if content is None and meta is None and vector is None:
-    _err("missing_argument", "At least one of --content, --meta, or --vector is required.",
-         exit_code=2, use_json=args.json)
 
-  # Default is merge; --replace switches to full replacement
-  merge = not getattr(args, "replace", False)
+def cmd_archive(args):
+    vault = PyVault(str(Path(args.vault).expanduser()))
+    path = vault.archive(args.id)
+    report = _index_after_write(vault, args, path)
+    _emit({"archived": path, "index": report}, args.json)
 
-  full_id = _resolve_id(db, args.id)
 
-  try:
-    db.update(args.id, content=content, vector=vector, metadata=meta, merge_metadata=merge)
-  except RuntimeError:
-    _err("not_found", f"No memory matching '{args.id}' (try 'memori list' to see available memories)",
-         exit_code=1, use_json=args.json, input_id=args.id)
+def cmd_index(args):
+    report = PyVault(str(Path(args.vault).expanduser())).index(embeddings=not args.text_only)
+    _emit(report, args.json)
 
-  if args.json:
-    print(json.dumps({"id": full_id, "status": "updated"}))
-  else:
-    print(f"Updated {full_id}")
 
+def cmd_search(args):
+    vault = PyVault(str(Path(args.vault).expanduser()))
+    vault.index(embeddings=not args.text_only)
+    result = vault.search(args.query, limit=args.limit, graph_limit=args.graph_limit,
+                          text_only=args.text_only, filter={"type": args.type} if args.type else None,
+                          min_similarity=args.min_similarity)
+    _emit(result, args.json)
 
-def _parse_tag_value(v):
-  """Parse a tag value string into its natural type (bool, int, float, or str)."""
-  if v.lower() == "true":
-    return True
-  if v.lower() == "false":
-    return False
-  try:
-    return int(v)
-  except ValueError:
-    pass
-  try:
-    return float(v)
-  except ValueError:
-    pass
-  return v
 
+def cmd_show(args):
+    vault = PyVault(str(Path(args.vault).expanduser()))
+    vault.index(embeddings=False)
+    _emit(vault.show(args.id, neighbor_limit=args.limit), args.json)
 
-def cmd_tag(args):
-  db = _get_db(args.db, use_json=args.json)
 
-  # Parse key=value pairs with type coercion
-  tags = {}
-  for pair in args.tags:
-    if "=" not in pair:
-      _err("invalid_format", f"Invalid tag format (expected key=value): {pair}",
-           exit_code=2, use_json=args.json)
-    k, v = pair.split("=", 1)
-    tags[k] = _parse_tag_value(v)
-
-  full_id = _resolve_id(db, args.id)
-
-  try:
-    # merge_metadata=True handles the read-modify-write in Rust
-    db.update(args.id, metadata=tags, merge_metadata=True)
-  except RuntimeError:
-    _err("not_found", f"No memory matching '{args.id}' (try 'memori list' to see available memories)",
-         exit_code=1, use_json=args.json, input_id=args.id)
-
-  # Fetch merged result for display (readonly to avoid inflating access_count)
-  mem = db.get_readonly(args.id)
-  merged = mem.get("metadata") or {} if mem else tags
-
-  if args.json:
-    print(json.dumps(merged, indent=_json_indent(args)))
-  else:
-    print(f"Tagged {full_id}: {merged}")
-
-
-def cmd_list(args):
-  db = _get_db(args.db, use_json=args.json)
-  include_vectors = getattr(args, "include_vectors", False)
-
-  # Parse date range filters
-  before_ts = _parse_date_arg(args.before, use_json=args.json) if getattr(args, "before", None) else None
-  after_ts = _parse_date_arg(args.after, use_json=args.json) if getattr(args, "after", None) else None
-
-  results = db.list(
-    type_filter=args.type,
-    sort=args.sort,
-    limit=args.limit,
-    offset=args.offset,
-    before=before_ts,
-    after=after_ts,
-  )
-
-  if args.json:
-    out = []
-    for r in results:
-      entry = {
-        "id": r["id"],
-        "content": r["content"],
-        "metadata": r.get("metadata"),
-        "created_at": r.get("created_at"),
-        "updated_at": r.get("updated_at"),
-        "last_accessed": r.get("last_accessed"),
-        "content_updated_at": r.get("content_updated_at"),
-        "validated_at": r.get("validated_at"),
-        "access_count": r.get("access_count", 0),
-      }
-      if include_vectors:
-        entry["vector"] = r.get("vector")
-      out.append(entry)
-    print(json.dumps(out, indent=_json_indent(args), default=str))
-  else:
-    if not results:
-      print("No memories found.")
-      return
-    for r in results:
-      meta_type = ""
-      meta = r.get("metadata")
-      if meta and isinstance(meta, dict) and "type" in meta:
-        meta_type = f" [{meta['type']}]"
-      access = r.get("access_count", 0)
-      access_str = f" ({access} hits)" if access > 0 else ""
-      content = r["content"][:100] + ("..." if len(r["content"]) > 100 else "")
-      print(f"{r['id'][:8]}{meta_type}{access_str} {content}")
-
-
-def cmd_context(args):
-  import time
-  db = _get_db(args.db, use_json=args.json)
-  topic = args.topic
-  limit = args.limit
-
-  total = db.count()
-
-  # Build search filter (optionally scoped to project)
-  search_filter = None
-  if getattr(args, "project", None):
-    search_filter = {"project": args.project}
-
-  # Relevant matches (always hybrid search -- let Rust handle efficiency)
-  matches = _search_or_error(db, use_json=args.json, text=topic, filter=search_filter, limit=limit,
-                             min_similarity=_cli_similarity(args))
-  # Recent memories (by last update, not creation)
-  recent = db.list(sort="updated", limit=5)
-  # Frequently accessed (only show if any have been accessed)
-  frequent = db.list(sort="count", limit=3)
-  frequent = [r for r in frequent if r.get("access_count", 0) > 0]
-  # Reads and metadata edits cannot hide factually old memories from review.
-  thirty_days_ago = time.time() - 30 * 86400
-  stale = db.stale(before=thirty_days_ago, limit=5)
-  # Type distribution
-  type_dist = db.type_distribution()
-
-  compact = getattr(args, "compact", False)
-
-  if compact or (args.json and compact):
-    # Minimal flat JSON for agent consumption
-    def _compact_entry(r):
-      entry = {"id": r["id"][:8], "content": r["content"]}
-      if r.get("score") is not None:
-        entry["score"] = round(r["score"], 4)
-      meta = r.get("metadata")
-      if meta and isinstance(meta, dict) and "type" in meta:
-        entry["type"] = meta["type"]
-      return entry
-
-    out = {
-      "topic": topic,
-      "total": total,
-      "matches": [_compact_entry(r) for r in matches],
-      "recent": [r["content"][:100] for r in recent],
-      "frequent": [r["content"][:100] for r in frequent],
-      "stale": [r["content"][:100] for r in stale],
-    }
-    print(json.dumps(out, default=str))
-  elif args.json:
-    out = {
-      "topic": topic,
-      "matches": [
-        {"id": r["id"], "content": r["content"], "score": r.get("score"),
-         "metadata": r.get("metadata"), "created_at": r.get("created_at")}
-        for r in matches
-      ],
-      "recent": [
-        {"id": r["id"], "content": r["content"], "metadata": r.get("metadata"),
-         "updated_at": r.get("updated_at")}
-        for r in recent
-      ],
-      "frequent": [
-        {"id": r["id"], "content": r["content"], "access_count": r.get("access_count", 0)}
-        for r in frequent
-      ],
-      "stale": [
-        {"id": r["id"], "content": r["content"], "created_at": r.get("created_at"),
-         "content_updated_at": r.get("content_updated_at"), "validated_at": r.get("validated_at")}
-        for r in stale
-      ],
-      "types": type_dist,
-      "total": total,
-    }
-    print(json.dumps(out, indent=_json_indent(args), default=str))
-  else:
-    # Human-readable markdown sections
-    print(f"## Relevant Memories: \"{topic}\"\n")
-    if matches:
-      for r in matches:
-        score = f" [{r['score']:.4f}]" if r.get("score") is not None else ""
-        content = r["content"][:120] + ("..." if len(r["content"]) > 120 else "")
-        print(f"- {r['id'][:8]}{score} {content}")
-    else:
-      print("  (no matches)")
-
-    print(f"\n## Recent Memories (by last update)\n")
-    if recent:
-      for r in recent:
-        content = r["content"][:100] + ("..." if len(r["content"]) > 100 else "")
-        meta_type = ""
-        meta = r.get("metadata")
-        if meta and isinstance(meta, dict) and "type" in meta:
-          meta_type = f" [{meta['type']}]"
-        print(f"- {r['id'][:8]}{meta_type} {content}")
-    else:
-      print("  (empty)")
-
-    if frequent:
-      print(f"\n## Frequently Accessed\n")
-      for r in frequent:
-        content = r["content"][:100] + ("..." if len(r["content"]) > 100 else "")
-        hits = r.get("access_count", 0)
-        print(f"- {r['id'][:8]} ({hits} hits) {content}")
-
-    if stale:
-      print(f"\n## Stale Memories (content not changed or revalidated in 30+ days)\n")
-      for r in stale:
-        content = r["content"][:100] + ("..." if len(r["content"]) > 100 else "")
-        print(f"- {r['id'][:8]} {content}")
-
-    print(f"\n## Stats\n")
-    print(f"Total: {total} memories")
-    if type_dist:
-      parts = [f"{t}: {c}" for t, c in sorted(type_dist.items(), key=lambda x: -x[1])]
-      print(f"Types: {', '.join(parts)}")
-
-
-def cmd_revalidate(args):
-  db = _get_db(args.db, use_json=args.json)
-  try:
-    db.revalidate(args.id)
-  except RuntimeError as e:
-    message = str(e)
-    kind = "ambiguous_prefix" if "ambiguous" in message else "not_found" if "not found" in message else "database_error"
-    _err(kind, message, use_json=args.json, input_id=args.id)
-  if args.json:
-    print(json.dumps({"id": args.id, "action": "revalidated"}))
-  else:
-    print(f"Revalidated {args.id}")
-
-
-def cmd_embed(args):
-  db = _get_db(args.db, use_json=args.json)
-  stats = db.embedding_stats()
-  total = stats["total"]
-  already_embedded = stats["embedded"]
-  to_embed = total - already_embedded
-
-  if to_embed == 0:
-    if args.json:
-      print(json.dumps({"embedded": 0, "total": total, "skipped": total}))
-    else:
-      print(f"All {total} memories already have embeddings.")
-    return
-
-  if not args.json:
-    print(f"Backfilling embeddings for {to_embed} memories (batch size: {args.batch_size})...")
-
-  processed = db.backfill_embeddings(args.batch_size)
-
-  if args.json:
-    print(json.dumps({
-      "embedded": processed,
-      "total": total,
-      "skipped": already_embedded,
-    }))
-  else:
-    print(f"Embedded {processed}/{total} memories ({already_embedded} already had embeddings)")
-
-
-def cmd_export(args):
-  db = _get_db(args.db, use_json=args.json)
-  include_vectors = args.include_vectors
-  batch_size = 100
-  offset = 0
-
-  while True:
-    batch = db.list(sort="created", limit=batch_size, offset=offset)
-    if not batch:
-      break
-    for r in batch:
-      entry = {
-        "id": r["id"],
-        "content": r["content"],
-        "metadata": r.get("metadata"),
-        "created_at": r.get("created_at"),
-        "updated_at": r.get("updated_at"),
-        "content_updated_at": r.get("content_updated_at"),
-        "validated_at": r.get("validated_at"),
-        "last_accessed": r.get("last_accessed"),
-        "access_count": r.get("access_count", 0),
-        "vector": r.get("vector") if include_vectors else None,
-      }
-      print(json.dumps(entry, default=str))
-    offset += len(batch)
-    if len(batch) < batch_size:
-      break
-
-
-def cmd_import(args):
-  db = _get_db(args.db, use_json=args.json)
-  new_ids = args.new_ids
-  imported = 0
-  errors = 0
-
-  for line in sys.stdin:
-    line = line.strip()
-    if not line:
-      continue
-    try:
-      entry = json.loads(line)
-      content = entry["content"]
-      metadata = entry.get("metadata")
-      vector = entry.get("vector")
-      created_at = entry.get("created_at")
-      updated_at = entry.get("updated_at")
-
-      last_accessed = entry.get("last_accessed")
-      access_count = entry.get("access_count", 0)
-
-      import uuid
-      mem_id = db.insert_with_id(
-        str(uuid.uuid4()) if new_ids else entry["id"], content,
-        vector=vector, metadata=metadata,
-        created_at=created_at, updated_at=updated_at,
-        content_updated_at=entry.get("content_updated_at"),
-        validated_at=entry.get("validated_at"),
-      )
-
-      # Restore access stats if present in export
-      if last_accessed is not None or access_count > 0:
-        db.set_access_stats(mem_id, last_accessed=last_accessed, access_count=access_count)
-
-      imported += 1
-    except Exception as e:
-      errors += 1
-      if not args.json:
-        print(f"Error on line {imported + errors}: {e}", file=sys.stderr)
-
-  if args.json:
-    print(json.dumps({"imported": imported, "errors": errors}))
-  else:
-    print(f"Imported {imported} memories ({errors} errors)")
-
-
-def cmd_purge(args):
-  db = _get_db(args.db, use_json=args.json)
-
-  if not args.before and not args.type:
-    _err("missing_argument", "At least one of --before or --type is required.",
-         exit_code=2, use_json=args.json)
-
-  before_ts = _parse_date_arg(args.before, use_json=args.json) if args.before else None
-
-  if args.confirm:
-    # Actually delete (AND logic when both flags present, matching preview)
-    if before_ts is not None and args.type:
-      to_delete = db.list(type_filter=args.type, sort="created", limit=1_000_000, before=before_ts)
-      for mem in to_delete:
-        db.delete(mem["id"])
-      total_deleted = len(to_delete)
-    elif before_ts is not None:
-      total_deleted = db.delete_before(before_ts)
-    elif args.type:
-      total_deleted = db.delete_by_type(args.type)
-    else:
-      total_deleted = 0
-
-    criteria = {}
-    if args.before:
-      criteria["before"] = args.before
-    if args.type:
-      criteria["type"] = args.type
-
-    if args.json:
-      print(json.dumps({"action": "deleted", "count": total_deleted, "criteria": criteria}))
-    else:
-      print(f"Deleted {total_deleted} memories")
-  else:
-    # Dry-run: preview what would be deleted (uses list, not search -- no vector overhead)
-    preview_items = db.list(
-      type_filter=args.type,
-      sort="created",
-      limit=1_000_000,
-      before=before_ts,
-    )
-    preview_count = len(preview_items)
-
-    criteria = {}
-    if args.before:
-      criteria["before"] = args.before
-    if args.type:
-      criteria["type"] = args.type
-
-    if args.json:
-      print(json.dumps({"action": "preview", "count": preview_count, "criteria": criteria}))
-    else:
-      print(f"Would delete {preview_count} memories (dry-run)")
-      if preview_items:
-        print("Preview (first 10):")
-        for r in preview_items[:10]:
-          content = r["content"][:80] + ("..." if len(r["content"]) > 80 else "")
-          print(f"  {r['id'][:8]} {content}")
-      print("\nRe-run with --confirm to delete.")
-
-
-def cmd_related(args):
-  db = _get_db(args.db, use_json=args.json)
-  include_vectors = getattr(args, "include_vectors", False)
-  min_similarity = _cli_similarity(args)
-  try:
-    results = db.related(args.id, limit=args.limit, min_similarity=min_similarity)
-  except RuntimeError as e:
-    err_msg = str(e)
-    if "similarity" in err_msg:
-      _err("invalid_similarity", err_msg, exit_code=2, use_json=args.json)
-    elif "no embedding" in err_msg:
-      error_type = "no_embedding"
-      hint = " (run 'memori embed' to generate embeddings)"
-    elif "ambiguous" in err_msg:
-      error_type = "ambiguous_prefix"
-      hint = " (use a longer prefix to disambiguate)"
-    else:
-      error_type = "not_found"
-      hint = " (try 'memori list' to see available memories)"
-    _err(error_type, err_msg + hint, exit_code=1, use_json=args.json, input_id=args.id)
-
-  if args.json:
-    out = []
-    for r in results:
-      entry = {
-        "id": r["id"],
-        "content": r["content"],
-        "score": r.get("score"),
-        "metadata": r.get("metadata"),
-        "created_at": r.get("created_at"),
-        "access_count": r.get("access_count", 0),
-      }
-      if include_vectors:
-        entry["vector"] = r.get("vector")
-      out.append(entry)
-    print(json.dumps(out, indent=_json_indent(args), default=str))
-  else:
-    if not results:
-      print("No related memories found.")
-      return
-    for r in results:
-      score = f"[{r['score']:.4f}]" if r.get("score") is not None else ""
-      meta = json.dumps(r.get("metadata") or {})
-      content = r["content"][:100] + ("..." if len(r["content"]) > 100 else "")
-      print(f"{r['id'][:8]} {score} {content}  meta={meta}")
-
-
-def cmd_delete(args):
-  db = _get_db(args.db, use_json=args.json)
-  full_id = _resolve_id(db, args.id)
-  try:
-    db.delete(args.id)
-  except RuntimeError:
-    _err("not_found", f"No memory matching '{args.id}' (try 'memori list' to see available memories)",
-         exit_code=1, use_json=args.json, input_id=args.id)
-  if args.json:
-    print(json.dumps({"id": full_id, "status": "deleted"}))
-  else:
-    print(f"Deleted {full_id}")
-
-
-def cmd_count(args):
-  db = _get_db(args.db, use_json=args.json)
-  count = db.count()
-  if args.json:
-    print(json.dumps({"count": count}))
-  else:
-    print(count)
-
-
-def cmd_stats(args):
-  db_path = args.db or DEFAULT_DB
-  db = _get_db(db_path)
-  count = db.count()
-
-  # DB file size
-  try:
-    size_bytes = os.path.getsize(db_path)
-    if size_bytes < 1024:
-      size_str = f"{size_bytes} B"
-    elif size_bytes < 1024 * 1024:
-      size_str = f"{size_bytes / 1024:.1f} KB"
-    else:
-      size_str = f"{size_bytes / (1024 * 1024):.1f} MB"
-  except OSError:
-    size_str = "unknown"
-
-  # Metadata type distribution via SQL (O(1) vs old O(N) Python loop)
-  type_counts = db.type_distribution()
-
-  # Embedding coverage
-  embed_stats = db.embedding_stats()
-  embedded = embed_stats["embedded"]
-  total = embed_stats["total"]
-
-  if args.json:
-    print(json.dumps({
-      "db_path": db_path,
-      "count": count,
-      "file_size": size_str,
-      "types": type_counts,
-      "embedded": embedded,
-      "embedding_coverage": f"{embedded}/{total}" if total > 0 else "0/0",
-    }, indent=_json_indent(args)))
-  else:
-    print(f"Database:  {db_path}")
-    print(f"Memories:  {count}")
-    print(f"File size: {size_str}")
-    if total > 0:
-      pct = embedded * 100 // total
-      print(f"Embedded:  {embedded}/{total} ({pct}%)")
-    if type_counts:
-      print("Types:")
-      for t, c in sorted(type_counts.items(), key=lambda x: -x[1]):
-        print(f"  {t}: {c}")
-
-
-def cmd_gc(args):
-  db_path = args.db or DEFAULT_DB
-  try:
-    size_before = os.path.getsize(db_path)
-  except OSError:
-    size_before = 0
-
-  db = _get_db(db_path)
-  db.vacuum()
-
-  try:
-    size_after = os.path.getsize(db_path)
-  except OSError:
-    size_after = 0
-
-  saved = size_before - size_after
-  if args.json:
-    print(json.dumps({
-      "before_bytes": size_before,
-      "after_bytes": size_after,
-      "saved_bytes": saved,
-    }, indent=_json_indent(args)))
-  else:
-    def fmt(b):
-      if b < 1024:
-        return f"{b} B"
-      elif b < 1024 * 1024:
-        return f"{b / 1024:.1f} KB"
-      return f"{b / (1024 * 1024):.1f} MB"
-    print(f"Compacted: {fmt(size_before)} -> {fmt(size_after)} (saved {fmt(saved)})")
+def _skill_text(name):
+    return (Path(__file__).parent / "data" / name / "SKILL.md").read_text(encoding="utf-8")
 
 
 def cmd_setup(args):
-  if args.show:
-    print(_snippet_text())
-    return
-
-  # Target: snippet file at ~/.claude/tools/memori/SNIPPET.md
-  snippet_target = Path.home() / ".claude" / "tools" / "memori" / "SNIPPET.md"
-  snippet_target.parent.mkdir(parents=True, exist_ok=True)
-
-  # Find CLAUDE.md for the reference pointer
-  claude_candidates = [
-    Path.cwd() / "CLAUDE.md",
-    Path.home() / ".claude" / "CLAUDE.md",
-  ]
-  claude_target = None
-  for c in claude_candidates:
-    if c.exists():
-      claude_target = c
-      break
-
-  if claude_target is None:
-    # Default to ~/.claude/CLAUDE.md (create it)
-    claude_target = Path.home() / ".claude" / "CLAUDE.md"
-    claude_target.parent.mkdir(parents=True, exist_ok=True)
-
-  snippet_content = snippet_target.read_text() if snippet_target.exists() else ""
-  claude_content = claude_target.read_text() if claude_target.exists() else ""
-
-  if args.undo:
-    # Remove pointer from CLAUDE.md
-    markers = _find_reference_markers(claude_content)
-    if markers is not None:
-      start_idx, end_idx = markers
-      claude_content = claude_content[:start_idx] + claude_content[end_idx:]
-      claude_target.write_text(claude_content)
-    # Remove snippet file
-    if snippet_target.exists():
-      snippet_target.unlink()
-    print(f"Removed memori configuration from {claude_target} and {snippet_target}")
-    return
-
-  # Check if snippet file already exists
-  if snippet_target.exists():
-    # Extract version from existing snippet
-    snippet_marker_idx = snippet_content.find(SNIPPET_START_PREFIX)
-    old_version = None
-    if snippet_marker_idx != -1:
-      marker_line_end = snippet_content.index("-->", snippet_marker_idx) + 3
-      marker_line = snippet_content[snippet_marker_idx:marker_line_end]
-      if " v" in marker_line:
-        old_version = marker_line.split(" v")[1].rstrip(" ->")
-
-    if old_version == __version__:
-      print(f"Memori already configured at {snippet_target}")
-      return
-
-    # Upgrade: replace snippet file
-    old_v = old_version or "unknown"
-    new_snippet = _snippet_text()
-    snippet_target.write_text(new_snippet)
-    print(f"Updated memori snippet at {snippet_target} (v{old_v} -> v{__version__})")
-    return
-
-  # New setup: write snippet file and add pointer to CLAUDE.md
-  new_snippet = _snippet_text()
-  snippet_target.write_text(new_snippet)
-
-  # Add reference pointer to CLAUDE.md
-  pointer = f"{SNIPPET_REFERENCE_START}\nRead the memori snippet at {snippet_target} for behavioral guidance on when to store/search/tag memories, key commands, and workflows.\n{SNIPPET_REFERENCE_END}\n"
-  separator = "\n" if claude_content and not claude_content.endswith("\n") else ""
-  claude_content += separator + pointer
-  claude_target.write_text(claude_content)
-
-  print(f"Configured memori. Snippet at {snippet_target}, reference in {claude_target}")
+    root = Path(args.project).expanduser().resolve()
+    base = root / (".agents" if args.agent == "codex" else ".claude") / "skills"
+    paths = []
+    for name in ("memori", "dream"):
+        target = base / ("memori-dream" if name == "dream" else "memori") / "SKILL.md"
+        if not target.resolve().is_relative_to(root):
+            raise ValueError(f"skill installation would leave the project: {target}")
+        content = _skill_text(name)
+        if target.exists() and target.read_text() != content and not args.force:
+            raise ValueError(f"{target} differs; inspect it or use --force to replace")
+        paths.append((target, content))
+    for target, content in paths:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+    _emit({"agent": args.agent, "installed": [str(p) for p, _ in paths]}, args.json)
 
 
-class DashboardHandler(BaseHTTPRequestHandler):
-  db = None
-
-  def log_message(self, format, *args):
-    pass  # silence request logs
-
-  def _json_response(self, data, status=200):
-    body = json.dumps(data, default=str).encode()
-    self.send_response(status)
-    self.send_header("Content-Type", "application/json")
-    self.send_header("Content-Length", str(len(body)))
-    self.end_headers()
-    self.wfile.write(body)
-
-  def _html_response(self, html):
-    body = html.encode()
-    self.send_response(200)
-    self.send_header("Content-Type", "text/html; charset=utf-8")
-    self.send_header("Content-Length", str(len(body)))
-    self.end_headers()
-    self.wfile.write(body)
-
-  def do_GET(self):
-    parsed = urlparse(self.path)
-    path = parsed.path
-    qs = parse_qs(parsed.query)
-
-    def qfirst(key, default=None):
-      return qs.get(key, [default])[0]
-
-    if path == "/":
-      data_dir = Path(__file__).parent / "data"
-      html = (data_dir / "dashboard.html").read_text()
-      self._html_response(html)
-
-    elif path == "/api/stats":
-      db = self.db
-      count = db.count()
-      types = db.type_distribution()
-      embed = db.embedding_stats()
-      self._json_response({
-        "count": count,
-        "types": types,
-        "embedding": embed,
-      })
-
-    elif path == "/api/memories" and not path.startswith("/api/memories/"):
-      db = self.db
-      type_filter = qfirst("type")
-      sort = qfirst("sort", "created")
-      limit = int(qfirst("limit", "20"))
-      offset = int(qfirst("offset", "0"))
-      before = float(qfirst("before")) if qfirst("before") else None
-      after = float(qfirst("after")) if qfirst("after") else None
-      results = db.list(
-        type_filter=type_filter, sort=sort,
-        limit=limit, offset=offset, before=before, after=after,
-      )
-      out = []
-      for r in results:
-        r.pop("vector", None)
-        out.append(r)
-      self._json_response(out)
-
-    elif path.startswith("/api/memories/"):
-      mem_id = path[len("/api/memories/"):]
-      if not mem_id:
-        self._json_response({"error": "missing id"}, 400)
-        return
-      mem = self.db.get_readonly(mem_id)
-      if mem:
-        mem.pop("vector", None)
-        self._json_response(mem)
-      else:
-        self._json_response({"error": "not_found"}, 404)
-
-    elif path == "/api/search":
-      db = self.db
-      text = qfirst("text")
-      filt_str = qfirst("filter")
-      filt = json.loads(filt_str) if filt_str else None
-      limit = int(qfirst("limit", "10"))
-      text_only = qfirst("text_only", "false") == "true"
-      before = float(qfirst("before")) if qfirst("before") else None
-      after = float(qfirst("after")) if qfirst("after") else None
-      try:
-        min_similarity = _similarity_value(qfirst("min_similarity"))
-        results = db.search(
-          text=text, filter=filt, limit=limit,
-          text_only=text_only, before=before, after=after,
-          min_similarity=min_similarity,
-        )
-      except (ValueError, RuntimeError) as e:
-        self._json_response({"error": "invalid_search", "message": str(e)}, 400)
-        return
-      out = []
-      for r in results:
-        r.pop("vector", None)
-        out.append(r)
-      self._json_response(out)
-
-    elif path.startswith("/api/related/"):
-      mem_id = path[len("/api/related/"):]
-      limit = int(qfirst("limit", "5"))
-      try:
-        min_similarity = _similarity_value(qfirst("min_similarity"))
-        results = self.db.related(mem_id, limit=limit, min_similarity=min_similarity)
-        out = []
-        for r in results:
-          r.pop("vector", None)
-          out.append(r)
-        self._json_response(out)
-      except ValueError as e:
-        self._json_response({"error": "invalid_similarity", "message": str(e)}, 400)
-      except RuntimeError as e:
-        self._json_response({"error": str(e)}, 400 if "similarity" in str(e) else 404)
-
-    else:
-      self.send_response(404)
-      self.end_headers()
-
-
-def cmd_ui(args):
-  db = _get_db(args.db, use_json=args.json)
-  DashboardHandler.db = db
-  port = args.port
-  server = HTTPServer(("127.0.0.1", port), DashboardHandler)
-  url = f"http://127.0.0.1:{port}"
-  print(f"Memori dashboard: {url}")
-  print("Press Ctrl+C to stop")
-  if not args.no_open:
-    threading.Timer(0.5, lambda: webbrowser.open(url)).start()
-  try:
-    server.serve_forever()
-  except KeyboardInterrupt:
-    print("\nStopped.")
-    server.server_close()
-
-
-# -- Main --
+def cmd_dream(args):
+    from .dream import run_dream
+    result = run_dream(Path(args.vault).expanduser(), args.agent,
+                       timeout=args.timeout, max_notes=args.max_notes, dry_run=args.dry_run)
+    _emit(result, args.json)
 
 
 def main():
-  # Shared parent parser for output format flags (accepted on every subcommand).
-  # SUPPRESS prevents subparser defaults from overriding main parser values,
-  # so both `memori --json search` and `memori search --json` work.
-  output_parser = argparse.ArgumentParser(add_help=False)
-  output_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
-                              help="Machine-readable JSON output")
-  output_parser.add_argument("--raw", action="store_true", default=argparse.SUPPRESS,
-                              help="Compact single-line JSON (no indent). Implies --json")
-
-  parser = argparse.ArgumentParser(
-    prog="memori",
-    description="Memori -- embedded AI agent memory (SQLite + vector search + FTS5)",
-    epilog="Quick start:\n"
-           "  memori context \"<topic>\"                          # start of session\n"
-           "  memori store \"<insight>\" --meta '{\"type\": \"debugging\"}'  # after fixing a bug\n"
-           "  memori search --text \"<query>\"                    # before investigating\n"
-           "  memori tag <id> verified=true priority=1           # enrich with typed tags\n"
-           "  memori setup                                       # auto-configure Claude Code\n"
-           "\nRun 'memori <command> --help' for details and examples on any command.\n"
-           "Known memory types: debugging, decision, architecture, pattern, preference, fact, roadmap, temporary",
-    formatter_class=argparse.RawDescriptionHelpFormatter,
-  )
-  parser.add_argument("--db", help=f"Database path (default: {DEFAULT_DB})")
-  parser.add_argument("--json", action="store_true", help="Machine-readable JSON output")
-  parser.add_argument("--raw", action="store_true",
-                       help="Compact single-line JSON (no indent). Implies --json")
-  parser.add_argument(
-    "--version", action="version",
-    version=f"memori {__version__}",
-  )
-
-  sub = parser.add_subparsers(dest="command", required=True)
-
-  _F = argparse.RawDescriptionHelpFormatter
-
-  # store
-  p_store = sub.add_parser("store", help="Store a memory", parents=[output_parser],
-      epilog="Examples:\n  memori store \"FTS5 hyphens crash MATCH\" --meta '{\"type\": \"debugging\"}'\n  memori store \"prefer dark mode\" --meta '{\"type\": \"preference\"}' --json\n\nKnown types: debugging, decision, architecture, pattern, preference, fact, roadmap, temporary",
-      formatter_class=_F)
-  p_store.add_argument("content", help="Text content to store")
-  p_store.add_argument("--meta", help="JSON metadata object")
-  p_store.add_argument("--vector", help="JSON array of floats")
-  p_store.add_argument("--no-embed", action="store_true",
-                        help="Skip auto-embedding (store without vector)")
-  p_store.add_argument("--no-dedup", action="store_true",
-                        help="Skip deduplication check")
-  p_store.add_argument("--dedup-threshold", type=float, default=DEFAULT_DEDUP_THRESHOLD,
-                        help=f"Cosine similarity threshold for dedup (default: {DEFAULT_DEDUP_THRESHOLD})")
-  p_store.set_defaults(func=cmd_store)
-
-  # search
-  p_search = sub.add_parser("search", help="Search memories", parents=[output_parser],
-      epilog="Examples:\n  memori search --text 'FTS5 crash' --filter '{\"type\": \"debugging\"}'\n  memori search --text 'dark mode' --limit 3 --json\n  memori search --text 'kafka' --text-only --before 2025-01-01",
-      formatter_class=_F)
-  p_search.add_argument("--text", help="Text query (FTS5)")
-  p_search.add_argument("--vector", help="Vector query (JSON float array)")
-  p_search.add_argument("--filter", help="Metadata filter (JSON object)")
-  p_search.add_argument("--limit", type=int, default=10, help="Max results (default: 10)")
-  p_search.add_argument("--text-only", action="store_true",
-                         help="Force FTS5-only search (skip auto-vectorization)")
-  p_search.add_argument("--include-vectors", action="store_true",
-                         help="Include vector data in JSON output (omitted by default)")
-  p_search.add_argument("--before", help="Only memories created before this ISO date")
-  p_search.add_argument("--after", help="Only memories created after this ISO date")
-  p_search.add_argument("--min-similarity", help="Inclusive cosine floor (-1..1) for semantic candidates; literal hybrid matches remain")
-  p_search.set_defaults(func=cmd_search)
-
-  # get
-  p_get = sub.add_parser("get", help="Get memory by ID", parents=[output_parser],
-      epilog="Examples:\n  memori get a1b2c3d4\n  memori get a1b2 --json\n  memori get a1b2c3d4 --include-vectors --json",
-      formatter_class=_F)
-  p_get.add_argument("id")
-  p_get.add_argument("--include-vectors", action="store_true",
-                      help="Include vector data in output (omitted by default to save tokens)")
-  p_get.set_defaults(func=cmd_get)
-
-  p_revalidate = sub.add_parser("revalidate", help="Record explicit verification of a memory's current content", parents=[output_parser])
-  p_revalidate.add_argument("id", help="Memory ID or unique prefix; caller must verify the fact first")
-  p_revalidate.set_defaults(func=cmd_revalidate)
-
-  # update
-  p_update = sub.add_parser("update", help="Update an existing memory", parents=[output_parser],
-      epilog="Examples:\n  memori update a1b2 --content 'corrected text'\n  memori update a1b2 --content 'corrected text' --json\n  memori update a1b2 --meta '{\"verified\": true}'\n  memori update a1b2 --meta '{\"type\": \"fact\"}' --replace",
-      formatter_class=_F)
-  p_update.add_argument("id", help="Memory ID to update")
-  p_update.add_argument("--content", help="New text content")
-  p_update.add_argument("--meta", help="New metadata (JSON object, merged by default)")
-  p_update.add_argument("--vector", help="New vector (JSON float array)")
-  p_update.add_argument("--replace", action="store_true",
-                         help="Replace metadata entirely instead of merging")
-  p_update.set_defaults(func=cmd_update)
-
-  # tag
-  p_tag = sub.add_parser("tag", help="Add key=value tags to memory metadata", parents=[output_parser],
-      epilog="Examples:\n  memori tag a1b2 topic=kafka verified=true\n  memori tag a1b2 priority=1 status=active --json",
-      formatter_class=_F)
-  p_tag.add_argument("id", help="Memory ID to tag")
-  p_tag.add_argument("tags", nargs="+", help="Tags as key=value pairs")
-  p_tag.set_defaults(func=cmd_tag)
-
-  # list
-  p_list = sub.add_parser("list", help="Browse memories with sort and pagination", parents=[output_parser],
-      epilog="Examples:\n  memori list --type debugging --sort count\n  memori list --limit 5 --before 2025-06-01 --json",
-      formatter_class=_F)
-  p_list.add_argument("--type", help="Filter by metadata type")
-  p_list.add_argument("--sort", default="created",
-                       choices=["created", "updated", "accessed", "count"],
-                       help="Sort field (default: created)")
-  p_list.add_argument("--limit", type=int, default=20, help="Max results (default: 20)")
-  p_list.add_argument("--offset", type=int, default=0, help="Pagination offset (default: 0)")
-  p_list.add_argument("--include-vectors", action="store_true",
-                       help="Include vector data in JSON output")
-  p_list.add_argument("--before", help="Only memories created before this ISO date")
-  p_list.add_argument("--after", help="Only memories created after this ISO date")
-  p_list.set_defaults(func=cmd_list)
-
-  # related
-  p_related = sub.add_parser("related", help="Find memories similar to a given memory", parents=[output_parser],
-      epilog="Examples:\n  memori related a1b2c3d4 --limit 3\n  memori related a1b2 --json",
-      formatter_class=_F)
-  p_related.add_argument("id", help="Memory ID (or unique prefix)")
-  p_related.add_argument("--limit", type=int, default=5, help="Max results (default: 5)")
-  p_related.add_argument("--min-similarity", help="Inclusive cosine floor (-1..1); omitted means no threshold")
-  p_related.add_argument("--include-vectors", action="store_true",
-                          help="Include vector data in JSON output")
-  p_related.set_defaults(func=cmd_related)
-
-  # delete
-  p_del = sub.add_parser("delete", help="Delete memory by ID", parents=[output_parser],
-      epilog="Examples:\n  memori delete a1b2c3d4\n  memori delete a1b2 --json",
-      formatter_class=_F)
-  p_del.add_argument("id")
-  p_del.set_defaults(func=cmd_delete)
-
-  # count
-  p_count = sub.add_parser("count", help="Count memories", parents=[output_parser],
-      epilog="Examples:\n  memori count\n  memori count --json",
-      formatter_class=_F)
-  p_count.set_defaults(func=cmd_count)
-
-  # stats
-  p_stats = sub.add_parser("stats", help="Show database stats", parents=[output_parser],
-      epilog="Examples:\n  memori stats\n  memori stats --json",
-      formatter_class=_F)
-  p_stats.set_defaults(func=cmd_stats)
-
-  # context
-  p_context = sub.add_parser("context", help="Load relevant context for a topic", parents=[output_parser],
-      epilog="Examples:\n  memori context 'kafka architecture'\n  memori context 'debugging tips' --compact\n  memori context 'auth' --project myapp --json",
-      formatter_class=_F)
-  p_context.add_argument("topic", help="Topic to search for")
-  p_context.add_argument("--limit", type=int, default=10, help="Max relevant matches")
-  p_context.add_argument("--min-similarity", help="Cosine floor (-1..1) for semantic matches; recent/frequent/stale sections are unchanged")
-  p_context.add_argument("--project", help="Scope search to a project (filters by metadata.project)")
-  p_context.add_argument("--compact", action="store_true",
-                          help="Minimal flat JSON for agent consumption (implies --json)")
-  p_context.set_defaults(func=cmd_context)
-
-  # embed
-  p_embed = sub.add_parser("embed", help="Backfill embeddings for memories without vectors", parents=[output_parser],
-      epilog="Examples:\n  memori embed\n  memori embed --batch-size 100 --json",
-      formatter_class=_F)
-  p_embed.add_argument("--batch-size", type=int, default=50,
-                        help="Number of memories to embed per batch (default: 50)")
-  p_embed.set_defaults(func=cmd_embed)
-
-  # export
-  p_export = sub.add_parser("export", help="Export all memories as JSONL to stdout", parents=[output_parser],
-      epilog="Examples:\n  memori export > backup.jsonl\n  memori export --include-vectors > full-backup.jsonl\n\nOutput is always JSONL (one JSON object per line), regardless of --json flag.",
-      formatter_class=_F)
-  p_export.add_argument("--include-vectors", action="store_true",
-                         help="Include vectors in export (large, re-derivable)")
-  p_export.set_defaults(func=cmd_export)
-
-  # import
-  p_import = sub.add_parser("import", help="Import memories from JSONL on stdin", parents=[output_parser],
-      epilog="Examples:\n  memori import < backup.jsonl\n  memori import --new-ids < backup.jsonl\n  memori import --json < backup.jsonl",
-      formatter_class=_F)
-  p_import.add_argument("--new-ids", action="store_true",
-                         help="Generate fresh IDs instead of preserving originals")
-  p_import.set_defaults(func=cmd_import)
-
-  # purge
-  p_purge = sub.add_parser("purge", help="Bulk delete memories (dry-run by default)", parents=[output_parser],
-      epilog="Examples:\n  memori purge --type temporary\n  memori purge --type scratch --json\n  memori purge --type temporary --confirm\n  memori purge --before 2025-01-01 --type debugging --confirm",
-      formatter_class=_F)
-  p_purge.add_argument("--before", help="Delete memories created before this ISO date")
-  p_purge.add_argument("--type", help="Delete memories with this metadata type")
-  p_purge.add_argument("--confirm", action="store_true",
-                        help="Actually delete (default is dry-run preview)")
-  p_purge.set_defaults(func=cmd_purge)
-
-  # gc
-  p_gc = sub.add_parser("gc", help="Compact database (SQLite VACUUM)", parents=[output_parser],
-      epilog="Examples:\n  memori gc\n  memori gc --json",
-      formatter_class=_F)
-  p_gc.set_defaults(func=cmd_gc)
-
-  # setup
-  p_setup = sub.add_parser("setup", help="Configure Claude Code integration", parents=[output_parser],
-      epilog="Examples:\n  memori setup\n  memori setup --show\n  memori setup --undo",
-      formatter_class=_F)
-  p_setup.add_argument("--show", action="store_true", help="Print snippet without writing")
-  p_setup.add_argument("--undo", action="store_true", help="Remove the snippet")
-  p_setup.set_defaults(func=cmd_setup)
-
-  # ui
-  p_ui = sub.add_parser("ui", help="Open web dashboard", parents=[output_parser],
-      epilog="Examples:\n  memori ui\n  memori ui --port 9000 --no-open",
-      formatter_class=_F)
-  p_ui.add_argument("--port", type=int, default=8899, help="Server port (default: 8899)")
-  p_ui.add_argument("--no-open", action="store_true", help="Don't auto-open browser")
-  p_ui.set_defaults(func=cmd_ui)
-
-  args = parser.parse_args()
-  if args.raw:
-    args.json = True
-  args.func(args)
+    parser = argparse.ArgumentParser(description="Memori 2 — Markdown knowledge vault + hybrid search")
+    parser.add_argument("--vault", default=os.environ.get("MEMORI_VAULT", "memory"), help="Vault directory (default: MEMORI_VAULT or ./memory)")
+    parser.add_argument("--version", action="version", version=f"memori {__version__}")
+    parser.add_argument("--json", action="store_true", help="JSON output; errors go to stderr")
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    sub = parser.add_subparsers(dest="command", required=True)
+    p = sub.add_parser("init", parents=[common], help="Create a vault, ignore its caches and initialize Git")
+    p.add_argument("--no-git", action="store_true"); p.set_defaults(func=cmd_init)
+    for name, function in (("add", cmd_add), ("update", cmd_update)):
+        p = sub.add_parser(name, parents=[common], help="Write an atomic Markdown note" if name == "add" else "Edit a note by stable ID or unique prefix")
+        if name == "update":
+            p.add_argument("id")
+        content = p.add_mutually_exclusive_group(required=name == "add")
+        content.add_argument("content" if name == "add" else "--content", **({"nargs": "?"} if name == "add" else {}), help="Markdown body, or '-' for stdin")
+        content.add_argument("--file", help="Read the Markdown body from a file")
+        p.add_argument("--meta", help="JSON frontmatter fields")
+        p.add_argument("--type", help="Note type, e.g. procedure, decision, fact")
+        p.add_argument("--tag", action="append", help="Tag; repeat for multiple tags")
+        p.add_argument("--text-only", action="store_true", help="Index without generating embeddings")
+        p.set_defaults(func=function)
+    p = sub.add_parser("archive", aliases=["delete"], parents=[common], help="Move the original note to archive/; preserve evidence")
+    p.add_argument("id"); p.add_argument("--text-only", action="store_true"); p.set_defaults(func=cmd_archive)
+    p = sub.add_parser("index", parents=[common], help="Rebuild/synchronize the disposable index from Markdown")
+    p.add_argument("--text-only", action="store_true"); p.set_defaults(func=cmd_index)
+    p = sub.add_parser("search", parents=[common], help="Hybrid recall with optional bounded linked context")
+    p.add_argument("query"); p.add_argument("--limit", type=_positive, default=5)
+    p.add_argument("--graph-limit", type=_positive, default=3, help="Total extra one-hop notes; 0 disables expansion")
+    p.add_argument("--text-only", action="store_true"); p.add_argument("--type")
+    p.add_argument("--min-similarity", type=float, help="Raw cosine floor; literal matches remain eligible")
+    p.set_defaults(func=cmd_search)
+    p = sub.add_parser("show", parents=[common], help="Read Markdown with links and derived backlinks")
+    p.add_argument("id"); p.add_argument("--limit", type=_positive, default=5); p.set_defaults(func=cmd_show)
+    p = sub.add_parser("setup", parents=[common], help="Install shared learning/dream skills for an agent in a project")
+    p.add_argument("--agent", choices=["codex", "claude"], required=True)
+    p.add_argument("--project", default="."); p.add_argument("--force", action="store_true"); p.set_defaults(func=cmd_setup)
+    p = sub.add_parser("dream", parents=[common], help="Run bounded consolidation using an existing headless agent")
+    p.add_argument("--agent", choices=["codex", "claude"], required=True)
+    p.add_argument("--timeout", type=int, default=300, help="Maximum agent runtime in seconds")
+    p.add_argument("--max-notes", type=int, default=20, help="Changed-note batch size")
+    p.add_argument("--dry-run", action="store_true", help="Show candidates and the launcher command without starting an agent")
+    p.set_defaults(func=cmd_dream)
+    args = parser.parse_args()
+    try:
+        args.func(args)
+    except (RuntimeError, ValueError, OSError, subprocess.SubprocessError) as error:
+        if args.json:
+            print(json.dumps({"error": type(error).__name__, "message": str(error)}), file=sys.stderr)
+        else:
+            print(f"Error: {error}", file=sys.stderr)
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
-  main()
+    main()

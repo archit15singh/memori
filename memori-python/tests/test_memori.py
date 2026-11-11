@@ -394,30 +394,3 @@ def test_list_after(db):
     results = db.list(after=ts - 3600, limit=10)
     assert len(results) == 1
     assert results[0]["content"] == "recent memory"
-
-
-# -- v0.5.1 tests: CLI prefix resolution in mutation output --
-
-
-def test_resolve_id_delete(db):
-    """_resolve_id returns full UUID from a prefix, used by cmd_delete."""
-    from memori_cli import _resolve_id
-    mid = db.insert("will be deleted")["id"]
-    prefix = mid[:8]
-    full_id = _resolve_id(db, prefix)
-    assert full_id == mid
-    assert len(full_id) == 36  # full UUID
-
-
-def test_cli_update_resolves_prefix(db):
-    """_resolve_id returns the full UUID from a short prefix."""
-    from memori_cli import _resolve_id
-    mid = db.insert("to update")["id"]
-    prefix = mid[:6]
-    assert _resolve_id(db, prefix) == mid
-
-
-def test_cli_resolve_id_not_found(db):
-    """_resolve_id returns the original prefix when no match."""
-    from memori_cli import _resolve_id
-    assert _resolve_id(db, "nonexistent") == "nonexistent"
