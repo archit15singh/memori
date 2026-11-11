@@ -23,3 +23,5 @@ Literal FTS5 first requires all quoted query terms. If no filtered rows match an
 ## English word forms
 
 Schema v5 uses SQLite's built-in Porter tokenizer over Unicode61 so English variants such as `migration`/`migrating` and `backup`/`backups` can match. Opening a v4 database rebuilds only its derived FTS tokens in a transaction, retaining body and metadata terms, vectors and clocks. Existing wiki links and Markdown are unchanged. Escaping still treats query terms as data; text-only search is token-based, not byte-exact matching. This is English stemming, not multilingual semantic search; accented Latin and CJK literal probes are covered, but broad multilingual quality is unmeasured.
+
+Equal hybrid RRF scores are ordered by semantic-leg rank, then stable note ID. This changes tie order only and makes repeated identical queries deterministic on the same index, clocks and model; it does not make scores probabilities or prevent changes after source/model updates.
