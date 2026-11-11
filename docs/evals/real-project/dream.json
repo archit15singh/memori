@@ -1,0 +1,23 @@
+{
+  "status": "completed",
+  "changed": [
+    "437fbf7d-859a-4e15-8def-6f4a1f14f6a4.md",
+    "release-status.md"
+  ],
+  "baseline": "a69d13d8bac0b5626b18dd923320692da9b15f77",
+  "commit": "2030846566e2bfc9931e8f9848189dd5014723db",
+  "index": {
+    "indexed": 2,
+    "links": 26,
+    "removed": 0,
+    "unchanged": 23,
+    "unresolved": []
+  },
+  "active_before": 25,
+  "active_after": 25,
+  "rollback_commit": "01b92f0477ca3af206707e1cfb143ca141a67380",
+  "restore_commit": "25761de61c9224d3e9f761953a3caafe692569fb",
+  "rollback_exact_bytes": true,
+  "restore_exact_bytes": true,
+  "clean_git": true
+}
