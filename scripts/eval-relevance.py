@@ -11,7 +11,7 @@ from lorevell import PyLorevell
 
 def evaluate(dataset, thresholds, limit):
     db = PyLorevell(":memory:")
-    documents = dataset["lorevelles"]
+    documents = dataset["memories"]
     known_ids = {doc["id"] for doc in documents}
     if len(known_ids) != len(documents):
         raise ValueError("document IDs must be unique")

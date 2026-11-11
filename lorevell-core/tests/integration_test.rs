@@ -510,7 +510,7 @@ fn test_delete_before() {
 
     assert_eq!(db.count().unwrap(), 3);
 
-    // Delete lorevelles created before 30 minutes ago
+    // Delete memories created before 30 minutes ago
     let deleted = db.delete_before(now - 1800.0).unwrap();
     assert_eq!(deleted, 2);
     assert_eq!(db.count().unwrap(), 1);
@@ -1060,7 +1060,7 @@ fn test_prefix_ambiguous() {
         .unwrap()
         .as_secs_f64();
 
-    // Insert two lorevelles with the same 3-char prefix
+    // Insert two memories with the same 3-char prefix
     db.insert_with_id(
         "aaa11111-1111-1111-1111-111111111111",
         "first",

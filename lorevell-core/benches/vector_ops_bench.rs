@@ -58,7 +58,7 @@ fn bench_find_duplicate(c: &mut Criterion) {
             let ts = base_ts + (i as f64);
 
             conn.execute(
-                "INSERT INTO lorevelles (id, content, vector, metadata, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                "INSERT INTO memories (id, content, vector, metadata, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 rusqlite::params![id, content, blob, meta_str, ts, ts],
             ).unwrap();
         }

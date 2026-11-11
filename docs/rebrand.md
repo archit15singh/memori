@@ -32,3 +32,5 @@ Sources: [existing Memori product](https://github.com/MemoriLabs/Memori), [nearb
 ## Rebrand verification
 
 Under the Lorevell identity: Rust release suite 94 passed; no-embedding vault/relevance/freshness suite 24 passed; Python suite 87 passed; formatting, Clippy and shared-skill equality/validation passed. A clean wheel-only installation verified `lorevell 2.0.0`, native imports, `LOREVELL_VAULT`, indexing/search of byte-unchanged pre-rebrand Markdown fixtures, add, both agent skill installations, dream dry-run and `.lorevell/` cache creation. The real authenticated agent evidence remains in the historical 2.0 verification report; this rename does not claim a new live agent experiment.
+
+The renamed low-level binding also opened a disposable SQLite database created by the original Memori binding and retrieved its original record, confirming that product renaming did not rename internal SQL tables.

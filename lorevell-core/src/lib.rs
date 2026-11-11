@@ -1,7 +1,7 @@
 //! Persistent memory for AI coding agents — SQLite + FTS5 + vector search in a single binary.
 //!
 //! `lorevell-core` is the Rust engine behind the `lorevell` Python package and the
-//! `lorevell` CLI. It stores lorevelles (text + 384-dim embeddings + JSON metadata + access
+//! `lorevell` CLI. It stores memories (text + 384-dim embeddings + JSON metadata + access
 //! stats) in one SQLite file with WAL journaling, exposes FTS5 full-text search and
 //! brute-force cosine vector search, and fuses them with Reciprocal Rank Fusion (k=60).
 //!
@@ -208,7 +208,7 @@ impl Lorevell {
         search::related(&self.conn, &full_id, limit)
     }
 
-    /// Related lorevelles with an inclusive raw cosine threshold.
+    /// Related memories with an inclusive raw cosine threshold.
     pub fn related_with_min_similarity(
         &self,
         id: &str,

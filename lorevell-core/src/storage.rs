@@ -32,7 +32,7 @@ fn auto_embed(content: &str, vector: Option<&[f32]>) -> Option<Vec<f32>> {
     }
 }
 
-/// Find a duplicate memory by cosine similarity against existing lorevelles of the same type.
+/// Find a duplicate memory by cosine similarity against existing memories of the same type.
 /// Returns the ID of the best match if similarity exceeds the threshold.
 pub fn find_duplicate(
     conn: &rusqlite::Connection,
@@ -42,11 +42,11 @@ pub fn find_duplicate(
 ) -> Result<Option<String>> {
     let (sql, has_param) = match type_filter {
         Some(_) => (
-            "SELECT id, vector FROM lorevelles WHERE json_extract(metadata, '$.type') = ?1 AND vector IS NOT NULL",
+            "SELECT id, vector FROM memories WHERE json_extract(metadata, '$.type') = ?1 AND vector IS NOT NULL",
             true,
         ),
         None => (
-            "SELECT id, vector FROM lorevelles WHERE vector IS NOT NULL",
+            "SELECT id, vector FROM memories WHERE vector IS NOT NULL",
             false,
         ),
     };
@@ -112,7 +112,7 @@ pub fn insert(
     let metadata_str = metadata.map(|m| m.to_string());
 
     conn.execute(
-        "INSERT INTO lorevelles (id, content, vector, metadata, created_at, updated_at, content_updated_at)
+        "INSERT INTO memories (id, content, vector, metadata, created_at, updated_at, content_updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
         params![id, content, vector_blob, metadata_str, ts, ts],
     )?;
@@ -178,7 +178,7 @@ pub fn insert_with_id_and_freshness(
     let metadata_str = metadata.map(|m| m.to_string());
 
     conn.execute(
-        "INSERT INTO lorevelles (id, content, vector, metadata, created_at, updated_at, content_updated_at, validated_at)
+        "INSERT INTO memories (id, content, vector, metadata, created_at, updated_at, content_updated_at, validated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![
             id,
@@ -198,7 +198,7 @@ pub fn insert_with_id_and_freshness(
 pub fn get(conn: &rusqlite::Connection, id: &str) -> Result<Option<Memory>> {
     let mut stmt = conn.prepare(
         "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count, content_updated_at, validated_at
-         FROM lorevelles WHERE id = ?1",
+         FROM memories WHERE id = ?1",
     )?;
 
     let mut rows = stmt.query(params![id])?;
@@ -267,7 +267,7 @@ pub fn update(
 
     if let Some(content) = content {
         conn.execute(
-            "UPDATE lorevelles SET
+            "UPDATE memories SET
                 content_updated_at = CASE WHEN content != ?1 THEN ?2 ELSE content_updated_at END,
                 validated_at = CASE WHEN content != ?1 THEN NULL ELSE validated_at END,
                 content = ?1, updated_at = ?2 WHERE id = ?3",
@@ -280,7 +280,7 @@ pub fn update(
             if let Some(v) = auto_vec {
                 let blob = vec_to_blob(&v);
                 conn.execute(
-                    "UPDATE lorevelles SET vector = ?1 WHERE id = ?2",
+                    "UPDATE memories SET vector = ?1 WHERE id = ?2",
                     params![blob, id],
                 )?;
             }
@@ -290,7 +290,7 @@ pub fn update(
     if let Some(v) = vector {
         let blob = vec_to_blob(v);
         conn.execute(
-            "UPDATE lorevelles SET vector = ?1, updated_at = ?2 WHERE id = ?3",
+            "UPDATE memories SET vector = ?1, updated_at = ?2 WHERE id = ?3",
             params![blob, ts, id],
         )?;
     }
@@ -307,7 +307,7 @@ pub fn update(
 
         let json_str = final_meta.to_string();
         conn.execute(
-            "UPDATE lorevelles SET metadata = ?1, updated_at = ?2 WHERE id = ?3",
+            "UPDATE memories SET metadata = ?1, updated_at = ?2 WHERE id = ?3",
             params![json_str, ts, id],
         )?;
 
@@ -327,7 +327,7 @@ pub fn update(
             if let Some(v) = auto_vec {
                 let blob = vec_to_blob(&v);
                 conn.execute(
-                    "UPDATE lorevelles SET vector = ?1 WHERE id = ?2",
+                    "UPDATE memories SET vector = ?1 WHERE id = ?2",
                     params![blob, id],
                 )?;
             }
@@ -341,7 +341,7 @@ pub fn update(
 pub fn revalidate(conn: &rusqlite::Connection, id: &str) -> Result<()> {
     let ts = now();
     if conn.execute(
-        "UPDATE lorevelles SET validated_at = ?1, updated_at = ?1 WHERE id = ?2",
+        "UPDATE memories SET validated_at = ?1, updated_at = ?1 WHERE id = ?2",
         params![ts, id],
     )? == 0
     {
@@ -358,7 +358,7 @@ pub fn stale(conn: &rusqlite::Connection, before: f64, limit: usize) -> Result<V
     }
     let mut stmt = conn.prepare(
         "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count, content_updated_at, validated_at
-         FROM lorevelles
+         FROM memories
          WHERE max(content_updated_at, coalesce(validated_at, content_updated_at)) < ?1
          ORDER BY max(content_updated_at, coalesce(validated_at, content_updated_at)), id LIMIT ?2",
     )?;
@@ -370,7 +370,7 @@ pub fn stale(conn: &rusqlite::Connection, before: f64, limit: usize) -> Result<V
 pub fn get_raw(conn: &rusqlite::Connection, id: &str) -> Result<Option<Memory>> {
     let mut stmt = conn.prepare(
         "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count, content_updated_at, validated_at
-         FROM lorevelles WHERE id = ?1",
+         FROM memories WHERE id = ?1",
     )?;
 
     let mut rows = stmt.query(params![id])?;
@@ -383,14 +383,14 @@ pub fn get_raw(conn: &rusqlite::Connection, id: &str) -> Result<Option<Memory>> 
 pub fn touch(conn: &rusqlite::Connection, id: &str) -> Result<()> {
     let ts = now();
     conn.execute(
-        "UPDATE lorevelles SET last_accessed = ?1, access_count = access_count + 1 WHERE id = ?2",
+        "UPDATE memories SET last_accessed = ?1, access_count = access_count + 1 WHERE id = ?2",
         params![ts, id],
     )?;
     Ok(())
 }
 
 pub fn delete(conn: &rusqlite::Connection, id: &str) -> Result<()> {
-    let affected = conn.execute("DELETE FROM lorevelles WHERE id = ?1", params![id])?;
+    let affected = conn.execute("DELETE FROM memories WHERE id = ?1", params![id])?;
     if affected == 0 {
         return Err(LorevellError::NotFound(id.to_string()));
     }
@@ -398,7 +398,7 @@ pub fn delete(conn: &rusqlite::Connection, id: &str) -> Result<()> {
 }
 
 pub fn count(conn: &rusqlite::Connection) -> Result<usize> {
-    let c: i64 = conn.query_row("SELECT COUNT(*) FROM lorevelles", [], |row| row.get(0))?;
+    let c: i64 = conn.query_row("SELECT COUNT(*) FROM memories", [], |row| row.get(0))?;
     Ok(c as usize)
 }
 
@@ -444,7 +444,7 @@ pub fn list(
     let sql =
         format!(
         "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count, content_updated_at, validated_at
-         FROM lorevelles {} ORDER BY {} DESC LIMIT ?{} OFFSET ?{}",
+         FROM memories {} ORDER BY {} DESC LIMIT ?{} OFFSET ?{}",
         where_clause, sort.sql_column(), limit_idx, offset_idx
     );
 
@@ -463,7 +463,7 @@ pub fn list(
 pub fn type_distribution(conn: &rusqlite::Connection) -> Result<HashMap<String, usize>> {
     let mut stmt = conn.prepare(
         "SELECT json_extract(metadata, '$.type') as mtype, COUNT(*) as cnt
-         FROM lorevelles WHERE mtype IS NOT NULL GROUP BY mtype",
+         FROM memories WHERE mtype IS NOT NULL GROUP BY mtype",
     )?;
 
     let mut map = HashMap::new();
@@ -479,7 +479,7 @@ pub fn type_distribution(conn: &rusqlite::Connection) -> Result<HashMap<String, 
 
 pub fn delete_before(conn: &rusqlite::Connection, before_timestamp: f64) -> Result<usize> {
     let affected = conn.execute(
-        "DELETE FROM lorevelles WHERE created_at < ?1",
+        "DELETE FROM memories WHERE created_at < ?1",
         params![before_timestamp],
     )?;
     Ok(affected)
@@ -487,7 +487,7 @@ pub fn delete_before(conn: &rusqlite::Connection, before_timestamp: f64) -> Resu
 
 pub fn delete_by_type(conn: &rusqlite::Connection, type_value: &str) -> Result<usize> {
     let affected = conn.execute(
-        "DELETE FROM lorevelles WHERE json_extract(metadata, '$.type') = ?1",
+        "DELETE FROM memories WHERE json_extract(metadata, '$.type') = ?1",
         params![type_value],
     )?;
     Ok(affected)
@@ -508,7 +508,7 @@ pub fn set_access_stats(
     access_count: i64,
 ) -> Result<()> {
     let affected = conn.execute(
-        "UPDATE lorevelles SET last_accessed = ?1, access_count = ?2 WHERE id = ?3",
+        "UPDATE memories SET last_accessed = ?1, access_count = ?2 WHERE id = ?3",
         params![last_accessed, access_count, id],
     )?;
     if affected == 0 {
@@ -519,17 +519,17 @@ pub fn set_access_stats(
 
 /// Return (embedded_count, total_count) for embedding coverage stats
 pub fn embedding_stats(conn: &rusqlite::Connection) -> Result<(usize, usize)> {
-    let total: i64 = conn.query_row("SELECT COUNT(*) FROM lorevelles", [], |row| row.get(0))?;
+    let total: i64 = conn.query_row("SELECT COUNT(*) FROM memories", [], |row| row.get(0))?;
     let embedded: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM lorevelles WHERE vector IS NOT NULL",
+        "SELECT COUNT(*) FROM memories WHERE vector IS NOT NULL",
         [],
         |row| row.get(0),
     )?;
     Ok((embedded as usize, total as usize))
 }
 
-/// Backfill embeddings for lorevelles that have vector = NULL.
-/// Returns the number of lorevelles processed.
+/// Backfill embeddings for memories that have vector = NULL.
+/// Returns the number of memories processed.
 pub fn backfill_embeddings(conn: &rusqlite::Connection, batch_size: usize) -> Result<usize> {
     #[cfg(not(feature = "embeddings"))]
     {
@@ -543,7 +543,7 @@ pub fn backfill_embeddings(conn: &rusqlite::Connection, batch_size: usize) -> Re
 
         loop {
             let mut stmt =
-                conn.prepare("SELECT id, content FROM lorevelles WHERE vector IS NULL LIMIT ?1")?;
+                conn.prepare("SELECT id, content FROM memories WHERE vector IS NULL LIMIT ?1")?;
             let mut rows = stmt.query(params![batch_size as i64])?;
 
             let mut batch: Vec<(String, String)> = Vec::new();
@@ -563,7 +563,7 @@ pub fn backfill_embeddings(conn: &rusqlite::Connection, batch_size: usize) -> Re
             for ((id, _), embedding) in batch.iter().zip(embeddings.iter()) {
                 let blob = vec_to_blob(embedding);
                 conn.execute(
-                    "UPDATE lorevelles SET vector = ?1 WHERE id = ?2",
+                    "UPDATE memories SET vector = ?1 WHERE id = ?2",
                     params![blob, id],
                 )?;
             }
@@ -583,7 +583,7 @@ pub fn resolve_prefix(conn: &rusqlite::Connection, prefix: &str) -> Result<Strin
         return Ok(prefix.to_string());
     }
 
-    let mut stmt = conn.prepare("SELECT id FROM lorevelles WHERE id LIKE ?1 || '%' LIMIT 2")?;
+    let mut stmt = conn.prepare("SELECT id FROM memories WHERE id LIKE ?1 || '%' LIMIT 2")?;
     let mut rows = stmt.query(params![prefix])?;
 
     let first = match rows.next()? {
@@ -598,7 +598,7 @@ pub fn resolve_prefix(conn: &rusqlite::Connection, prefix: &str) -> Result<Strin
     if rows.next()?.is_some() {
         // Count total matches for the error message
         let count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM lorevelles WHERE id LIKE ?1 || '%'",
+            "SELECT COUNT(*) FROM memories WHERE id LIKE ?1 || '%'",
             params![prefix],
             |row| row.get(0),
         )?;

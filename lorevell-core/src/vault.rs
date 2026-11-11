@@ -170,7 +170,7 @@ impl Vault {
         let mut report = IndexReport::default();
         let mut cached = BTreeMap::new();
         {
-            let mut stmt = conn.prepare("SELECT s.note_id, s.hash, m.vector IS NOT NULL FROM note_sources s JOIN lorevelles m ON m.id=s.note_id")?;
+            let mut stmt = conn.prepare("SELECT s.note_id, s.hash, m.vector IS NOT NULL FROM note_sources s JOIN memories m ON m.id=s.note_id")?;
             let rows = stmt.query_map([], |r| {
                 Ok((
                     r.get::<_, String>(0)?,
@@ -191,7 +191,7 @@ impl Vault {
                 report.unchanged += 1;
             } else {
                 // A changed file replaces its derived record, never another similar note.
-                conn.execute("DELETE FROM lorevelles WHERE id=?1", [&note.id])?;
+                conn.execute("DELETE FROM memories WHERE id=?1", [&note.id])?;
                 let created = note
                     .metadata
                     .get("created_at")
@@ -217,7 +217,7 @@ impl Vault {
                     None
                 };
                 conn.execute(
-                    "INSERT INTO lorevelles (id, content, vector, metadata, created_at, updated_at, content_updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
+                    "INSERT INTO memories (id, content, vector, metadata, created_at, updated_at, content_updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
                     params![note.id, note.content, vector.as_deref().map(crate::util::vec_to_blob), note.metadata.to_string(), created, updated],
                 )?;
                 report.indexed += 1;
@@ -226,7 +226,7 @@ impl Vault {
             cached.remove(&note.id);
         }
         for id in cached.keys() {
-            conn.execute("DELETE FROM lorevelles WHERE id=?1", [id])?;
+            conn.execute("DELETE FROM memories WHERE id=?1", [id])?;
             conn.execute("DELETE FROM note_sources WHERE note_id=?1", [id])?;
             report.removed += 1;
         }

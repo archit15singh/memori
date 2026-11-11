@@ -20,23 +20,23 @@ impl Drop for DatabaseFile {
 fn legacy_database(path: &str) -> Connection {
     let conn = Connection::open(path).unwrap();
     conn.execute_batch(
-        "CREATE TABLE lorevelles (
+        "CREATE TABLE memories (
             id TEXT PRIMARY KEY, content TEXT NOT NULL, vector BLOB, metadata TEXT,
             created_at REAL NOT NULL, updated_at REAL NOT NULL,
             last_accessed REAL DEFAULT 0, access_count INTEGER DEFAULT 0);
-         CREATE VIRTUAL TABLE lorevelles_fts USING fts5(content, content=lorevelles, content_rowid=rowid);
-         CREATE TRIGGER lorevelles_ai AFTER INSERT ON lorevelles BEGIN
-            INSERT INTO lorevelles_fts(rowid, content) VALUES(new.rowid, new.content || ' ' || coalesce(new.metadata, ''));
+         CREATE VIRTUAL TABLE memories_fts USING fts5(content, content=memories, content_rowid=rowid);
+         CREATE TRIGGER memories_ai AFTER INSERT ON memories BEGIN
+            INSERT INTO memories_fts(rowid, content) VALUES(new.rowid, new.content || ' ' || coalesce(new.metadata, ''));
          END;
-         CREATE TRIGGER lorevelles_ad AFTER DELETE ON lorevelles BEGIN
-            INSERT INTO lorevelles_fts(lorevelles_fts,rowid,content) VALUES('delete',old.rowid,old.content || ' ' || coalesce(old.metadata, ''));
+         CREATE TRIGGER memories_ad AFTER DELETE ON memories BEGIN
+            INSERT INTO memories_fts(memories_fts,rowid,content) VALUES('delete',old.rowid,old.content || ' ' || coalesce(old.metadata, ''));
          END;
-         CREATE TRIGGER lorevelles_au AFTER UPDATE ON lorevelles BEGIN
-            INSERT INTO lorevelles_fts(lorevelles_fts,rowid,content) VALUES('delete',old.rowid,old.content || ' ' || coalesce(old.metadata, ''));
-            INSERT INTO lorevelles_fts(rowid,content) VALUES(new.rowid,new.content || ' ' || coalesce(new.metadata, ''));
+         CREATE TRIGGER memories_au AFTER UPDATE ON memories BEGIN
+            INSERT INTO memories_fts(memories_fts,rowid,content) VALUES('delete',old.rowid,old.content || ' ' || coalesce(old.metadata, ''));
+            INSERT INTO memories_fts(rowid,content) VALUES(new.rowid,new.content || ' ' || coalesce(new.metadata, ''));
          END;
-         CREATE INDEX idx_lorevelles_type ON lorevelles(json_extract(metadata, '$.type'));
-         INSERT INTO lorevelles(id,content,created_at,updated_at,last_accessed,access_count)
+         CREATE INDEX idx_memories_type ON memories(json_extract(metadata, '$.type'));
+         INSERT INTO memories(id,content,created_at,updated_at,last_accessed,access_count)
             VALUES('legacy','PostgreSQL architecture',100,200,250,7);
          PRAGMA user_version=3;"
     ).unwrap();
@@ -79,7 +79,7 @@ fn v3_migration_preserves_records_fts_and_access_and_is_idempotent() {
 fn failed_migration_rolls_back_columns_and_version() {
     let conn = legacy_database(":memory:");
     // Force failure at the second ALTER after the first column was added.
-    conn.execute("ALTER TABLE lorevelles ADD COLUMN validated_at REAL", [])
+    conn.execute("ALTER TABLE memories ADD COLUMN validated_at REAL", [])
         .unwrap();
     assert!(schema::init_db(&conn).is_err());
     assert_eq!(
@@ -88,10 +88,10 @@ fn failed_migration_rolls_back_columns_and_version() {
         3
     );
     assert!(conn
-        .prepare("SELECT content_updated_at FROM lorevelles")
+        .prepare("SELECT content_updated_at FROM memories")
         .is_err());
     assert_eq!(
-        conn.query_row("SELECT content FROM lorevelles", [], |row| row
+        conn.query_row("SELECT content FROM memories", [], |row| row
             .get::<_, String>(0))
             .unwrap(),
         "PostgreSQL architecture"
@@ -109,7 +109,7 @@ fn newer_schema_is_rejected_without_creating_tables() {
     ));
     let count: i64 = conn
         .query_row(
-            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='lorevelles'",
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='memories'",
             [],
             |row| row.get(0),
         )
@@ -135,7 +135,7 @@ fn failed_content_and_metadata_update_preserves_clock_and_history() {
     )
     .unwrap();
     let conn = Connection::open(file.path()).unwrap();
-    conn.execute_batch("CREATE TRIGGER reject_metadata BEFORE UPDATE OF metadata ON lorevelles BEGIN SELECT RAISE(ABORT, 'test rejection'); END;").unwrap();
+    conn.execute_batch("CREATE TRIGGER reject_metadata BEFORE UPDATE OF metadata ON memories BEGIN SELECT RAISE(ABORT, 'test rejection'); END;").unwrap();
     assert!(db
         .update(
             "old",

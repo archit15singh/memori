@@ -58,7 +58,7 @@ fn measure_scale(n: usize) {
     let path = format!("/tmp/lorevell-bench-memory-{}.db", n);
     cleanup(&path);
 
-    eprint!("  Seeding {} lorevelles ... ", format_count(n));
+    eprint!("  Seeding {} memories ... ", format_count(n));
 
     let db = Lorevell::open(&path).expect("open failed");
 
@@ -101,7 +101,7 @@ fn measure_scale(n: usize) {
 
 fn main() {
     println!("### Memory Efficiency\n");
-    println!("| Lorevelles | DB Size | Per-Memory | Write Throughput |");
+    println!("| Memories | DB Size | Per-Memory | Write Throughput |");
     println!("|---|---|---|---|");
 
     for &scale in &[1_000, 10_000, 100_000, 500_000, 1_000_000] {

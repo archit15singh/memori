@@ -257,7 +257,7 @@ pub fn random_metadata(rng: &mut StdRng) -> serde_json::Value {
     })
 }
 
-/// Seed an in-memory DB with N lorevelles using insert_with_id (bypasses embedding + dedup).
+/// Seed an in-memory DB with N memories using insert_with_id (bypasses embedding + dedup).
 /// Returns (Lorevell, Vec<id>, Vec<vector>).
 pub fn seed_db(n: usize) -> (Lorevell, Vec<String>, Vec<Vec<f32>>) {
     let mut rng = StdRng::seed_from_u64(42);

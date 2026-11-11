@@ -24,7 +24,7 @@ pub enum LorevellError {
     #[error("not found: {0}")]
     NotFound(String),
 
-    #[error("ambiguous prefix '{0}': matches {1} lorevelles")]
+    #[error("ambiguous prefix '{0}': matches {1} memories")]
     AmbiguousPrefix(String, usize),
 
     #[error("invalid filter key: {0}")]
@@ -82,9 +82,9 @@ pub struct SearchQuery {
     pub limit: usize,
     /// When true, skip auto-vectorization and use FTS5 only for text queries.
     pub text_only: bool,
-    /// Filter: only return lorevelles created before this timestamp (epoch seconds).
+    /// Filter: only return memories created before this timestamp (epoch seconds).
     pub before: Option<f64>,
-    /// Filter: only return lorevelles created after this timestamp (epoch seconds).
+    /// Filter: only return memories created after this timestamp (epoch seconds).
     pub after: Option<f64>,
     /// Inclusive raw cosine floor for semantic candidates, before boost and RRF.
     /// Literal FTS matches remain eligible in hybrid search. None preserves recall.

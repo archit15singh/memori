@@ -127,7 +127,7 @@ fn vector_search(
     let where_clause = filter.map_or(String::new(), |f| format!("WHERE {}", f));
     let sql = format!(
         "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count, content_updated_at, validated_at
-         FROM lorevelles AS m {} ORDER BY rowid",
+         FROM memories AS m {} ORDER BY rowid",
         where_clause
     );
 
@@ -193,18 +193,18 @@ fn text_search(
         format!(
             "SELECT m.id, m.content, m.vector, m.metadata, m.created_at, m.updated_at,
                     m.last_accessed, m.access_count, m.content_updated_at, m.validated_at, fts.rank
-             FROM lorevelles_fts fts
-             JOIN lorevelles m ON m.rowid = fts.rowid
-             WHERE lorevelles_fts MATCH ?1 AND {}
+             FROM memories_fts fts
+             JOIN memories m ON m.rowid = fts.rowid
+             WHERE memories_fts MATCH ?1 AND {}
              ORDER BY fts.rank",
             f
         )
     } else {
         "SELECT m.id, m.content, m.vector, m.metadata, m.created_at, m.updated_at,
                 m.last_accessed, m.access_count, m.content_updated_at, m.validated_at, fts.rank
-         FROM lorevelles_fts fts
-         JOIN lorevelles m ON m.rowid = fts.rowid
-         WHERE lorevelles_fts MATCH ?1
+         FROM memories_fts fts
+         JOIN memories m ON m.rowid = fts.rowid
+         WHERE memories_fts MATCH ?1
          ORDER BY fts.rank"
             .to_string()
     };
@@ -269,16 +269,16 @@ fn hybrid_search(
     }
 
     // Collect all unique candidates
-    let mut all_lorevelles: HashMap<String, Memory> = HashMap::new();
+    let mut all_memories: HashMap<String, Memory> = HashMap::new();
     for m in vec_results {
-        all_lorevelles.insert(m.id.clone(), m);
+        all_memories.insert(m.id.clone(), m);
     }
     for m in text_results {
-        all_lorevelles.entry(m.id.clone()).or_insert(m);
+        all_memories.entry(m.id.clone()).or_insert(m);
     }
 
     // Compute RRF scores (access boost already applied in sub-searches)
-    let mut scored: Vec<(Memory, f32)> = all_lorevelles
+    let mut scored: Vec<(Memory, f32)> = all_memories
         .into_values()
         .map(|m| {
             let vec_rank = vec_ranks.get(&m.id).copied().unwrap_or(candidate_limit + 1);
@@ -311,7 +311,7 @@ fn recent_search(
     let where_clause = filter.map_or(String::new(), |f| format!("WHERE {}", f));
     let sql = format!(
         "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count, content_updated_at, validated_at
-         FROM lorevelles AS m {} ORDER BY updated_at DESC LIMIT ?1",
+         FROM memories AS m {} ORDER BY updated_at DESC LIMIT ?1",
         where_clause
     );
 
@@ -326,7 +326,7 @@ fn recent_search(
     Ok(results)
 }
 
-/// Find lorevelles similar to a given memory by its ID.
+/// Find memories similar to a given memory by its ID.
 /// Uses the source memory's vector to run a vector search, excluding itself.
 pub fn related(conn: &rusqlite::Connection, id: &str, limit: usize) -> Result<Vec<Memory>> {
     related_with_min_similarity(conn, id, limit, None)

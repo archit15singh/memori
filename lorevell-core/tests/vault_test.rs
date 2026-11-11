@@ -80,7 +80,7 @@ fn duplicate_or_malformed_notes_leave_previous_index_unchanged() {
     // Query underlying row counts without reading invalid files through search.
     let conn = rusqlite::Connection::open(t.0.join(".lorevell/index.sqlite")).unwrap();
     let content: String = conn
-        .query_row("SELECT content FROM lorevelles", [], |r| r.get(0))
+        .query_row("SELECT content FROM memories", [], |r| r.get(0))
         .unwrap();
     assert_eq!(content, "retained evidence");
     fs::write(t.0.join("b.md"), "not a note").unwrap();
@@ -90,8 +90,7 @@ fn duplicate_or_malformed_notes_leave_previous_index_unchanged() {
         .to_string()
         .contains("frontmatter"));
     assert_eq!(
-        conn.query_row("SELECT count(*) FROM lorevelles", [], |r| r
-            .get::<_, i64>(0))
+        conn.query_row("SELECT count(*) FROM memories", [], |r| r.get::<_, i64>(0))
             .unwrap(),
         1
     );
