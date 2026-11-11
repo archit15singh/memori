@@ -1,10 +1,10 @@
 # Time semantics: vault and low-level engine
 
-Memori 2.0 retains knowledge in Markdown. Generated notes include finite numeric epoch-second `created_at` and `updated_at` frontmatter. `update` preserves creation time and advances update time. Native file edits preserve whatever metadata the author leaves in the file; reindexing does not invent factual validation. When a timestamp is absent, the file's modification time initializes the derived engine clocks.
+Lorevell 2.0 retains knowledge in Markdown. Generated notes include finite numeric epoch-second `created_at` and `updated_at` frontmatter. `update` preserves creation time and advances update time. Native file edits preserve whatever metadata the author leaves in the file; reindexing does not invent factual validation. When a timestamp is absent, the file's modification time initializes the derived engine clocks.
 
 The current vault uses those source timestamps when populating the existing retrieval engine. Usage counters are not canonical vault knowledge, and rebuilding the cache does not preserve a history of reads. Neither popularity nor recent modification proves a note true. Consolidation flags uncertain or stale claims rather than certifying them automatically.
 
-The retained low-level Rust `Memori` / Python `PyMemori` engine has more detailed clocks for its database API:
+The retained low-level Rust `Lorevell` / Python `PyLorevell` engine has more detailed clocks for its database API:
 
 | Clock | Engine behavior |
 | --- | --- |

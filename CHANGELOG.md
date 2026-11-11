@@ -1,3 +1,13 @@
+# Unreleased — Lorevell rebrand
+
+Memori is now **Lorevell**: local knowledge for humans and agents. Plain Markdown. Yours to keep.
+
+The CLI is `lorevell`, the Python distribution/import is `lorevell`, the Rust package is `lorevell-core`, and the vault override is `LOREVELL_VAULT`. Internal caches now live in `.lorevell/`. This is a complete identity change; old command/import aliases are not installed. Notes and stable IDs remain readable without conversion. See [the rename guide](docs/rebrand.md).
+
+The entries below retain the names used when those changes were made.
+
+---
+
 # 2.0.0 — Markdown knowledge vault
 
 Breaking vault-first release: Markdown notes are authoritative; SQLite is a rebuildable hybrid retrieval index. Adds explicit wiki links/backlinks, bounded one-hop context, shared learning/consolidation skills, and a thin headless dream launcher with incremental batches, byte-preserving archives, scoped Git snapshots/commits and failure-safe acknowledgement. Replaces the 1.x database CLI, dashboard and setup snippet. The existing Rust retrieval engine and low-level Python database binding remain. No automatic 1.x database migration or registry publication is performed by this change.

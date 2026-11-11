@@ -6,7 +6,7 @@ truth judge. Keep consolidation inputs separate from held-out query labels.
 import argparse
 import json
 from pathlib import Path
-from memori import PyVault
+from lorevell import PyVault
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--vault', type=Path, required=True)

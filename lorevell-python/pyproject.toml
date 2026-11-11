@@ -1,0 +1,47 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "lorevell"
+version = "2.0.0"
+description = "Local knowledge for humans and agents. Plain Markdown. Yours to keep."
+requires-python = ">=3.9"
+license = "MIT"
+readme = "../README.md"
+keywords = ["ai", "memory", "vector-search", "sqlite", "agent"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+]
+
+[project.urls]
+Repository = "https://github.com/archit15singh/lorevell"
+Homepage = "https://github.com/archit15singh/lorevell"
+Documentation = "https://github.com/archit15singh/lorevell#readme"
+Changelog = "https://github.com/archit15singh/lorevell/blob/main/CHANGELOG.md"
+
+[project.scripts]
+lorevell = "lorevell_cli:main"
+
+[tool.maturin]
+features = ["pyo3/abi3-py39", "pyo3/extension-module", "embeddings"]
+python-source = "python"
+python-packages = ["lorevell", "lorevell_cli"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+]

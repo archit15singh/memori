@@ -6,12 +6,12 @@ import argparse
 import json
 from pathlib import Path
 
-from memori import PyMemori
+from lorevell import PyLorevell
 
 
 def evaluate(dataset, thresholds, limit):
-    db = PyMemori(":memory:")
-    documents = dataset["memories"]
+    db = PyLorevell(":memory:")
+    documents = dataset["lorevelles"]
     known_ids = {doc["id"] for doc in documents}
     if len(known_ids) != len(documents):
         raise ValueError("document IDs must be unique")

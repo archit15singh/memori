@@ -1,3 +1,5 @@
+> Historical Memori 2.0 record, preserved under its original names. Current commands and package names are documented in [the rename guide](../rebrand.md).
+
 # Memori 2.0 implementation plan
 
 Status: implementation and local verification complete. Delivery and CI state are tracked by the feature branch pull request. Breaking replacement authorized; all work stays on `feat/memori-v2`.
