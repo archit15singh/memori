@@ -27,3 +27,5 @@ Schema v5 uses SQLite's built-in Porter tokenizer over Unicode61 so English vari
 Equal hybrid RRF scores are ordered by semantic-leg rank, then stable note ID. This changes tie order only and makes repeated identical queries deterministic on the same index, clocks and model; it does not make scores probabilities or prevent changes after source/model updates.
 
 A zero result limit does not initialize text embeddings. The CLI still validates and indexes Markdown, but skips embedding generation when `--limit 0` is requested. Positive-limit retrieval behavior is unchanged.
+
+Blank automatic-text queries return no matches in the low-level engine without initializing a model, consistent with keyword search. Omitting text altogether still requests recent records. The vault and CLI continue to reject blank search text with a validation error.
