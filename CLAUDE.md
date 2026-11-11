@@ -32,7 +32,12 @@ python3 scripts/bench-table.py                       # criterion JSON -> markdow
 bash scripts/bench-cli.sh                            # CLI-level timing (needs hyperfine)
 
 # Full verification after changes
-cargo test -p memori-ai-core && cd memori-python && maturin develop && pytest tests/test_memori.py tests/test_cli.py -v
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test -p memori-ai-core --release
+# Create .venv and install maturin + pytest first (see README Testing).
+(cd memori-python && VIRTUAL_ENV="$PWD/../.venv" ../.venv/bin/maturin develop --release)
+.venv/bin/python -m pytest memori-python/tests -v
 ```
 
 CI/CD: `.github/workflows/ci.yml` runs `cargo fmt --check`, `cargo clippy`, `cargo test`, `maturin develop`, and `pytest` on push and PR. `.github/workflows/release.yml` is tag-triggered and publishes wheels to PyPI + the Rust crate to crates.io.

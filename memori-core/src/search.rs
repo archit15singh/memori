@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::storage::{get_raw, row_to_memory};
-use crate::types::{Memory, MemoriError, Result, SearchQuery};
+use crate::types::{MemoriError, Memory, Result, SearchQuery};
 use crate::util::{blob_to_vec, cosine_similarity};
 
 const RRF_K: f32 = 60.0;
@@ -42,9 +42,14 @@ pub fn search(conn: &rusqlite::Connection, query: SearchQuery) -> Result<Vec<Mem
     };
 
     let results = match (&query.vector, &query.text) {
-        (Some(vec), Some(text)) => {
-            hybrid_search(conn, vec, text, combined_filter.as_deref(), query.limit, now)?
-        }
+        (Some(vec), Some(text)) => hybrid_search(
+            conn,
+            vec,
+            text,
+            combined_filter.as_deref(),
+            query.limit,
+            now,
+        )?,
         (Some(vec), None) => {
             vector_search(conn, vec, combined_filter.as_deref(), query.limit, now)?
         }
@@ -55,7 +60,14 @@ pub fn search(conn: &rusqlite::Connection, query: SearchQuery) -> Result<Vec<Mem
                     text_search(conn, text, combined_filter.as_deref(), query.limit, now)?
                 } else {
                     let query_vec = crate::embed::embed_text(text);
-                    hybrid_search(conn, &query_vec, text, combined_filter.as_deref(), query.limit, now)?
+                    hybrid_search(
+                        conn,
+                        &query_vec,
+                        text,
+                        combined_filter.as_deref(),
+                        query.limit,
+                        now,
+                    )?
                 }
             }
             #[cfg(not(feature = "embeddings"))]
@@ -63,9 +75,7 @@ pub fn search(conn: &rusqlite::Connection, query: SearchQuery) -> Result<Vec<Mem
                 text_search(conn, text, combined_filter.as_deref(), query.limit, now)?
             }
         }
-        (None, None) => {
-            recent_search(conn, combined_filter.as_deref(), query.limit)?
-        }
+        (None, None) => recent_search(conn, combined_filter.as_deref(), query.limit)?,
     };
 
     Ok(results)
@@ -243,7 +253,10 @@ fn hybrid_search(
         .into_values()
         .map(|m| {
             let vec_rank = vec_ranks.get(&m.id).copied().unwrap_or(candidate_limit + 1);
-            let text_rank = text_ranks.get(&m.id).copied().unwrap_or(candidate_limit + 1);
+            let text_rank = text_ranks
+                .get(&m.id)
+                .copied()
+                .unwrap_or(candidate_limit + 1);
             let rrf = 1.0 / (RRF_K + vec_rank as f32) + 1.0 / (RRF_K + text_rank as f32);
             (m, rrf)
         })
@@ -287,10 +300,10 @@ fn recent_search(
 /// Find memories similar to a given memory by its ID.
 /// Uses the source memory's vector to run a vector search, excluding itself.
 pub fn related(conn: &rusqlite::Connection, id: &str, limit: usize) -> Result<Vec<Memory>> {
-    let source = get_raw(conn, id)?
-        .ok_or_else(|| MemoriError::NotFound(id.to_string()))?;
+    let source = get_raw(conn, id)?.ok_or_else(|| MemoriError::NotFound(id.to_string()))?;
 
-    let source_vec = source.vector
+    let source_vec = source
+        .vector
         .ok_or_else(|| MemoriError::InvalidVector("memory has no embedding".to_string()))?;
 
     let now = now_secs();
@@ -336,7 +349,10 @@ fn build_filter_clause(filter: &Value) -> Result<String> {
                     }
                     _ => format!("'{}'", val.to_string().replace('\'', "''")),
                 };
-                conditions.push(format!("json_extract(metadata, '$.{}') = {}", key, json_val));
+                conditions.push(format!(
+                    "json_extract(metadata, '$.{}') = {}",
+                    key, json_val
+                ));
             }
             Ok(conditions.join(" AND "))
         }

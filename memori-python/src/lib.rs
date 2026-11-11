@@ -1,3 +1,6 @@
+// PyO3 0.22 generates identity PyErr conversions in its method wrappers.
+#![allow(clippy::useless_conversion)]
+
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -142,7 +145,13 @@ impl PyMemori {
             self.inner
                 .lock()
                 .unwrap()
-                .insert(&content_owned, vector.as_deref(), meta, dedup_threshold, no_embed)
+                .insert(
+                    &content_owned,
+                    vector.as_deref(),
+                    meta,
+                    dedup_threshold,
+                    no_embed,
+                )
                 .map_err(memori_err)
         })?;
 
@@ -158,7 +167,12 @@ impl PyMemori {
     }
 
     fn get_readonly(&self, py: Python<'_>, id: &str) -> PyResult<Option<PyObject>> {
-        let mem = self.inner.lock().unwrap().get_readonly(id).map_err(memori_err)?;
+        let mem = self
+            .inner
+            .lock()
+            .unwrap()
+            .get_readonly(id)
+            .map_err(memori_err)?;
         match mem {
             Some(m) => Ok(Some(memory_to_dict(py, &m)?)),
             None => Ok(None),
@@ -187,6 +201,8 @@ impl PyMemori {
     }
 
     #[pyo3(signature = (vector=None, text=None, filter=None, limit=10, text_only=false, before=None, after=None))]
+    // Arguments expose the existing Python keyword API.
+    #[allow(clippy::too_many_arguments)]
     fn search(
         &self,
         py: Python<'_>,
@@ -209,14 +225,14 @@ impl PyMemori {
             after,
         };
 
-        let results = py.allow_threads(|| {
-            self.inner.lock().unwrap().search(query).map_err(memori_err)
-        })?;
+        let results =
+            py.allow_threads(|| self.inner.lock().unwrap().search(query).map_err(memori_err))?;
 
         results.iter().map(|m| memory_to_dict(py, m)).collect()
     }
 
     #[pyo3(signature = (type_filter=None, sort="created", limit=20, offset=0, before=None, after=None))]
+    #[allow(clippy::too_many_arguments)]
     fn list(
         &self,
         py: Python<'_>,
@@ -227,8 +243,7 @@ impl PyMemori {
         before: Option<f64>,
         after: Option<f64>,
     ) -> PyResult<Vec<PyObject>> {
-        let sort_field = SortField::from_str(sort)
-            .map_err(|e| PyRuntimeError::new_err(e))?;
+        let sort_field = SortField::from_str(sort).map_err(PyRuntimeError::new_err)?;
         let results = self
             .inner
             .lock()

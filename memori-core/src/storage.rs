@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::types::{InsertResult, Memory, MemoriError, Result, SortField};
+use crate::types::{InsertResult, MemoriError, Memory, Result, SortField};
 use crate::util::{blob_to_vec, cosine_similarity, vec_to_blob};
 
 fn now() -> f64 {
@@ -139,7 +139,14 @@ pub fn insert_with_id(
     conn.execute(
         "INSERT INTO memories (id, content, vector, metadata, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![id, content, vector_blob, metadata_str, created_at, updated_at],
+        params![
+            id,
+            content,
+            vector_blob,
+            metadata_str,
+            created_at,
+            updated_at
+        ],
     )?;
 
     Ok(id.to_string())
@@ -334,7 +341,10 @@ pub fn list(
 
     if let Some(tf) = type_filter {
         param_values.push(Box::new(tf.to_string()));
-        conditions.push(format!("json_extract(metadata, '$.type') = ?{}", param_values.len()));
+        conditions.push(format!(
+            "json_extract(metadata, '$.type') = ?{}",
+            param_values.len()
+        ));
     }
     if let Some(b) = before {
         conditions.push(format!("created_at < {}", b));
@@ -355,14 +365,16 @@ pub fn list(
     param_values.push(Box::new(limit as i64));
     param_values.push(Box::new(offset as i64));
 
-    let sql = format!(
+    let sql =
+        format!(
         "SELECT id, content, vector, metadata, created_at, updated_at, last_accessed, access_count
          FROM memories {} ORDER BY {} DESC LIMIT ?{} OFFSET ?{}",
         where_clause, sort.sql_column(), limit_idx, offset_idx
     );
 
     let mut stmt = conn.prepare(&sql)?;
-    let param_refs: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+        param_values.iter().map(|p| p.as_ref()).collect();
     let mut rows = stmt.query(param_refs.as_slice())?;
 
     let mut results = Vec::new();
@@ -454,9 +466,8 @@ pub fn backfill_embeddings(conn: &rusqlite::Connection, batch_size: usize) -> Re
         let mut total_processed = 0usize;
 
         loop {
-            let mut stmt = conn.prepare(
-                "SELECT id, content FROM memories WHERE vector IS NULL LIMIT ?1",
-            )?;
+            let mut stmt =
+                conn.prepare("SELECT id, content FROM memories WHERE vector IS NULL LIMIT ?1")?;
             let mut rows = stmt.query(params![batch_size as i64])?;
 
             let mut batch: Vec<(String, String)> = Vec::new();

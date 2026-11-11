@@ -589,8 +589,14 @@ See [`docs/packaging_dev.md`](docs/packaging_dev.md) for the full open-source pa
 - **CLI** (`memori-python/tests/test_cli.py`): 91 subprocess-based tests. Full command matrix: all 18 subcommands, output modes, error cases, date filtering, dedup behavior, typed tag coercion, purge AND logic.
 
 ```bash
-cargo test -p memori-ai-core
-cd memori-python && maturin develop && pytest tests/test_memori.py tests/test_cli.py -v
+python3 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip maturin pytest
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test -p memori-ai-core --release
+# From the repository root; build the extension from this checkout.
+(cd memori-python && VIRTUAL_ENV="$PWD/../.venv" ../.venv/bin/maturin develop --release)
+.venv/bin/python -m pytest memori-python/tests -v
 ```
 
 ---

@@ -20,8 +20,8 @@ fn bench_insert(c: &mut Criterion) {
                     black_box(&content),
                     None,
                     Some(meta),
-                    None,       // no dedup
-                    true,       // no_embed
+                    None, // no dedup
+                    true, // no_embed
                 )
                 .unwrap()
             })
@@ -85,9 +85,7 @@ fn bench_delete(c: &mut Criterion) {
                     let (db, ids, _vecs) = common::seed_db(s);
                     (db, ids[0].clone())
                 },
-                |(db, id)| {
-                    db.delete(black_box(&id)).unwrap()
-                },
+                |(db, id)| db.delete(black_box(&id)).unwrap(),
                 BatchSize::LargeInput,
             )
         });
@@ -104,7 +102,8 @@ fn bench_list(c: &mut Criterion) {
 
         group.bench_with_input(BenchmarkId::from_parameter(scale), &scale, |bencher, _| {
             bencher.iter(|| {
-                db.list(None, &SortField::Created, 20, 0, None, None).unwrap()
+                db.list(None, &SortField::Created, 20, 0, None, None)
+                    .unwrap()
             })
         });
     }

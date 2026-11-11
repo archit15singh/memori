@@ -10,7 +10,13 @@ fn open_temp() -> Memori {
 fn test_insert_and_get() {
     let db = open_temp();
     let result = db
-        .insert("hello world", None, Some(json!({"tag": "test"})), None, false)
+        .insert(
+            "hello world",
+            None,
+            Some(json!({"tag": "test"})),
+            None,
+            false,
+        )
         .unwrap();
 
     let id = result.id().to_string();
@@ -24,7 +30,9 @@ fn test_insert_and_get() {
 fn test_insert_with_vector() {
     let db = open_temp();
     let vec = vec![1.0, 2.0, 3.0];
-    let result = db.insert("with vector", Some(&vec), None, None, false).unwrap();
+    let result = db
+        .insert("with vector", Some(&vec), None, None, false)
+        .unwrap();
 
     let mem = db.get(result.id()).unwrap().unwrap();
     let stored = mem.vector.unwrap();
@@ -53,7 +61,8 @@ fn test_update_metadata() {
         .insert("test", None, Some(json!({"a": 1})), None, false)
         .unwrap();
     let id = result.id().to_string();
-    db.update(&id, None, None, Some(json!({"b": 2})), false).unwrap();
+    db.update(&id, None, None, Some(json!({"b": 2})), false)
+        .unwrap();
 
     let mem = db.get(&id).unwrap().unwrap();
     assert_eq!(mem.metadata, Some(json!({"b": 2})));
@@ -63,12 +72,19 @@ fn test_update_metadata() {
 fn test_update_metadata_merge() {
     let db = open_temp();
     let result = db
-        .insert("test", None, Some(json!({"type": "fact", "topic": "kafka"})), None, false)
+        .insert(
+            "test",
+            None,
+            Some(json!({"type": "fact", "topic": "kafka"})),
+            None,
+            false,
+        )
         .unwrap();
     let id = result.id().to_string();
 
     // Merge: add "verified" without destroying "type" and "topic"
-    db.update(&id, None, None, Some(json!({"verified": true})), true).unwrap();
+    db.update(&id, None, None, Some(json!({"verified": true})), true)
+        .unwrap();
 
     let mem = db.get(&id).unwrap().unwrap();
     let meta = mem.metadata.unwrap();
@@ -81,12 +97,19 @@ fn test_update_metadata_merge() {
 fn test_update_metadata_merge_overwrites_key() {
     let db = open_temp();
     let result = db
-        .insert("test", None, Some(json!({"type": "fact", "status": "draft"})), None, false)
+        .insert(
+            "test",
+            None,
+            Some(json!({"type": "fact", "status": "draft"})),
+            None,
+            false,
+        )
         .unwrap();
     let id = result.id().to_string();
 
     // Merge with overlapping key: "status" should be overwritten
-    db.update(&id, None, None, Some(json!({"status": "verified"})), true).unwrap();
+    db.update(&id, None, None, Some(json!({"status": "verified"})), true)
+        .unwrap();
 
     let mem = db.get(&id).unwrap().unwrap();
     let meta = mem.metadata.unwrap();
@@ -98,12 +121,19 @@ fn test_update_metadata_merge_overwrites_key() {
 fn test_update_metadata_replace() {
     let db = open_temp();
     let result = db
-        .insert("test", None, Some(json!({"type": "fact", "topic": "kafka"})), None, false)
+        .insert(
+            "test",
+            None,
+            Some(json!({"type": "fact", "topic": "kafka"})),
+            None,
+            false,
+        )
         .unwrap();
     let id = result.id().to_string();
 
     // Replace: only new metadata survives
-    db.update(&id, None, None, Some(json!({"verified": true})), false).unwrap();
+    db.update(&id, None, None, Some(json!({"verified": true})), false)
+        .unwrap();
 
     let mem = db.get(&id).unwrap().unwrap();
     let meta = mem.metadata.unwrap();
@@ -160,7 +190,8 @@ fn test_vector_search_cosine_similarity() {
 
     db.insert("north", Some(&v1), None, None, false).unwrap();
     db.insert("east", Some(&v2), None, None, false).unwrap();
-    db.insert("mostly north", Some(&v3), None, None, false).unwrap();
+    db.insert("mostly north", Some(&v3), None, None, false)
+        .unwrap();
 
     let query = SearchQuery {
         vector: Some(vec![1.0, 0.0, 0.0]),
@@ -191,10 +222,22 @@ fn test_text_search_fts5() {
         false,
     )
     .unwrap();
-    db.insert("a fast red car drives on the highway", None, None, None, false)
-        .unwrap();
-    db.insert("the brown bear sleeps in the forest", None, None, None, false)
-        .unwrap();
+    db.insert(
+        "a fast red car drives on the highway",
+        None,
+        None,
+        None,
+        false,
+    )
+    .unwrap();
+    db.insert(
+        "the brown bear sleeps in the forest",
+        None,
+        None,
+        None,
+        false,
+    )
+    .unwrap();
 
     let query = SearchQuery {
         text: Some("brown".to_string()),
@@ -220,8 +263,14 @@ fn test_hybrid_search() {
         .unwrap();
     db.insert("database optimization", Some(&v2), None, None, false)
         .unwrap();
-    db.insert("machine learning optimization", Some(&v3), None, None, false)
-        .unwrap();
+    db.insert(
+        "machine learning optimization",
+        Some(&v3),
+        None,
+        None,
+        false,
+    )
+    .unwrap();
 
     let query = SearchQuery {
         vector: Some(vec![0.9, 0.1, 0.0]),
@@ -250,8 +299,14 @@ fn test_metadata_filter() {
         false,
     )
     .unwrap();
-    db.insert("fact: earth is round", None, Some(json!({"type": "fact"})), None, false)
-        .unwrap();
+    db.insert(
+        "fact: earth is round",
+        None,
+        Some(json!({"type": "fact"})),
+        None,
+        false,
+    )
+    .unwrap();
     db.insert(
         "preference: vim keys",
         None,
@@ -404,10 +459,22 @@ fn test_insert_with_id() {
 #[test]
 fn test_type_distribution() {
     let db = open_temp();
-    db.insert("pref 1", None, Some(json!({"type": "preference"})), None, false)
-        .unwrap();
-    db.insert("pref 2", None, Some(json!({"type": "preference"})), None, false)
-        .unwrap();
+    db.insert(
+        "pref 1",
+        None,
+        Some(json!({"type": "preference"})),
+        None,
+        false,
+    )
+    .unwrap();
+    db.insert(
+        "pref 2",
+        None,
+        Some(json!({"type": "preference"})),
+        None,
+        false,
+    )
+    .unwrap();
     db.insert("fact 1", None, Some(json!({"type": "fact"})), None, false)
         .unwrap();
     db.insert("no type", None, None, None, false).unwrap();
@@ -427,8 +494,15 @@ fn test_delete_before() {
         .as_secs_f64();
 
     // Insert with old timestamps via insert_with_id
-    db.insert_with_id("old-1", "old memory", None, None, now - 7200.0, now - 7200.0)
-        .unwrap();
+    db.insert_with_id(
+        "old-1",
+        "old memory",
+        None,
+        None,
+        now - 7200.0,
+        now - 7200.0,
+    )
+    .unwrap();
     db.insert_with_id("old-2", "also old", None, None, now - 3600.0, now - 3600.0)
         .unwrap();
     // Recent one via normal insert
@@ -445,10 +519,22 @@ fn test_delete_before() {
 #[test]
 fn test_delete_by_type() {
     let db = open_temp();
-    db.insert("temp 1", None, Some(json!({"type": "temporary"})), None, false)
-        .unwrap();
-    db.insert("temp 2", None, Some(json!({"type": "temporary"})), None, false)
-        .unwrap();
+    db.insert(
+        "temp 1",
+        None,
+        Some(json!({"type": "temporary"})),
+        None,
+        false,
+    )
+    .unwrap();
+    db.insert(
+        "temp 2",
+        None,
+        Some(json!({"type": "temporary"})),
+        None,
+        false,
+    )
+    .unwrap();
     db.insert("fact 1", None, Some(json!({"type": "fact"})), None, false)
         .unwrap();
     db.insert("no type", None, None, None, false).unwrap();
@@ -495,8 +581,14 @@ fn test_fts5_metadata_search() {
         false,
     )
     .unwrap();
-    db.insert("unrelated note", None, Some(json!({"type": "fact"})), None, false)
-        .unwrap();
+    db.insert(
+        "unrelated note",
+        None,
+        Some(json!({"type": "fact"})),
+        None,
+        false,
+    )
+    .unwrap();
 
     // Search for "kafka" which only appears in metadata, not content
     // Use text_only to test pure FTS5 behavior
@@ -537,7 +629,8 @@ fn test_access_count_increments_on_get() {
 fn test_search_does_not_bump_access_count() {
     let db = open_temp();
     let v = vec![1.0, 0.0, 0.0];
-    db.insert("searchable", Some(&v), None, None, false).unwrap();
+    db.insert("searchable", Some(&v), None, None, false)
+        .unwrap();
 
     // Search should NOT touch results (access tracking is only on get())
     let query = SearchQuery {
@@ -562,7 +655,9 @@ fn test_search_does_not_bump_access_count() {
 #[test]
 fn test_last_accessed_timestamp() {
     let db = open_temp();
-    let result = db.insert("test timestamp", None, None, None, false).unwrap();
+    let result = db
+        .insert("test timestamp", None, None, None, false)
+        .unwrap();
     let id = result.id().to_string();
 
     // First get returns pre-touch snapshot (last_accessed=0), but touch fires after
@@ -709,8 +804,15 @@ fn test_search_after_filter() {
 
     db.insert_with_id("old", "old memory", None, None, now - 7200.0, now - 7200.0)
         .unwrap();
-    db.insert_with_id("recent", "recent memory", None, None, now - 60.0, now - 60.0)
-        .unwrap();
+    db.insert_with_id(
+        "recent",
+        "recent memory",
+        None,
+        None,
+        now - 60.0,
+        now - 60.0,
+    )
+    .unwrap();
 
     let query = SearchQuery {
         after: Some(now - 3600.0), // after 1 hour ago
@@ -754,10 +856,24 @@ fn test_search_date_range_with_text() {
         .unwrap()
         .as_secs_f64();
 
-    db.insert_with_id("old-kafka", "kafka architecture old", None, None, now - 7200.0, now - 7200.0)
-        .unwrap();
-    db.insert_with_id("new-kafka", "kafka architecture new", None, None, now - 60.0, now - 60.0)
-        .unwrap();
+    db.insert_with_id(
+        "old-kafka",
+        "kafka architecture old",
+        None,
+        None,
+        now - 7200.0,
+        now - 7200.0,
+    )
+    .unwrap();
+    db.insert_with_id(
+        "new-kafka",
+        "kafka architecture new",
+        None,
+        None,
+        now - 60.0,
+        now - 60.0,
+    )
+    .unwrap();
 
     let query = SearchQuery {
         text: Some("kafka".to_string()),
@@ -788,7 +904,9 @@ fn test_list_basic() {
         .unwrap();
     }
 
-    let results = db.list(None, &SortField::Created, 10, 0, None, None).unwrap();
+    let results = db
+        .list(None, &SortField::Created, 10, 0, None, None)
+        .unwrap();
     assert_eq!(results.len(), 5);
 }
 
@@ -797,16 +915,24 @@ fn test_list_type_filter() {
     let db = open_temp();
     db.insert("fact 1", None, Some(json!({"type": "fact"})), None, false)
         .unwrap();
-    db.insert("pref 1", None, Some(json!({"type": "preference"})), None, false)
-        .unwrap();
+    db.insert(
+        "pref 1",
+        None,
+        Some(json!({"type": "preference"})),
+        None,
+        false,
+    )
+    .unwrap();
     db.insert("fact 2", None, Some(json!({"type": "fact"})), None, false)
         .unwrap();
 
-    let results = db.list(Some("fact"), &SortField::Created, 10, 0, None, None).unwrap();
+    let results = db
+        .list(Some("fact"), &SortField::Created, 10, 0, None, None)
+        .unwrap();
     assert_eq!(results.len(), 2);
-    assert!(results.iter().all(|m| {
-        m.metadata.as_ref().unwrap().get("type").unwrap() == "fact"
-    }));
+    assert!(results
+        .iter()
+        .all(|m| { m.metadata.as_ref().unwrap().get("type").unwrap() == "fact" }));
 }
 
 #[test]
@@ -817,8 +943,12 @@ fn test_list_pagination() {
             .unwrap();
     }
 
-    let page1 = db.list(None, &SortField::Created, 3, 0, None, None).unwrap();
-    let page2 = db.list(None, &SortField::Created, 3, 3, None, None).unwrap();
+    let page1 = db
+        .list(None, &SortField::Created, 3, 0, None, None)
+        .unwrap();
+    let page2 = db
+        .list(None, &SortField::Created, 3, 3, None, None)
+        .unwrap();
     assert_eq!(page1.len(), 3);
     assert_eq!(page2.len(), 3);
     // Pages shouldn't overlap
@@ -830,8 +960,12 @@ fn test_list_pagination() {
 #[test]
 fn test_list_sort_by_access_count() {
     let db = open_temp();
-    let _r1 = db.insert("rarely accessed", None, None, None, false).unwrap();
-    let r2 = db.insert("frequently accessed", None, None, None, false).unwrap();
+    let _r1 = db
+        .insert("rarely accessed", None, None, None, false)
+        .unwrap();
+    let r2 = db
+        .insert("frequently accessed", None, None, None, false)
+        .unwrap();
 
     // Access r2 multiple times
     for _ in 0..5 {
@@ -880,7 +1014,8 @@ fn test_prefix_update() {
     let full_id = result.id().to_string();
     let prefix = &full_id[..8];
 
-    db.update(prefix, Some("updated via prefix"), None, None, false).unwrap();
+    db.update(prefix, Some("updated via prefix"), None, None, false)
+        .unwrap();
     let mem = db.get(&full_id).unwrap().unwrap();
     assert_eq!(mem.content, "updated via prefix");
 }
@@ -911,7 +1046,10 @@ fn test_full_uuid_passthrough() {
 fn test_prefix_not_found() {
     let db = open_temp();
     let mem = db.get("zzz_no_match").unwrap();
-    assert!(mem.is_none(), "non-matching prefix should return None for get");
+    assert!(
+        mem.is_none(),
+        "non-matching prefix should return None for get"
+    );
 }
 
 #[test]
@@ -923,8 +1061,24 @@ fn test_prefix_ambiguous() {
         .as_secs_f64();
 
     // Insert two memories with the same 3-char prefix
-    db.insert_with_id("aaa11111-1111-1111-1111-111111111111", "first", None, None, ts, ts).unwrap();
-    db.insert_with_id("aaa22222-2222-2222-2222-222222222222", "second", None, None, ts, ts).unwrap();
+    db.insert_with_id(
+        "aaa11111-1111-1111-1111-111111111111",
+        "first",
+        None,
+        None,
+        ts,
+        ts,
+    )
+    .unwrap();
+    db.insert_with_id(
+        "aaa22222-2222-2222-2222-222222222222",
+        "second",
+        None,
+        None,
+        ts,
+        ts,
+    )
+    .unwrap();
 
     // 3-char prefix "aaa" is ambiguous
     let result = db.update("aaa", Some("fail"), None, None, false);
@@ -934,7 +1088,10 @@ fn test_prefix_ambiguous() {
     assert!(err_msg.contains("2"));
 
     // But 8-char prefix is unique
-    let mem = db.get("aaa11111").unwrap().expect("8-char prefix should resolve");
+    let mem = db
+        .get("aaa11111")
+        .unwrap()
+        .expect("8-char prefix should resolve");
     assert_eq!(mem.content, "first");
 }
 
@@ -949,8 +1106,12 @@ fn test_decay_recently_accessed_ranks_first() {
         .as_secs_f64();
 
     let v = vec![1.0, 0.0, 0.0]; // identical vectors
-    let r1 = db.insert("old accessed", Some(&v), None, None, false).unwrap();
-    let r2 = db.insert("recently accessed", Some(&v), None, None, false).unwrap();
+    let r1 = db
+        .insert("old accessed", Some(&v), None, None, false)
+        .unwrap();
+    let r2 = db
+        .insert("recently accessed", Some(&v), None, None, false)
+        .unwrap();
 
     // Both get accessed a few times
     for _ in 0..3 {
@@ -959,7 +1120,8 @@ fn test_decay_recently_accessed_ranks_first() {
     }
 
     // Set r1's last_accessed to 200 days ago, r2 to just now
-    db.set_access_stats(r1.id(), Some(ts - 200.0 * 86400.0), 3).unwrap();
+    db.set_access_stats(r1.id(), Some(ts - 200.0 * 86400.0), 3)
+        .unwrap();
     db.set_access_stats(r2.id(), Some(ts), 3).unwrap();
 
     let query = SearchQuery {
@@ -985,14 +1147,15 @@ fn test_related_finds_similar() {
 
     let r1 = db.insert("source", Some(&v1), None, None, false).unwrap();
     db.insert("similar", Some(&v2), None, None, false).unwrap();
-    db.insert("different", Some(&v3), None, None, false).unwrap();
+    db.insert("different", Some(&v3), None, None, false)
+        .unwrap();
 
     let results = db.related(r1.id(), 5).unwrap();
     assert!(!results.is_empty());
     // First result should be the similar one
     assert_eq!(results[0].content, "similar");
     // Self should be excluded
-    assert!(results.iter().all(|r| r.id != r1.id().to_string()));
+    assert!(results.iter().all(|r| r.id != r1.id()));
 }
 
 #[test]
@@ -1000,10 +1163,11 @@ fn test_related_excludes_self() {
     let db = open_temp();
     let v = vec![1.0, 0.0, 0.0];
     let r1 = db.insert("self", Some(&v), None, None, false).unwrap();
-    db.insert("other", Some(&vec![0.9, 0.1, 0.0]), None, None, false).unwrap();
+    db.insert("other", Some(&[0.9, 0.1, 0.0]), None, None, false)
+        .unwrap();
 
     let results = db.related(r1.id(), 10).unwrap();
-    assert!(results.iter().all(|r| r.id != r1.id().to_string()));
+    assert!(results.iter().all(|r| r.id != r1.id()));
 }
 
 #[test]
@@ -1048,10 +1212,20 @@ fn test_list_before_filter() {
         .unwrap()
         .as_secs_f64();
 
-    db.insert_with_id("old-1", "old memory", None, None, now - 7200.0, now - 7200.0).unwrap();
+    db.insert_with_id(
+        "old-1",
+        "old memory",
+        None,
+        None,
+        now - 7200.0,
+        now - 7200.0,
+    )
+    .unwrap();
     db.insert("recent memory", None, None, None, false).unwrap();
 
-    let results = db.list(None, &SortField::Created, 10, 0, Some(now - 3600.0), None).unwrap();
+    let results = db
+        .list(None, &SortField::Created, 10, 0, Some(now - 3600.0), None)
+        .unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].content, "old memory");
 }
@@ -1064,10 +1238,20 @@ fn test_list_after_filter() {
         .unwrap()
         .as_secs_f64();
 
-    db.insert_with_id("old-1", "old memory", None, None, now - 7200.0, now - 7200.0).unwrap();
+    db.insert_with_id(
+        "old-1",
+        "old memory",
+        None,
+        None,
+        now - 7200.0,
+        now - 7200.0,
+    )
+    .unwrap();
     db.insert("recent memory", None, None, None, false).unwrap();
 
-    let results = db.list(None, &SortField::Created, 10, 0, None, Some(now - 3600.0)).unwrap();
+    let results = db
+        .list(None, &SortField::Created, 10, 0, None, Some(now - 3600.0))
+        .unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].content, "recent memory");
 }
@@ -1080,12 +1264,38 @@ fn test_list_combined_type_and_date() {
         .unwrap()
         .as_secs_f64();
 
-    db.insert_with_id("old-fact", "old fact", None, Some(json!({"type": "fact"})), now - 7200.0, now - 7200.0).unwrap();
-    db.insert_with_id("old-pref", "old pref", None, Some(json!({"type": "preference"})), now - 7200.0, now - 7200.0).unwrap();
-    db.insert("new fact", None, Some(json!({"type": "fact"})), None, false).unwrap();
+    db.insert_with_id(
+        "old-fact",
+        "old fact",
+        None,
+        Some(json!({"type": "fact"})),
+        now - 7200.0,
+        now - 7200.0,
+    )
+    .unwrap();
+    db.insert_with_id(
+        "old-pref",
+        "old pref",
+        None,
+        Some(json!({"type": "preference"})),
+        now - 7200.0,
+        now - 7200.0,
+    )
+    .unwrap();
+    db.insert("new fact", None, Some(json!({"type": "fact"})), None, false)
+        .unwrap();
 
     // Only old facts
-    let results = db.list(Some("fact"), &SortField::Created, 10, 0, Some(now - 3600.0), None).unwrap();
+    let results = db
+        .list(
+            Some("fact"),
+            &SortField::Created,
+            10,
+            0,
+            Some(now - 3600.0),
+            None,
+        )
+        .unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].content, "old fact");
 }
@@ -1095,7 +1305,8 @@ fn test_list_combined_type_and_date() {
 #[test]
 fn test_fts5_query_with_quotes() {
     let db = open_temp();
-    db.insert("he said \"hello\" to everyone", None, None, None, false).unwrap();
+    db.insert("he said \"hello\" to everyone", None, None, None, false)
+        .unwrap();
 
     let query = SearchQuery {
         text: Some("\"hello\"".to_string()),
@@ -1110,7 +1321,8 @@ fn test_fts5_query_with_quotes() {
 #[test]
 fn test_fts5_query_with_parentheses() {
     let db = open_temp();
-    db.insert("function call (with args)", None, None, None, false).unwrap();
+    db.insert("function call (with args)", None, None, None, false)
+        .unwrap();
 
     let query = SearchQuery {
         text: Some("(with args)".to_string()),
@@ -1126,7 +1338,14 @@ fn test_fts5_query_with_parentheses() {
 #[test]
 fn test_fts5_query_with_operators() {
     let db = open_temp();
-    db.insert("this AND that OR something NOT else", None, None, None, false).unwrap();
+    db.insert(
+        "this AND that OR something NOT else",
+        None,
+        None,
+        None,
+        false,
+    )
+    .unwrap();
 
     // Searching for "AND" or "OR" should not be interpreted as FTS5 operators
     let query = SearchQuery {
@@ -1142,7 +1361,8 @@ fn test_fts5_query_with_operators() {
 #[test]
 fn test_fts5_query_with_asterisk() {
     let db = open_temp();
-    db.insert("wildcard * pattern matching", None, None, None, false).unwrap();
+    db.insert("wildcard * pattern matching", None, None, None, false)
+        .unwrap();
 
     let query = SearchQuery {
         text: Some("wildcard*".to_string()),
@@ -1157,7 +1377,8 @@ fn test_fts5_query_with_asterisk() {
 #[test]
 fn test_fts5_query_with_colons() {
     let db = open_temp();
-    db.insert("time is 12:30:00 UTC", None, None, None, false).unwrap();
+    db.insert("time is 12:30:00 UTC", None, None, None, false)
+        .unwrap();
 
     let query = SearchQuery {
         text: Some("12:30:00".to_string()),
