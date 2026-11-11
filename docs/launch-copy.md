@@ -1,3 +1,5 @@
+> Historical 1.x material. The current 2.0 contract is in [README.md](../README.md) and [v2.md](v2.md).
+
 # Memori Launch Copy
 
 Ready-to-paste content for each platform. All character limits verified.

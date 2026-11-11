@@ -1,0 +1,10 @@
+{
+  "description": "Synthetic held-out queries and required facts, kept outside the consolidation vault. Scores measure required-fact completeness of the top retrieved note, not model intelligence or production retrieval quality.",
+  "queries": [
+    {"query": "HTTP 429 retry policy", "required": ["retry-after", "idempoten"]},
+    {"query": "retry rate limited requests safely", "required": ["retry-after", "three", "jitter"]},
+    {"query": "transient HTTP 503 retry procedure", "required": ["retry-after", "idempoten", "jitter"]},
+    {"query": "avoid duplicate side effects on retries", "required": ["idempoten", "three"]},
+    {"query": "banana bread ingredients", "required": ["banana", "flour"]}
+  ]
+}

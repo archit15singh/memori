@@ -1,0 +1,148 @@
+{
+  "fixture": "Synthetic held-out queries and required facts, kept outside the consolidation vault. Scores measure required-fact completeness of the top retrieved note, not model intelligence or production retrieval quality.",
+  "before": [
+    {
+      "query": "HTTP 429 retry policy",
+      "required": [
+        "retry-after",
+        "idempoten"
+      ],
+      "id": "retry-procedure",
+      "found": [
+        "idempoten"
+      ],
+      "complete": false
+    },
+    {
+      "query": "retry rate limited requests safely",
+      "required": [
+        "retry-after",
+        "three",
+        "jitter"
+      ],
+      "id": "retry-procedure",
+      "found": [
+        "three",
+        "jitter"
+      ],
+      "complete": false
+    },
+    {
+      "query": "transient HTTP 503 retry procedure",
+      "required": [
+        "retry-after",
+        "idempoten",
+        "jitter"
+      ],
+      "id": "retry-procedure",
+      "found": [
+        "idempoten",
+        "jitter"
+      ],
+      "complete": false
+    },
+    {
+      "query": "avoid duplicate side effects on retries",
+      "required": [
+        "idempoten",
+        "three"
+      ],
+      "id": "retry-procedure",
+      "found": [
+        "idempoten",
+        "three"
+      ],
+      "complete": true
+    },
+    {
+      "query": "banana bread ingredients",
+      "required": [
+        "banana",
+        "flour"
+      ],
+      "id": "bread",
+      "found": [
+        "banana",
+        "flour"
+      ],
+      "complete": true
+    }
+  ],
+  "after": [
+    {
+      "query": "HTTP 429 retry policy",
+      "required": [
+        "retry-after",
+        "idempoten"
+      ],
+      "id": "retry-procedure",
+      "found": [
+        "retry-after",
+        "idempoten"
+      ],
+      "complete": true
+    },
+    {
+      "query": "retry rate limited requests safely",
+      "required": [
+        "retry-after",
+        "three",
+        "jitter"
+      ],
+      "id": "retry-procedure",
+      "found": [
+        "retry-after",
+        "three",
+        "jitter"
+      ],
+      "complete": true
+    },
+    {
+      "query": "transient HTTP 503 retry procedure",
+      "required": [
+        "retry-after",
+        "idempoten",
+        "jitter"
+      ],
+      "id": "retry-procedure",
+      "found": [
+        "retry-after",
+        "idempoten",
+        "jitter"
+      ],
+      "complete": true
+    },
+    {
+      "query": "avoid duplicate side effects on retries",
+      "required": [
+        "idempoten",
+        "three"
+      ],
+      "id": "retry-procedure",
+      "found": [
+        "idempoten",
+        "three"
+      ],
+      "complete": true
+    },
+    {
+      "query": "banana bread ingredients",
+      "required": [
+        "banana",
+        "flour"
+      ],
+      "id": "bread",
+      "found": [
+        "banana",
+        "flour"
+      ],
+      "complete": true
+    }
+  ],
+  "before_complete": 2,
+  "after_complete": 5,
+  "total": 5,
+  "baseline": "9df6a56124e93cb6e9bcdf2f6ab670d261a29000",
+  "consolidation": "c2965175ef3a6d3ecf6a6aca3ba040457203ef9b",
+  "original_archived": true
+}

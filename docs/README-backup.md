@@ -1,3 +1,5 @@
+> Historical 1.x material. The current 2.0 contract is in [README.md](../README.md) and [v2.md](v2.md).
+
 # Memori
 
 Persistent memory for AI coding agents. SQLite + FTS5 + vector search in a single binary.
