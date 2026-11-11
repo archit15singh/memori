@@ -1,0 +1,95 @@
+{
+  "run_id": 43109822635,
+  "head_sha": "1b10145c722d5372a5c2fabec710afc6c403163c",
+  "cold_attempt": 1,
+  "warm_attempt": 2,
+  "cold": {
+    "Python (maturin build + pytest)": {
+      "head_sha": "1b10145c722d5372a5c2fabec710afc6c403163c",
+      "conclusion": "success",
+      "seconds": 220.0,
+      "steps": {
+        "Set up job": 1.0,
+        "Run actions/checkout@v5": 1.0,
+        "Run dtolnay/rust-toolchain@stable": 0.0,
+        "Run actions/setup-python@v5": 1.0,
+        "Run Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0": 0.0,
+        "Install maturin + pytest": 6.0,
+        "maturin develop": 196.0,
+        "Packaged skills are current": 0.0,
+        "pytest": 7.0,
+        "Post Run Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0": 6.0,
+        "Post Run actions/setup-python@v5": 0.0,
+        "Post Run actions/checkout@v5": 0.0,
+        "Complete job": 0.0
+      }
+    },
+    "Rust (fmt, clippy, test)": {
+      "head_sha": "1b10145c722d5372a5c2fabec710afc6c403163c",
+      "conclusion": "success",
+      "seconds": 254.0,
+      "steps": {
+        "Set up job": 1.0,
+        "Run actions/checkout@v5": 1.0,
+        "Run dtolnay/rust-toolchain@stable": 1.0,
+        "Run Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0": 3.0,
+        "cargo fmt": 3.0,
+        "cargo clippy": 58.0,
+        "cargo test": 156.0,
+        "Relevance without embeddings": 20.0,
+        "Freshness without embeddings": 0.0,
+        "Post Run Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0": 9.0,
+        "Post Run actions/checkout@v5": 0.0,
+        "Complete job": 0.0
+      }
+    }
+  },
+  "warm": {
+    "Python (maturin build + pytest)": {
+      "head_sha": "1b10145c722d5372a5c2fabec710afc6c403163c",
+      "conclusion": "success",
+      "seconds": 69.0,
+      "steps": {
+        "Set up job": 2.0,
+        "Run actions/checkout@v5": 1.0,
+        "Run dtolnay/rust-toolchain@stable": 2.0,
+        "Run actions/setup-python@v5": 0.0,
+        "Run Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0": 7.0,
+        "Install maturin + pytest": 8.0,
+        "maturin develop": 37.0,
+        "Packaged skills are current": 0.0,
+        "pytest": 9.0,
+        "Post Run Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0": 0.0,
+        "Post Run actions/setup-python@v5": 0.0,
+        "Post Run actions/checkout@v5": 1.0,
+        "Complete job": 0.0
+      }
+    },
+    "Rust (fmt, clippy, test)": {
+      "head_sha": "1b10145c722d5372a5c2fabec710afc6c403163c",
+      "conclusion": "success",
+      "seconds": 71.0,
+      "steps": {
+        "Set up job": 1.0,
+        "Run actions/checkout@v5": 4.0,
+        "Run dtolnay/rust-toolchain@stable": 4.0,
+        "Run Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0": 13.0,
+        "cargo fmt": 4.0,
+        "cargo clippy": 24.0,
+        "cargo test": 14.0,
+        "Relevance without embeddings": 3.0,
+        "Freshness without embeddings": 0.0,
+        "Post Run Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0": 0.0,
+        "Post Run actions/checkout@v5": 1.0,
+        "Complete job": 0.0
+      }
+    }
+  },
+  "accepted": true,
+  "cold_cache_miss_both_jobs": true,
+  "warm_cache_hit_both_jobs": true,
+  "combined_job_seconds_before": 474.0,
+  "combined_job_seconds_after": 140.0,
+  "reduction_percent": 70.5,
+  "limitations": "One cold/warm pair, queue time excluded; no statistical or universal runtime claim. Test commands and source commit unchanged between attempts."
+}

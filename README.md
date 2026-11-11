@@ -128,6 +128,8 @@ The example has 24 source-grounded maintainer notes and 20 frozen questions. It 
 - [2.0 design and implementation plan](docs/plans/memori-v2.md)
 - [Operational details and limits](docs/v2.md)
 - [Live acceptance evidence](docs/v2-verification.md)
+- [Eval-gated improvement loops](docs/evals/loops/README.md)
+- [Measured CI cache improvement](docs/evals/loops/ci-cache.md)
 - [Relevance semantics](docs/relevance.md)
 - [Native engine time semantics](docs/freshness.md)
 
