@@ -1,18 +1,22 @@
-# Memori 2.0
+# Lorevell
 
-**A local Markdown knowledge vault that agents can search, learn from and consolidate.**
+**Local knowledge for humans and agents. Plain Markdown. Yours to keep.**
 
-Markdown is the source of truth. SQLite is a disposable index. Claude Code or Codex provides the reasoning: Memori does not implement another agent runtime, learning model or orchestration framework.
+Keep useful knowledge in files you can read, edit and carry between tools. Link your notes, search them locally, and let your existing coding agent recall procedures or consolidate discoveries.
+
+Markdown is the source of truth. SQLite is a disposable index. Claude Code or Codex provides the reasoning: Lorevell does not implement another agent runtime, learning model or orchestration framework.
 
 ```mermaid
 flowchart LR
-    Agent[Claude Code / Codex] --> CLI[Memori CLI]
+    Agent[Claude Code / Codex] --> CLI[Lorevell CLI]
     CLI --> Vault[Markdown notes + Git]
     Vault --> Index[Rebuildable SQLite index]
     Index --> Search[Rust FTS5 + local vectors + RRF]
     Search --> Agent
     Dream[Same agent, headless] -->|consolidation skill| Vault
 ```
+
+Formerly Memori. See the [rename guide](docs/rebrand.md) for changed commands, imports and existing vaults.
 
 ## Install from this checkout
 
@@ -21,9 +25,9 @@ These instructions describe the breaking 2.0 interface. The branch does not publ
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install maturin pytest
-(cd memori-python && VIRTUAL_ENV="$PWD/../.venv" ../.venv/bin/maturin develop --release)
+(cd lorevell-python && VIRTUAL_ENV="$PWD/../.venv" ../.venv/bin/maturin develop --release)
 export PATH="$PWD/.venv/bin:$PATH"
-memori --version
+lorevell --version
 ```
 
 Local embedding inference uses AllMiniLM-L6-V2 and may download its model on first use. `--text-only` avoids model inference and supports an offline literal-search workflow.
@@ -31,14 +35,14 @@ Local embedding inference uses AllMiniLM-L6-V2 and may download its model on fir
 ## Start a vault
 
 ```bash
-export MEMORI_VAULT="$PWD/memory"
-memori init
-memori add 'Use a transaction for multi-statement writes that must succeed together.' --type procedure --tag sqlite
-memori search 'atomic database updates'
-memori show <id>
+export LOREVELL_VAULT="$PWD/memory"
+lorevell init
+lorevell add 'Use a transaction for multi-statement writes that must succeed together.' --type procedure --tag sqlite
+lorevell search 'atomic database updates'
+lorevell show <id>
 ```
 
-`--vault <directory>` overrides `MEMORI_VAULT`; without either, the directory is `./memory`. `init` creates the directory, ignores caches and initializes a dedicated Git repository. It does not change your Git identity. `init --no-git` supports a plain vault; dream requires a dedicated Git repository rooted at the vault.
+`--vault <directory>` overrides `LOREVELL_VAULT`; without either, the directory is `./memory`. `init` creates the directory, ignores caches and initializes a dedicated Git repository. It does not change your Git identity. `init --no-git` supports a plain vault; dream requires a dedicated Git repository rooted at the vault.
 
 Each note is ordinary Markdown:
 
@@ -79,29 +83,29 @@ Automatically retry only idempotent operations.
 
 Wiki links resolve by exact stable ID, then vault-relative filename without `.md`, then unique basename. `[[path/note#heading|label]]` is supported. Links in fenced blocks and ordinary inline code are ignored. Backlinks are derived; there is no second file write for each relationship. Missing or ambiguous targets are diagnostics, not invented edges. Graph context is explicit one-hop navigation and is returned separately from ranked matches.
 
-Human edits become searchable after `index`; CLI reads and mutations also synchronize automatically. Native `Vault` / `PyVault` callers explicitly call `index` after mutations or external edits before querying links or search. The index lives in `.memori/index.sqlite`. Close other Memori processes and remove that cache to rebuild it from files. Hidden directories, symlinks and the root `archive/` directory are excluded. Malformed active notes or duplicate IDs abort indexing and preserve the prior cache.
+Human edits become searchable after `index`; CLI reads and mutations also synchronize automatically. Native `Vault` / `PyVault` callers explicitly call `index` after mutations or external edits before querying links or search. The index lives in `.lorevell/index.sqlite`. Close other Lorevell processes and remove that cache to rebuild it from files. Hidden directories, symlinks and the root `archive/` directory are excluded. Malformed active notes or duplicate IDs abort indexing and preserve the prior cache.
 
 ## Let the agent learn
 
 Run `setup` in the project where the agent works. The shared skill asks it to search before investigating, then retain one or two verified reusable lessons after a meaningful discovery. Routine work can save nothing. Commands, their preconditions and evidence belong in ordinary procedure notes. No automatic session recording, transcript ingestion or skill generation is involved.
 
-Skill installation refuses to overwrite customized instructions unless `--force` is explicit. The canonical files are [skills/memori](skills/memori/SKILL.md) and [skills/dream](skills/dream/SKILL.md); identical packaged copies support installed wheels.
+Skill installation refuses to overwrite customized instructions unless `--force` is explicit. The canonical files are [skills/lorevell](skills/lorevell/SKILL.md) and [skills/dream](skills/dream/SKILL.md); identical packaged copies support installed wheels.
 
 ## Consolidate with an existing headless agent
 
 ```bash
 # Configure a Git identity normally if this machine has none.
-memori dream --agent codex --dry-run
-memori dream --agent codex --max-notes 20 --timeout 300
+lorevell dream --agent codex --dry-run
+lorevell dream --agent codex --max-notes 20 --timeout 300
 # Or use an installed Claude Code CLI:
-memori dream --agent claude
+lorevell dream --agent claude
 ```
 
-A dream run processes a bounded batch of files changed since the last successful run. Memori snapshots pending knowledge in Git, invokes one agent, validates/reindexes its edits, and commits the result. The agent improves notes, extracts useful procedures, repairs links and flags uncertainty. Superseded originals must remain in `archive/` or a byte-preserving rename. Validation checks structure, scope and retained originals; it cannot prove semantic truth.
+A dream run processes a bounded batch of files changed since the last successful run. Lorevell snapshots pending knowledge in Git, invokes one agent, validates/reindexes its edits, and commits the result. The agent improves notes, extracts useful procedures, repairs links and flags uncertainty. Superseded originals must remain in `archive/` or a byte-preserving rename. Validation checks structure, scope and retained originals; it cannot prove semantic truth.
 
-Failures and timeouts leave edits available for inspection and do not acknowledge the batch. Pending batches remain pending. `.memori/dream-last.log` records the child output locally. Concurrent dream runs are rejected. Run no other writers during consolidation: the MVP does not merge concurrent native edits.
+Failures and timeouts leave edits available for inspection and do not acknowledge the batch. Pending batches remain pending. `.lorevell/dream-last.log` records the child output locally. Concurrent dream runs are rejected. Run no other writers during consolidation: the MVP does not merge concurrent native edits.
 
-Successful changes are reversible with `git -C "$MEMORI_VAULT" revert <consolidation-commit>`, followed by `memori index`. There is no scheduler service; invoke the command manually or through a scheduler you choose and authorize. Runtime authentication and normal agent permissions remain the responsibility of the existing installed CLI. Memori never passes bypass-permission flags.
+Successful changes are reversible with `git -C "$LOREVELL_VAULT" revert <consolidation-commit>`, followed by `lorevell index`. There is no scheduler service; invoke the command manually or through a scheduler you choose and authorize. Runtime authentication and normal agent permissions remain the responsibility of the existing installed CLI. Lorevell never passes bypass-permission flags.
 
 ## Architecture and verification
 
@@ -114,16 +118,16 @@ Successful changes are reversible with `git -C "$MEMORI_VAULT" revert <consolida
 ```bash
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test -p memori-ai-core --release
-cargo test -p memori-ai-core --no-default-features --release --test vault_test --test relevance_test --test freshness_test
+cargo test -p lorevell-core --release
+cargo test -p lorevell-core --no-default-features --release --test vault_test --test relevance_test --test freshness_test
 python3 scripts/sync-skills.py --check
-PATH="$PWD/.venv/bin:$PATH" .venv/bin/python -m pytest memori-python/tests -v
+PATH="$PWD/.venv/bin:$PATH" .venv/bin/python -m pytest lorevell-python/tests -v
 ```
 
 Tests use real temporary files, SQLite, the native extension and CLI subprocesses. Launcher contract tests use controlled child processes; actual headless Codex runs and the small held-out retrieval experiment are recorded separately. A passing structural check is not proof of autonomous semantic correctness.
 
 ## Breaking changes
 
-2.0 replaces `--db`, `store`, the old multi-section `context`, setup snippet and dashboard with the vault-first interface. It never reads or modifies `~/.claude/memori.db`. Export important 1.x records using the 1.x binary before switching, then turn selected records into atomic Markdown notes; an automatic migration is not included. The old low-level `Memori` / `PyMemori` database engine remains as retrieval plumbing, not as an alternative canonical store for 2.0 vaults.
+2.0 replaces `--db`, `store`, the old multi-section `context`, setup snippet and dashboard with the vault-first interface. It never reads or modifies `~/.claude/lorevell.db`. Export important 1.x records using the 1.x binary before switching, then turn selected records into atomic Markdown notes; an automatic migration is not included. The old low-level `Lorevell` / `PyLorevell` database engine remains as retrieval plumbing, not as an alternative canonical store for 2.0 vaults.
 
 MIT licensed. No graph database, hosted vector store, custom LLM API or orchestration framework is required.

@@ -24,13 +24,13 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: cargo test
-        run: cargo test -p memori-ai-core --release
+        run: cargo test -p lorevell-core --release
 
       - name: Relevance without embeddings
-        run: cargo test -p memori-ai-core --no-default-features --release --test relevance_test --test vault_test
+        run: cargo test -p lorevell-core --no-default-features --release --test relevance_test --test vault_test
 
       - name: Freshness without embeddings
-        run: cargo test -p memori-ai-core --no-default-features --release --test freshness_test
+        run: cargo test -p lorevell-core --no-default-features --release --test freshness_test
 
   python:
     name: Python (maturin build + pytest)
@@ -51,7 +51,7 @@ jobs:
 
       - name: maturin develop
         run: |
-          cd memori-python
+          cd lorevell-python
           VIRTUAL_ENV="$GITHUB_WORKSPACE/.venv" "$GITHUB_WORKSPACE/.venv/bin/maturin" develop --release
 
       - name: Packaged skills are current
@@ -59,5 +59,5 @@ jobs:
 
       - name: pytest
         run: |
-          cd memori-python
+          cd lorevell-python
           "$GITHUB_WORKSPACE/.venv/bin/python" -m pytest tests -v

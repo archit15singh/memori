@@ -11,11 +11,19 @@ dist/
 .worktrees/
 
 # Private working drafts (superseded by CLAUDE.md and README.md)
-memori_dev.md
-memori_usage.md
+lorevell_dev.md
+lorevell_usage.md
 
 # publish tokens (never commit)
-.memori-publish-tokens/
+.lorevell-publish-tokens/
 
 # Rebuildable Markdown vault caches
+.lorevell/
+
+# Retain protection for credentials under the former identity
+.memori-publish-tokens/
+
+# Previous local drafts and disposable cache remain private
+memori_dev.md
+memori_usage.md
 .memori/

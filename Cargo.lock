@@ -1491,6 +1491,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "lorevell-core"
+version = "2.0.0"
+dependencies = [
+ "criterion",
+ "fastembed",
+ "fs2",
+ "rand 0.8.5",
+ "regex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "serde_yaml_ng",
+ "sha2",
+ "thiserror 1.0.69",
+ "uuid",
+]
+
+[[package]]
+name = "lorevell-py"
+version = "2.0.0"
+dependencies = [
+ "lorevell-core",
+ "pyo3",
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
 name = "macro_rules_attribute"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1539,35 +1568,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
 dependencies = [
  "autocfg",
-]
-
-[[package]]
-name = "memori-ai-core"
-version = "2.0.0"
-dependencies = [
- "criterion",
- "fastembed",
- "fs2",
- "rand 0.8.5",
- "regex",
- "rusqlite",
- "serde",
- "serde_json",
- "serde_yaml_ng",
- "sha2",
- "thiserror 1.0.69",
- "uuid",
-]
-
-[[package]]
-name = "memori-ai-py"
-version = "2.0.0"
-dependencies = [
- "memori-ai-core",
- "pyo3",
- "serde",
- "serde_json",
- "uuid",
 ]
 
 [[package]]

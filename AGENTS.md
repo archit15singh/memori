@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-Memori combines a Rust SQLite memory engine with PyO3 bindings and a Python CLI. `memori-core/src/` contains storage, search, embeddings, schema migrations, and shared types. `memori-python/src/lib.rs` exposes the Python API; `memori-python/python/memori_cli/` implements commands and bundles dashboard assets in `data/`. Rust integration tests live in `memori-core/tests/`, Python and CLI tests in `memori-python/tests/`, and Criterion benchmarks in `memori-core/benches/`. See `docs/` for architecture diagrams and packaging notes, and `CLAUDE.md` for detailed implementation constraints.
+Lorevell combines a Rust SQLite memory engine with PyO3 bindings and a Python CLI. `lorevell-core/src/` contains storage, search, embeddings, schema migrations, and shared types. `lorevell-python/src/lib.rs` exposes the Python API; `lorevell-python/python/lorevell_cli/` implements commands and bundles shared agent skills in `data/`. Rust integration tests live in `lorevell-core/tests/`, Python and CLI tests in `lorevell-python/tests/`, and Criterion benchmarks in `lorevell-core/benches/`. See `docs/` for architecture diagrams and packaging notes, and `CLAUDE.md` for detailed implementation constraints.
 
 ## Build, Test, and Development Commands
 
@@ -11,10 +11,10 @@ Run Rust commands from the repository root:
 - `cargo build --workspace` builds both crates.
 - `cargo fmt --all -- --check` checks Rust formatting.
 - `cargo clippy --workspace --all-targets -- -D warnings` runs the CI lint checks.
-- `cargo test -p memori-ai-core --release` runs core tests.
-- `cargo bench -p memori-ai-core --bench vector_ops_bench` runs vector microbenchmarks.
+- `cargo test -p lorevell-core --release` runs core tests.
+- `cargo bench -p lorevell-core --bench vector_ops_bench` runs vector microbenchmarks.
 
-For Python development, activate a virtual environment, install `maturin` and `pytest`, then run `maturin develop --release` from `memori-python/`. From the root, run `pytest memori-python/tests/test_memori.py memori-python/tests/test_cli.py -v`. Ensure the environment's `memori` executable is first on `PATH` so CLI tests exercise your source build.
+For Python development, activate a virtual environment, install `maturin` and `pytest`, then run `maturin develop --release` from `lorevell-python/`. From the root, run `pytest lorevell-python/tests/test_lorevell.py lorevell-python/tests/test_cli.py -v`. Ensure the environment's `lorevell` executable is first on `PATH` so CLI tests exercise your source build.
 
 ## Coding Style & Naming Conventions
 

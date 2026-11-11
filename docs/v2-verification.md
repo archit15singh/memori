@@ -1,3 +1,5 @@
+> Historical Memori 2.0 record, preserved under its original names. Current commands and package names are documented in [the rename guide](../docs/rebrand.md).
+
 # Memori 2.0 verification
 
 Observed locally on 12 November 2026, macOS arm64, Python 3.13, source-built native extension. This report separates executable contracts, real agent behavior and limitations. It is not a production quality benchmark.
