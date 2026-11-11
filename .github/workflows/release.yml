@@ -46,7 +46,7 @@ jobs:
       - name: Build and test Python source
         run: |
           python -m venv .venv
-          .venv/bin/python -m pip install maturin pytest
+          .venv/bin/python -m pip install --upgrade pip maturin pytest
           VIRTUAL_ENV="$GITHUB_WORKSPACE/.venv" .venv/bin/maturin develop --release --manifest-path lorevell-python/Cargo.toml
           PATH="$GITHUB_WORKSPACE/.venv/bin:$PATH" .venv/bin/python -m pytest lorevell-python/tests -q
           python scripts/sync-skills.py --check
