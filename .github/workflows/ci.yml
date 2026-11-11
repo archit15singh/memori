@@ -17,6 +17,8 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+
       - name: cargo fmt
         run: cargo fmt --all -- --check
 
@@ -43,6 +45,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
 
       - name: Install maturin + pytest
         run: |
