@@ -161,6 +161,13 @@ def cmd_dream(args):
     _emit(result, args.json)
 
 
+def cmd_ui(args):
+    from .ui import serve
+    if not 0 <= args.port <= 65535:
+        raise ValueError("port must be between 0 and 65535")
+    serve(Path(args.vault).expanduser(), args.port, open_browser=not args.no_open)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Lorevell — local knowledge for humans and agents. Plain Markdown. Yours to keep.")
     parser.add_argument("--vault", default=os.environ.get("LOREVELL_VAULT", "memory"), help="Vault directory (default: LOREVELL_VAULT or ./memory)")
@@ -204,6 +211,10 @@ def main():
     p.add_argument("--max-notes", type=int, default=20, help="Changed-note batch size")
     p.add_argument("--dry-run", action="store_true", help="Show candidates and the launcher command without starting an agent")
     p.set_defaults(func=cmd_dream)
+    p = sub.add_parser("ui", help="Open the local recall and reading workspace")
+    p.add_argument("--port", type=int, default=8765, help="Loopback port; 0 chooses an available port")
+    p.add_argument("--no-open", action="store_true", help="Print the URL without opening a browser")
+    p.set_defaults(func=cmd_ui)
     args = parser.parse_args()
     try:
         args.func(args)

@@ -63,6 +63,18 @@ Automatically retry only idempotent operations.
 
 `add` generates a UUID and filename. Files can be renamed or organized into subdirectories without changing their IDs. To write multiline procedures, use `add --file body.md` or `add -` with stdin. Unknown frontmatter fields are preserved; `id` is required, while `type` and `tags` are optional. Every active `.md` file must have valid frontmatter and a nonempty body.
 
+## Find a lesson in the browser
+
+```bash
+lorevell --vault ./memory ui
+# Choose another port, or leave browser opening to yourself:
+lorevell --vault ./memory ui --port 0 --no-open
+```
+
+The local workspace opens in Brave on macOS and the default browser elsewhere. Search for a past lesson, read its Markdown and source path, follow linked notes or backlinks, then copy the Markdown or a command block to reuse it. **Keyword** is the offline default; **Hybrid** adds local semantic search and may download the embedding model on first use. Switch modes explicitly, and use the note-type filter to narrow results.
+
+**New note** saves a real Markdown file in the selected vault. External edits are picked up on the next search or refresh. The UI uses the same Rust retrieval engine as the CLI; it does not generate answers or add another database. It binds only to `127.0.0.1`; leave it on loopback. Stop the server with Ctrl+C. See [the workspace guide](docs/local-workspace.md) for scope and limitations.
+
 ## Recall and maintain
 
 | Command | Behavior |
@@ -72,6 +84,7 @@ Automatically retry only idempotent operations.
 | `update <id> --meta '{"verified":true}'` | Merge top-level frontmatter fields |
 | `search "query" --limit 5 --graph-limit 3` | Hybrid matches plus at most three extra one-hop notes |
 | `show <id> --limit 5` | Source note, outgoing links, backlinks and unresolved links |
+| `ui [--port 8765] [--no-open]` | Open the local search, source-reading and capture workspace |
 | `index` | Incrementally synchronize hashes, embeddings and links from Markdown |
 | `archive <id>` | Preserve the original bytes in `archive/`; remove it from active retrieval |
 | `delete <id>` | Alias for archive, not permanent deletion |
