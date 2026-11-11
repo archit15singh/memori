@@ -1,3 +1,5 @@
+
+
 # Memori
 
 [![PyPI](https://img.shields.io/pypi/v/py-memori.svg)](https://pypi.org/project/py-memori/)
@@ -499,7 +501,7 @@ memori ui --no-open          # start server without auto-opening browser
 ## Python API
 
 ```python
-from memori import PyMemori   # import name is `memori` (not `memori_ai`)
+from memori import PyMemori   # import name is `memori` (distribution is `py-memori`)
 
 db = PyMemori("memories.db")
 
