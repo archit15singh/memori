@@ -38,6 +38,23 @@ fn query(text: &str) -> SearchQuery {
 }
 
 #[test]
+fn listing_reads_active_sources_without_requiring_an_index() {
+    let t = Temp::new();
+    t.note("z.md", "z", "# Last");
+    t.note("nested/a.md", "a", "# First");
+    t.note("archive/old.md", "old", "# Archived");
+    t.note(".hidden/private.md", "private", "# Hidden");
+    let v = t.vault();
+    let notes = v.notes().unwrap();
+    assert_eq!(
+        notes.iter().map(|n| n.id.as_str()).collect::<Vec<_>>(),
+        vec!["a", "z"]
+    );
+    t.note("z.md", "z", "# Edited outside Lorevell");
+    assert!(v.notes().unwrap()[1].content.contains("Edited outside"));
+}
+
+#[test]
 fn manual_edits_renames_removals_and_cache_loss_rebuild_from_markdown() {
     let t = Temp::new();
     t.note("first.md", "first", "# Diagnose\nUse canary tests.");

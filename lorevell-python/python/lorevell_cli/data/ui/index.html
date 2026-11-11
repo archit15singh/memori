@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="lorevell-token" content="__TOKEN__" />
+    <title>Lorevell · Your working knowledge</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Lorevell home"
+        ><span class="monogram">l<span>·</span></span
+        >lorevell<span
+          class="local-dot"
+          title="Running on your computer"
+        ></span></a
+      ><span id="vaultPath" class="vault-path"></span
+      ><button id="newNote" class="primary">＋ New note</button>
+    </header>
+    <main>
+      <section class="intro">
+        <div>
+          <p class="eyebrow">YOUR WORKING KNOWLEDGE</p>
+          <h1>Pick up where you left off.</h1>
+        </div>
+        <div class="index-controls">
+          <span id="indexStatus" role="status">Connecting to your vault…</span
+          ><button
+            id="refresh"
+            class="quiet"
+            aria-label="Refresh notes and search index"
+          >
+            ↻ Refresh
+          </button>
+        </div>
+      </section>
+      <form id="searchForm" class="search-bar">
+        <span class="search-icon" aria-hidden="true">⌕</span
+        ><label class="sr-only" for="query">Search your knowledge</label
+        ><input
+          id="query"
+          name="q"
+          placeholder="What have you already learned?"
+          autocomplete="off"
+          maxlength="1000"
+        /><kbd>⌘ K</kbd
+        ><button class="primary" id="searchButton" type="submit">
+          Find a note <span aria-hidden="true">↗</span>
+        </button>
+      </form>
+      <div class="toolbar">
+        <div class="mode-switch" aria-label="Search mode">
+          <button type="button" data-mode="keyword" aria-pressed="true">
+            Keyword</button
+          ><button type="button" data-mode="hybrid" aria-pressed="false">
+            Hybrid
+          </button>
+        </div>
+        <p id="modeHelp">Fast, offline search. Words and their variations.</p>
+        <label class="type-label"
+          >Show
+          <select id="typeFilter">
+            <option value="">All types</option>
+          </select></label
+        >
+      </div>
+      <div id="error" class="error" role="alert" hidden></div>
+      <div class="workspace">
+        <section id="resultsPane" class="results-pane" aria-label="Notes">
+          <div class="section-label">
+            <span id="resultsLabel">Your notes</span
+            ><span id="resultCount"></span>
+          </div>
+          <div id="results" class="results">
+            <p class="muted loading">Reading your Markdown files…</p>
+          </div>
+          <section id="contextSection" hidden>
+            <div class="section-label">
+              Connected context <span>one hop</span>
+            </div>
+            <div id="contextResults"></div>
+          </section>
+        </section>
+        <section class="reader" id="reader" aria-label="Selected note">
+          <div class="reader-placeholder">
+            <span class="book-mark">l<span>·</span></span>
+            <p class="eyebrow">A LITTLE LESS RELEARNING</p>
+            <h2>Your next answer<br />might already be here.</h2>
+            <p>
+              Search for a lesson, or choose a note.<br />Follow its sources.
+              Make it useful again.
+            </p>
+            <button id="emptyNew" class="quiet">Write your first note ↗</button>
+          </div>
+        </section>
+      </div>
+      <footer>
+        <span>Plain Markdown. Yours to keep.</span
+        ><span id="footerHint">⌘/Ctrl K to search · ↑ ↓ to browse results</span>
+      </footer>
+    </main>
+    <dialog id="capture">
+      <form id="captureForm">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">KEEP SOMETHING USEFUL</p>
+            <h2>A note for your future self.</h2>
+          </div>
+          <button
+            class="quiet"
+            type="button"
+            id="cancelCapture"
+            aria-label="Close new note"
+          >
+            ✕
+          </button>
+        </div>
+        <label
+          >Title<input
+            id="noteTitle"
+            required
+            maxlength="140"
+            placeholder="What should you remember?" /></label
+        ><label
+          >The lesson<textarea
+            id="noteBody"
+            required
+            maxlength="32768"
+            rows="8"
+            placeholder="The procedure, decision or pitfall. Include a source and how you verified it. Markdown works here."
+          ></textarea>
+        </label>
+        <div class="capture-bottom">
+          <label
+            >Type<select id="noteType">
+              <option value="note">Note</option>
+              <option value="procedure">Procedure</option>
+              <option value="decision">Decision</option>
+            </select></label
+          ><button class="primary" id="saveNote">Save to Markdown ↗</button>
+        </div>
+        <p id="captureError" class="error" role="alert" hidden></p>
+        <p class="muted small">
+          Saved as a file in your selected vault. No account. No upload.
+        </p>
+      </form>
+    </dialog>
+    <div id="toast" class="toast" role="status" hidden></div>
+  </body>
+</html>

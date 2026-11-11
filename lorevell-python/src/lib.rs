@@ -478,6 +478,11 @@ impl PyVault {
         })
     }
 
+    fn notes(&self, py: Python<'_>) -> PyResult<PyObject> {
+        let notes = self.inner.lock().unwrap().notes().map_err(lorevell_err)?;
+        serialized_to_python(py, notes)
+    }
+
     #[pyo3(signature = (embeddings=true))]
     fn index(&self, py: Python<'_>, embeddings: bool) -> PyResult<PyObject> {
         let report = py.allow_threads(|| {

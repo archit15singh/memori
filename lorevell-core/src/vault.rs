@@ -101,6 +101,15 @@ impl Vault {
         &self.root
     }
 
+    /// Active Markdown notes, in source-path order; archives and symlinks stay excluded.
+    pub fn notes(&self) -> Result<Vec<Note>> {
+        Ok(self
+            .sources()?
+            .into_iter()
+            .map(|source| source.note)
+            .collect())
+    }
+
     fn lock(&self) -> Result<File> {
         let path = self.root.join(".lorevell/vault.lock");
         if path
