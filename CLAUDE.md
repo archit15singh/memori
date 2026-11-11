@@ -24,7 +24,7 @@ Tests use disposable files and real SQLite. CLI tests launch the environment's a
 | `lorevell-core/src/vault.rs` | Canonical Markdown parsing, writes, archives, hash indexing and explicit graph |
 | `lorevell-core/src/search.rs` | Existing FTS5/vector/RRF retrieval and semantic gate |
 | `lorevell-core/src/storage.rs` | Low-level SQLite engine operations, retained as retrieval plumbing |
-| `lorevell-core/src/schema.rs` | Base v4 migrations and vault-only cache tables |
+| `lorevell-core/src/schema.rs` | Base v5 migrations and vault-only cache tables |
 | `lorevell-core/src/embed.rs` | Lazy AllMiniLM-L6-V2 singleton; keep independent of vault policy |
 | `lorevell-core/src/types.rs` | Shared engine records, queries and errors |
 | `lorevell-python/src/lib.rs` | PyO3 conversion, `PyVault` and low-level `PyLorevell` binding |

@@ -1,0 +1,121 @@
+{
+  "questions": {
+    "runs": [
+      {
+        "top1": 17,
+        "hit_at_3": 18,
+        "mrr_at_3": 0.875
+      },
+      {
+        "top1": 16,
+        "hit_at_3": 18,
+        "mrr_at_3": 0.85
+      },
+      {
+        "top1": 16,
+        "hit_at_3": 18,
+        "mrr_at_3": 0.85
+      },
+      {
+        "top1": 17,
+        "hit_at_3": 18,
+        "mrr_at_3": 0.875
+      },
+      {
+        "top1": 17,
+        "hit_at_3": 18,
+        "mrr_at_3": 0.875
+      },
+      {
+        "top1": 16,
+        "hit_at_3": 18,
+        "mrr_at_3": 0.85
+      },
+      {
+        "top1": 18,
+        "hit_at_3": 18,
+        "mrr_at_3": 0.9
+      },
+      {
+        "top1": 18,
+        "hit_at_3": 18,
+        "mrr_at_3": 0.9
+      },
+      {
+        "top1": 17,
+        "hit_at_3": 18,
+        "mrr_at_3": 0.875
+      },
+      {
+        "top1": 16,
+        "hit_at_3": 18,
+        "mrr_at_3": 0.85
+      }
+    ],
+    "unstable_queries": {
+      "Can I delete the database without losing my notes?": 2,
+      "What happens when a wiki link matches multiple filenames?": 2,
+      "How do I find notes that point to this procedure?": 2,
+      "Will a malformed Markdown file leave a half updated search index?": 2,
+      "Why does a similarity threshold not exclude literal keyword hits?": 2,
+      "How do I configure a different vault directory?": 2
+    }
+  },
+  "shadow-questions": {
+    "runs": [
+      {
+        "top1": 9,
+        "hit_at_3": 10,
+        "mrr_at_3": 0.95
+      },
+      {
+        "top1": 9,
+        "hit_at_3": 10,
+        "mrr_at_3": 0.95
+      },
+      {
+        "top1": 9,
+        "hit_at_3": 10,
+        "mrr_at_3": 0.95
+      },
+      {
+        "top1": 9,
+        "hit_at_3": 10,
+        "mrr_at_3": 0.95
+      },
+      {
+        "top1": 9,
+        "hit_at_3": 10,
+        "mrr_at_3": 0.95
+      },
+      {
+        "top1": 9,
+        "hit_at_3": 10,
+        "mrr_at_3": 0.95
+      },
+      {
+        "top1": 9,
+        "hit_at_3": 10,
+        "mrr_at_3": 0.95
+      },
+      {
+        "top1": 9,
+        "hit_at_3": 10,
+        "mrr_at_3": 0.95
+      },
+      {
+        "top1": 9,
+        "hit_at_3": 10,
+        "mrr_at_3": 0.95
+      },
+      {
+        "top1": 9,
+        "hit_at_3": 10,
+        "mrr_at_3": 0.95
+      }
+    ],
+    "unstable_queries": {
+      "Does consolidation destroy the original superseded procedure?": 2
+    }
+  }
+}

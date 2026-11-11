@@ -1,7 +1,7 @@
 use crate::types::{LorevellError, Result};
 use rusqlite::{Connection, Transaction, TransactionBehavior};
 
-pub const SCHEMA_VERSION: i32 = 4;
+pub const SCHEMA_VERSION: i32 = 5;
 
 pub fn init_db(conn: &Connection) -> Result<()> {
     conn.pragma_update(None, "journal_mode", "WAL")?;
@@ -109,6 +109,21 @@ pub fn init_db(conn: &Connection) -> Result<()> {
              ALTER TABLE memories ADD COLUMN validated_at REAL;
              UPDATE memories SET content_updated_at = updated_at;
              PRAGMA user_version = 4;",
+        )?;
+    }
+    let version: i32 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
+    if version < 5 {
+        // Rebuild derived FTS tokens, retaining both body and metadata text.
+        // FTS5's external-content rebuild alone would omit metadata terms.
+        conn.execute_batch(
+            "DROP TABLE memories_fts;
+             CREATE VIRTUAL TABLE memories_fts USING fts5(
+                 content, content=memories, content_rowid=rowid,
+                 tokenize='porter unicode61'
+             );
+             INSERT INTO memories_fts(rowid, content)
+                 SELECT rowid, content || ' ' || COALESCE(metadata, '') FROM memories;
+             PRAGMA user_version = 5;",
         )?;
     }
     transaction.commit()?;

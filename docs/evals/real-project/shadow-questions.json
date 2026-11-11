@@ -1,0 +1,65 @@
+{
+  "description": "Additional frozen maintainer paraphrases, authored before candidate RRF experiments; same public corpus and manually labeled note IDs. Not an independent author or blind benchmark.",
+  "queries": [
+    {
+      "query": "How can I read and correct knowledge without installing this tool?",
+      "relevant_ids": [
+        "markdown"
+      ]
+    },
+    {
+      "query": "Can two notes use the same frontmatter ID?",
+      "relevant_ids": [
+        "identity"
+      ]
+    },
+    {
+      "query": "What if a link uses a filename shared by two folders?",
+      "relevant_ids": [
+        "links"
+      ]
+    },
+    {
+      "query": "Where can I see incoming references to a note?",
+      "relevant_ids": [
+        "backlinks"
+      ]
+    },
+    {
+      "query": "Does consolidation destroy the original superseded procedure?",
+      "relevant_ids": [
+        "archive"
+      ]
+    },
+    {
+      "query": "Are edits made in my editor protected by the writer lock?",
+      "relevant_ids": [
+        "locking"
+      ]
+    },
+    {
+      "query": "Can cached embeddings be kept when source Markdown is unchanged?",
+      "relevant_ids": [
+        "index"
+      ]
+    },
+    {
+      "query": "How are sparse and dense search lists combined?",
+      "relevant_ids": [
+        "hybrid"
+      ]
+    },
+    {
+      "query": "What happens to the remaining files after a small dream batch?",
+      "relevant_ids": [
+        "dream-batch"
+      ]
+    },
+    {
+      "query": "Will the consolidation log tell me why the agent failed?",
+      "relevant_ids": [
+        "dream-failure"
+      ]
+    }
+  ]
+}

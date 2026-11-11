@@ -19,3 +19,7 @@ The old native engine calibration remains runnable with `scripts/eval-relevance.
 ## Natural-language keyword queries
 
 Literal FTS5 first requires all quoted query terms. If no filtered rows match and there is more than one term, it retries with quoted terms joined by OR, retaining the same metadata filter and ranking. This deterministic fallback applies to the text leg of hybrid retrieval too. It never interprets user tokens as FTS operators. Successful all-term results keep precedence; fallback scores are still rankings, not truth or confidence.
+
+## English word forms
+
+Schema v5 uses SQLite's built-in Porter tokenizer over Unicode61 so English variants such as `migration`/`migrating` and `backup`/`backups` can match. Opening a v4 database rebuilds only its derived FTS tokens in a transaction, retaining body and metadata terms, vectors and clocks. Existing wiki links and Markdown are unchanged. Escaping still treats query terms as data; text-only search is token-based, not byte-exact matching. This is English stemming, not multilingual semantic search; accented Latin and CJK literal probes are covered, but broad multilingual quality is unmeasured.

@@ -1449,3 +1449,37 @@ fn literal_search_relaxes_only_empty_all_word_matches_and_keeps_filters() {
     );
     assert_eq!(strict[0].id, wanted.id());
 }
+
+#[test]
+fn stemming_keeps_unicode_keyword_search_and_metadata_filters() {
+    let db = open_temp();
+    let wanted = db
+        .insert(
+            "Café 東京 running migrations",
+            Some(&[1.0, 0.0]),
+            Some(json!({"scope":"local"})),
+            None,
+            false,
+        )
+        .unwrap();
+    db.insert(
+        "Café 東京 running migrations",
+        Some(&[0.0, 1.0]),
+        Some(json!({"scope":"other"})),
+        None,
+        false,
+    )
+    .unwrap();
+    for text in ["cafe", "東京", "run migration"] {
+        let results = db
+            .search(SearchQuery {
+                text: Some(text.into()),
+                text_only: true,
+                filter: Some(json!({"scope":"local"})),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, wanted.id());
+    }
+}
