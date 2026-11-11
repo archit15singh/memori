@@ -27,7 +27,7 @@ Top-3 means at least one of the manually labeled relevant note IDs appears in th
 | Shadow / hybrid | 9/10 | 9/10 | 10/10 | 10/10 | .9500 | .9500 |
 | Shadow / keyword | 7/10 | 9/10 | 9/10 | 9/10 | .8000 | .9000 |
 
-The earlier fresh-cache probe happened to score main hybrid top-1 at 18/20; the production migration run scored 17/20. Repeated evaluation found a real reason not to cherry-pick that difference: hash-map iteration can change the order of equal RRF scores. Across ten hybrid runs, baseline main top-1 averaged 16.8/20 and Porter averaged 17.1/20; main top-3 stayed 18/20 versus 19/20. Shadow hybrid stayed 9/10 top-1 and 10/10 top-3. Six baseline main questions and four Porter main questions had varying returned ID order. Raw repeated reports are retained. Deterministic tie-breaking is being evaluated separately; it is not silently included in the stemming change.
+The earlier fresh-cache probe happened to score main hybrid top-1 at 18/20; the production migration run scored 17/20. Repeated evaluation found a real reason not to cherry-pick that difference: hash-map iteration can change the order of equal RRF scores. Across ten hybrid runs, baseline main top-1 averaged 16.8/20 and Porter averaged 17.1/20; main top-3 stayed 18/20 versus 19/20. Shadow hybrid stayed 9/10 top-1 and 10/10 top-3. Six baseline main questions and four Porter main questions had varying returned ID order. Raw repeated reports are retained. Deterministic tie-breaking is a separate follow-up change, evaluated below; it is not silently included in the stemming change.
 
 The v4 migration retains vectors, metadata terms, IDs, timestamps, access counts, and subsequent update/delete trigger behavior; repeated opens are idempotent. Regression tests demonstrate the actual old tokenizer miss on metadata `backups` queried as `backup`, then matching after migration. Accented Latin and CJK probes plus metadata filters pass. Local validation: 97 Rust tests, 25 no-embedding checks, 87 Python tests, formatting, Clippy and skill-copy equality.
 
@@ -42,3 +42,11 @@ python scripts/gate-eval.py \
 ```
 
 To regenerate retrieval reports, use `scripts/eval-project.py` with a fresh copy of `docs/evals/real-project/after/`, selecting `questions.json` or `shadow-questions.json`, and optionally `--text-only`. Timing-sensitive clocks and model/runtime versions can affect rankings; the stored output is evidence of these runs rather than a promise of identical future rankings.
+
+## Follow-up loop: stable equal-score fusion
+
+Repeated runs exposed a second reproducible issue: `HashMap` iteration fed equal RRF scores to a comparator with no tie-break. The minimal follow-up keeps every RRF score unchanged and resolves only ties by the existing semantic-leg rank, then stable ID. It introduces no rank weights or model calls. A controlled two-document fixture has genuinely equal fusion scores and must return the same semantic-first order across 50 searches.
+
+Against the Porter migration reports, main hybrid top-1 moves 17→18/20 and MRR .8917→.9167, with top-3 remaining 19/20. Both shadow hybrid and both keyword-mode reports are unchanged. All four pairs pass the same fail-closed gate. Ten repeated runs return identical ranked ID sequences for every main and shadow question; the preceding Porter-only repeat report varied on four main queries and one shadow query. This establishes repeatability on the exercised inputs, not general quality or significance.
+
+The accepted combination gives main hybrid 18/20 top-1 and 19/20 top-3, main keyword 18/20 and 19/20, shadow hybrid 9/10 and 10/10, and shadow keyword 9/10 and 9/10. Local follow-up validation: 98 Rust tests, 26 no-embedding checks (including the explicit-vector stability test) and 87 Python tests, plus formatting and Clippy.

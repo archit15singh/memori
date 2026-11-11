@@ -306,7 +306,17 @@ fn hybrid_search(
         })
         .collect();
 
-    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    scored.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| {
+                vec_ranks
+                    .get(&a.0.id)
+                    .unwrap_or(&usize::MAX)
+                    .cmp(vec_ranks.get(&b.0.id).unwrap_or(&usize::MAX))
+            })
+            .then_with(|| a.0.id.cmp(&b.0.id))
+    });
     scored.truncate(limit);
 
     Ok(scored
