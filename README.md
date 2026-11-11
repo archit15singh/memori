@@ -590,7 +590,7 @@ See [`docs/packaging_dev.md`](docs/packaging_dev.md) for the full open-source pa
 
 ```bash
 python3 -m venv .venv
-.venv/bin/python -m pip install maturin pytest
+.venv/bin/python -m pip install --upgrade pip maturin pytest
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test -p memori-ai-core --release

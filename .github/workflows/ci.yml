@@ -41,7 +41,7 @@ jobs:
       - name: Install maturin + pytest
         run: |
           python -m venv .venv
-          .venv/bin/python -m pip install maturin pytest
+          .venv/bin/python -m pip install --upgrade pip maturin pytest
 
       - name: maturin develop
         run: |
