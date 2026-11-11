@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Optional `min_similarity` on Python search/related, Rust search/related APIs,
+  CLI search/context/related and dashboard search. Gates semantic candidates
+  before access weighting and RRF; preserves hybrid literal matches and defaults
+  to no threshold. Includes validation, real HTTP/CLI regressions and a small
+  labeled calibration fixture with measured recall/precision tradeoffs.
+
 ## [0.7.0] — 2026-07-18
 
 ### Added

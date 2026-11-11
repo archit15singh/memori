@@ -22,7 +22,7 @@ use memori_core::{Memori, SearchQuery, SortField};
 
 let db = Memori::open("memories.db")?;
 let id = db.insert("Chose SQLite over Postgres for zero-config portability.",
-                   Some(r#"{"type":"decision"}"#), true, None, None)?;
+                   None, None, None, false)?;
 let hits = db.search(SearchQuery {
     text: Some("sqlite".into()),
     ..Default::default()
@@ -34,6 +34,8 @@ for m in hits { println!("{}", m.content); }
 
 - **Single SQLite file** with WAL journaling — no external services, no config
 - **Hybrid search**: FTS5 full-text + cosine vector fused with Reciprocal Rank Fusion (k=60)
+- **Optional semantic floor**: `SearchQuery.min_similarity` filters raw cosine before scoring;
+  hybrid literal FTS matches remain eligible. Default `None`; calibrate for your data.
 - **Built-in embeddings** via `fastembed` (AllMiniLM-L6-V2, 384-dim, ~9ms/memory)
 - **Cosine-similarity deduplication** (configurable threshold, default 0.92)
 - **Access-weighted decay scoring** — frequently-used recent memories surface first
