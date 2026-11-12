@@ -187,3 +187,80 @@ def test_existing_unresolved_link_can_be_retained_after_rename(vault, tmp_path, 
     result = dream.run_dream(vault, 'codex')
     assert result['status'] == 'completed'
     assert len(result['index']['unresolved']) == 1
+
+
+def test_due_review_runs_without_file_changes_and_does_not_verify(vault, tmp_path, monkeypatch):
+    from lorevell_cli.review import run_review
+    clock = [1_000_000.0]
+    monkeypatch.setattr(dream.time, 'time', lambda: clock[0])
+    (vault / 'a.md').write_text('---\nid: a\nreview_after_days: 1\n---\nOriginal evidence.\n')
+    runner(tmp_path, monkeypatch, "print('Inspected; evidence not newly verified.')")
+    assert dream.run_dream(vault, 'codex')['status'] == 'completed'
+    assert dream.run_dream(vault, 'codex')['status'] == 'unchanged'
+    assert not (vault / '.lorevell/review.json').exists()
+    clock[0] += 2 * 86400
+    result = dream.run_dream(vault, 'codex')
+    assert result['status'] == 'completed' and result['candidates'] == ['a.md']
+    assert result['review_reasons']['a.md']
+    assert dream.run_dream(vault, 'codex')['status'] == 'unchanged'
+    # Successful maintenance must not stamp the independent evidence-review queue.
+    assert run_review(vault)['candidates'][0]['reasons'] == ['changed-or-never-reviewed']
+
+
+def test_reviewed_note_becomes_dream_candidate_and_deferral_is_respected(vault, tmp_path, monkeypatch):
+    from lorevell_cli.review import run_review
+    clock = [1_000_000.0]
+    monkeypatch.setattr(dream.time, 'time', lambda: clock[0])
+    runner(tmp_path, monkeypatch, "print('No edits needed.')")
+    dream.run_dream(vault, 'codex')
+    candidate = run_review(vault)['candidates'][0]
+    run_review(vault, mark='a', expected=candidate['revision'])
+    clock[0] += 91 * 86400
+    candidate = run_review(vault)['candidates'][0]
+    run_review(vault, defer='a', expected=candidate['revision'])
+    assert dream.run_dream(vault, 'codex')['status'] == 'unchanged'
+    clock[0] += 86401
+    result = dream.run_dream(vault, 'codex')
+    assert result['review_reasons']['a.md'] == ['review-due']
+    assert dream.run_dream(vault, 'codex')['status'] == 'unchanged'
+
+
+def test_source_drift_wakes_dream_without_rebaselining(vault, tmp_path, monkeypatch):
+    from lorevell_cli.review import run_review
+    source = tmp_path / 'Makefile'
+    source.write_text('build: old\n')
+    run_review(vault, watch=source, note_id='a')
+    # The first pass is new knowledge, before source drift is introduced.
+    runner(tmp_path, monkeypatch, "print('Initial inspection.')")
+    dream.run_dream(vault, 'codex')
+    source.write_text('build: new\n')
+    runner(tmp_path, monkeypatch, "assert 'source-drift' in prompt")
+    result = dream.run_dream(vault, 'codex')
+    assert 'source-drift' in result['review_reasons']['a.md']
+    assert dream.run_dream(vault, 'codex')['status'] == 'unchanged'
+    assert run_review(vault)['candidates'][0]['source_drift'] == [str(source)]
+
+
+def test_maintenance_queue_does_not_starve_after_twenty_notes(vault, tmp_path, monkeypatch):
+    for i in range(24):
+        (vault / f'n{i:02}.md').write_text(f'---\nid: n{i:02}\n---\nEvidence {i}.\n')
+    runner(tmp_path, monkeypatch, "print('Inspected.')")
+    first = dream.run_dream(vault, 'codex', max_notes=20)
+    assert first['pending'] == 5
+    second = dream.run_dream(vault, 'codex', max_notes=20)
+    assert len(second['candidates']) == 5 and second['pending'] == 0
+    assert dream.run_dream(vault, 'codex')['status'] == 'unchanged'
+
+
+def test_failed_maintenance_does_not_advance_attempt(vault, tmp_path, monkeypatch):
+    clock = [1_000_000.0]
+    monkeypatch.setattr(dream.time, 'time', lambda: clock[0])
+    runner(tmp_path, monkeypatch, "print('Initial inspection.')")
+    dream.run_dream(vault, 'codex')
+    state = (vault / '.lorevell/dream-state.json').read_bytes()
+    clock[0] += 91 * 86400
+    runner(tmp_path, monkeypatch, "sys.exit(7)")
+    with pytest.raises(RuntimeError, match='exited 7'):
+        dream.run_dream(vault, 'codex')
+    assert (vault / '.lorevell/dream-state.json').read_bytes() == state
+    assert dream.run_dream(vault, 'codex', dry_run=True)['candidates'] == ['a.md']
