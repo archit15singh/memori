@@ -161,6 +161,25 @@ def cmd_dream(args):
     _emit(result, args.json)
 
 
+def cmd_recall(args):
+    from .recall import recall
+    raw = sys.stdin.read() if args.snapshot == '-' else Path(args.snapshot).expanduser().read_text()
+    result = recall(json.loads(raw), args.cache_dir, args.query or '', args.limit, args.text_only, args.index_only)
+    if args.json:
+        _emit(result, True)
+    else:
+        print(f"Source: {result['source_id']} · sync {result['sync_status']} · {result['synced_at'] or 'unknown date'}")
+        for hit in result['matches']:
+            print(f"{hit['id']}  {hit['title']}\n  {hit['source_url']} @ {hit['source_revision']}\n  {hit['content'][:300]}")
+        print(result['notice'])
+
+
+def cmd_review(args):
+    from .review import run_review
+    result = run_review(args.vault, args.limit, args.mark, args.defer, args.revision, args.watch, args.note)
+    _emit(result, args.json)
+
+
 def cmd_ui(args):
     from .ui import serve
     if not 0 <= args.port <= 65535:
@@ -211,6 +230,23 @@ def main():
     p.add_argument("--max-notes", type=int, default=20, help="Changed-note batch size")
     p.add_argument("--dry-run", action="store_true", help="Show candidates and the launcher command without starting an agent")
     p.set_defaults(func=cmd_dream)
+    p = sub.add_parser("recall", parents=[common], help="Read-only recall from an explicit source snapshot")
+    p.add_argument("query", nargs="?")
+    p.add_argument("--snapshot", required=True, help="Versioned complete source JSON; - reads stdin")
+    p.add_argument("--cache-dir", required=True, help="Dedicated disposable local index directory")
+    p.add_argument("--limit", type=_positive, default=3)
+    p.add_argument("--text-only", action="store_true")
+    p.add_argument("--index-only", action="store_true", help="Refresh the projection without inference or search")
+    p.set_defaults(func=cmd_recall)
+    p = sub.add_parser("review", parents=[common], help="Inspect a bounded revision-aware memory review queue")
+    action = p.add_mutually_exclusive_group()
+    action.add_argument("--mark", help="Record an evidence review for a full note ID")
+    action.add_argument("--defer", help="Defer a full note ID for 24 hours unless its revision changes")
+    action.add_argument("--watch", help="Watch one explicitly chosen source file for drift")
+    p.add_argument("--revision", help="Exact revision returned by a current scan")
+    p.add_argument("--note", help="Full note ID associated with --watch")
+    p.add_argument("--limit", type=_positive, default=3)
+    p.set_defaults(func=cmd_review)
     p = sub.add_parser("ui", help="Open the local recall and reading workspace")
     p.add_argument("--port", type=int, default=8765, help="Loopback port; 0 chooses an available port")
     p.add_argument("--no-open", action="store_true", help="Print the URL without opening a browser")

@@ -4,7 +4,7 @@
 
 Keep useful knowledge in files you can read, edit and carry between tools. Link your notes, search them locally, and let your existing coding agent recall procedures or consolidate discoveries.
 
-Markdown is the source of truth. SQLite is a disposable index. Claude Code or Codex provides the reasoning: Lorevell does not implement another agent runtime, learning model or orchestration framework.
+For Lorevell-owned vaults, Markdown is the source of truth. Read-only external recall keeps its configured source authoritative. SQLite is a disposable index. Claude Code or Codex provides the reasoning: Lorevell does not implement another agent runtime, learning model or orchestration framework.
 
 ```mermaid
 flowchart LR
@@ -88,6 +88,8 @@ The [vault benchmark report](docs/benchmarks/README.md) records native, CLI and 
 | `show <id> --limit 5` | Source note, outgoing links, backlinks and unresolved links |
 | `ui [--port 8765] [--no-open]` | Open the local search, source-reading and capture workspace |
 | `index` | Incrementally synchronize hashes, embeddings and links from Markdown |
+| `review --limit 3` | Inspect a bounded revision-aware review queue; explicitly mark or defer after checking evidence |
+| `recall "query" --snapshot <file> --cache-dir <private-directory>` | Read-only source recall with provenance; another system retains authority |
 | `archive <id>` | Preserve the original bytes in `archive/`; remove it from active retrieval |
 | `delete <id>` | Alias for archive, not permanent deletion |
 | `setup --agent codex --project .` | Install learning and dream skills under `.agents/skills/` |
@@ -105,6 +107,8 @@ Human edits become searchable after `index`; CLI reads and mutations also synchr
 Run `setup` in the project where the agent works. The shared skill asks it to search before investigating, then retain one or two verified reusable lessons after a meaningful discovery. Routine work can save nothing. Commands, their preconditions and evidence belong in ordinary procedure notes. No automatic session recording, transcript ingestion or skill generation is involved.
 
 Skill installation refuses to overwrite customized instructions unless `--force` is explicit. The canonical files are [skills/lorevell](skills/lorevell/SKILL.md) and [skills/dream](skills/dream/SKILL.md); identical packaged copies support installed wheels.
+
+For personal or shared memory owned by another system, use [read-only snapshot recall and bounded review](docs/memory-integration.md). An existing adapter can provide a complete eligible cache snapshot over stdin; Lorevell supplies local retrieval without taking over cloud synchronization or writes. Sync freshness and semantic verification remain separate.
 
 ## Consolidate with an existing headless agent
 

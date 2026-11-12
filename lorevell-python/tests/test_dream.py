@@ -85,6 +85,19 @@ def test_batch_checkpoint_does_not_skip_pending_files(vault,tmp_path,monkeypatch
     assert dream.run_dream(vault,'codex')['status']=='unchanged'
 
 
+def test_original_source_is_excluded_and_edits_are_rejected(vault,tmp_path,monkeypatch):
+    source = vault / 'source.md'
+    source.write_text('---\nid: source\nimmutable_source: true\n---\nOriginal evidence.\n')
+    preview = dream.run_dream(vault, 'codex', dry_run=True)
+    assert preview['candidates'] == ['a.md']
+    runner(tmp_path, monkeypatch, "pathlib.Path('source.md').write_text('damaged evidence')")
+    with pytest.raises(RuntimeError, match='immutable source'):
+        dream.run_dream(vault, 'codex')
+    assert not (vault / '.lorevell/dream-state.json').exists()
+    baseline = subprocess.check_output(['git','-C',str(vault),'show','HEAD:source.md'],text=True)
+    assert 'Original evidence.' in baseline
+
+
 def test_dry_run_needs_no_agent_and_makes_no_git_commit(vault):
     result=dream.run_dream(vault,'claude',dry_run=True)
     assert result['status']=='preview' and result['candidates']==['a.md']
