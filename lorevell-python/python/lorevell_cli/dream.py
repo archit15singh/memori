@@ -12,6 +12,8 @@ import time
 
 from lorevell import PyVault
 from .review import run_review
+from .evaluation import load_evaluation, evaluate, regression
+from .local_state import read_json, write_json
 
 
 def _git(root, *args, check=True):
@@ -127,15 +129,23 @@ def _invoke(command, root, prompt, timeout):
         raise RuntimeError(f'agent exited {process.returncode}; see .lorevell/dream-last.log; checkpoint unchanged')
 
 
-def run_dream(root, agent, *, timeout=300, max_notes=20, dry_run=False):
+def run_dream(root, agent, *, timeout=300, max_notes=20, dry_run=False,
+              eval_set=None, eval_text_only=False):
     if timeout <= 0 or max_notes <= 0:
         raise ValueError('timeout and max-notes must be positive')
     root = root.resolve()
+    if eval_text_only and eval_set is None:
+        raise ValueError('eval-text-only requires an evaluation set')
+    cases, labels_hash = load_evaluation(eval_set, root) if eval_set is not None else (None, None)
     vault = PyVault(str(root))
     top = _git(root, 'rev-parse', '--show-toplevel').stdout.strip()
     if Path(top).resolve() != root:
         raise ValueError('dream requires a dedicated Git repository rooted at the vault; run lorevell init in the vault directory')
     with _dream_lock(root):
+        gate_path = root / '.lorevell/dream-evaluation-pending.json'
+        pending_gate = read_json(gate_path, None)
+        if pending_gate is not None and cases is None:
+            raise ValueError('An unfinished retrieval gate requires its original --eval-set; inspect the edits before removing dream-evaluation-pending.json')
         initial_report = vault.index(embeddings=False)  # Validate before snapshotting or invoking an agent.
         unresolved_before = _unresolved_links(vault, initial_report)
         state_path = root / '.lorevell/dream-state.json'
@@ -181,6 +191,26 @@ def run_dream(root, agent, *, timeout=300, max_notes=20, dry_run=False):
             return dict(result, status='preview' if dry_run else 'unchanged')
         if shutil.which(command[0]) is None:
             raise ValueError(f'{command[0]} is not installed or not on PATH')
+        quality = None
+        if cases is not None:
+            active_ids = {note['id'] for note in vault.notes()}
+            if pending_gate is None and any(not active_ids.intersection(case['relevant_ids']) for case in cases):
+                raise ValueError('Each evaluation query must label at least one active baseline note')
+            mode = 'text-only' if eval_text_only else 'hybrid'
+            if pending_gate is not None:
+                baseline_scores = pending_gate.get('before') if isinstance(pending_gate, dict) else None
+                if (not isinstance(baseline_scores, dict) or pending_gate.get('labels_sha256') != labels_hash
+                        or pending_gate.get('mode') != mode or baseline_scores.get('queries') != len(cases)
+                        or any(type(baseline_scores.get(key)) is not int or not 0 <= baseline_scores[key] <= len(cases) * 6
+                               for key in ('top1', 'hit_at_3', 'reciprocal_rank_units'))):
+                    raise ValueError('Pending retrieval gate does not match this evaluation; inspect dream-evaluation-pending.json before retrying')
+                quality = dict(pending_gate)
+            else:
+                vault.index(embeddings=not eval_text_only)
+                quality = {'labels_sha256': labels_hash, 'mode': mode,
+                           'before': evaluate(vault, cases, eval_text_only)}
+                # Keep the original comparison across failed runs; retained edits
+                # must not become a lower acceptance baseline on an ordinary retry.
         dirty = _dirty_paths(root)
         outside = {p for p in dirty if not _knowledge_path(p) and p != '.gitignore'}
         if outside:
@@ -193,6 +223,8 @@ def run_dream(root, agent, *, timeout=300, max_notes=20, dry_run=False):
                   f'\nChange at most {max_notes} knowledge files (including new notes and archives). '
                   'Process this batch; leave other candidates for later. Read related notes only as needed. '
                   'Do not run other agents or Lorevell dream recursively. Native file edits are sufficient.\n')
+        if quality is not None and pending_gate is None:
+            write_json(gate_path, quality)
         _invoke(command, root, prompt, timeout)
         after = _files(root)
         touched = {p for p in set(before) | set(after) if before.get(p) != after.get(p)}
@@ -214,6 +246,12 @@ def run_dream(root, agent, *, timeout=300, max_notes=20, dry_run=False):
         report = vault.index(embeddings=True)
         if _unresolved_links(vault, report) - unresolved_before:
             raise RuntimeError('agent introduced unresolved links; inspect retained edits; checkpoint unchanged')
+        if quality is not None:
+            quality['after'] = evaluate(vault, cases, eval_text_only)
+            failed = regression(quality['before'], quality['after'])
+            if failed:
+                raise RuntimeError('dream retrieval evaluation regressed: '+', '.join(failed)+
+                                   '; edits retained for inspection; no consolidation commit; checkpoint unchanged')
         acknowledged = dict(previous)
         for path in set(selected) | touched:
             if path in after:
@@ -229,6 +267,9 @@ def run_dream(root, agent, *, timeout=300, max_notes=20, dry_run=False):
                 attempted[candidate['id']] = {'revision': candidate['revision'], 'attempted_at': time.time()}
         commit = _commit(root, touched, 'feat(memory): consolidate reusable knowledge')
         updated = {'hashes': acknowledged, 'maintenance': attempted, 'commit': commit, 'baseline': baseline}
+        if quality is not None:
+            updated['evaluation'] = quality
+            result['evaluation'] = quality
         with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=state_path.parent, delete=False) as file:
             temporary = Path(file.name)
             json.dump(updated, file, indent=2)
@@ -238,4 +279,6 @@ def run_dream(root, agent, *, timeout=300, max_notes=20, dry_run=False):
             temporary.replace(state_path)
         finally:
             temporary.unlink(missing_ok=True)
+        if quality is not None:
+            gate_path.unlink(missing_ok=True)
         return dict(result, status='completed', changed=sorted(touched), baseline=baseline, commit=commit, index=report)

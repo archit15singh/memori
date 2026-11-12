@@ -118,6 +118,9 @@ lorevell dream --agent codex --dry-run
 lorevell dream --agent codex --max-notes 20 --timeout 300
 # Or use an installed Claude Code CLI:
 lorevell dream --agent claude
+# Optional acceptance gate, using held-out labels outside the vault:
+lorevell dream --agent codex --eval-set ../held-out.json
+# Use --eval-text-only to gate keyword retrieval instead of hybrid retrieval.
 ```
 
 A dream run processes a bounded batch of files changed since the last successful run. Lorevell snapshots pending knowledge in Git, invokes one agent, validates/reindexes its edits, and commits the result. The agent improves notes, extracts useful procedures, repairs links and flags uncertainty. Superseded originals must remain in `archive/` or a byte-preserving rename. Existing archived files must remain byte-for-byte at their original paths. New missing or ambiguous wiki links reject the batch; existing unresolved links can remain, including when their source note is renamed. Validation checks structure, scope and retained originals; it cannot prove semantic truth.
@@ -125,6 +128,10 @@ A dream run processes a bounded batch of files changed since the last successful
 Dream also considers the revision-aware review queue, including due reviews and watched-source drift, under the same batch limit. Changed files are processed first. Successful maintenance records an attempt and waits the note's `review_after_days` interval (default 90) before repeating the same revision; new note/source revisions can wake it earlier. Explicit review deferrals are respected for unchanged notes. Maintenance never marks a note factually reviewed or resets source-watch baselines. Existing checkpoints without maintenance records trigger a bounded initial inspection.
 
 Failures and timeouts leave edits available for inspection and do not acknowledge the batch or its maintenance attempts. Pending batches remain pending. `.lorevell/dream-last.log` records the child output locally. Concurrent dream runs are rejected. Run no other writers during consolidation: the MVP does not merge concurrent native edits.
+
+An optional `--eval-set` JSON file contains `{"queries":[{"query":"build failure","relevant_ids":["procedure-id"]}]}`. Keep it outside the vault; each query must label at least one active baseline note. Dream freezes the labels before invoking the agent and does not include them in its prompt. It compares top-1 hits, hits in the top three and MRR@3 with graph expansion disabled. A decrease in any metric rejects the consolidation commit and leaves the checkpoint unchanged. Equal or better scores pass; this checks retrieval against supplied labels, not factual truth or general task success.
+
+Failed gated runs keep `.lorevell/dream-evaluation-pending.json` so an ordinary retry cannot adopt degraded edits as its new baseline. Retry with the same labels and retrieval mode. After inspecting and deliberately accepting a different baseline, remove that pending file explicitly. Successful gated runs record aggregate scores and the label SHA256 in the private checkpoint, then clear the pending baseline. Labels and query text are not saved there. No evaluation runs unless you supply `--eval-set`.
 
 Successful changes are reversible with `git -C "$LOREVELL_VAULT" revert <consolidation-commit>`, followed by `lorevell index`. There is no scheduler service; invoke the command manually or through a scheduler you choose and authorize. Runtime authentication and normal agent permissions remain the responsibility of the existing installed CLI. A Codex sandbox must have writable access to the chosen vault because recall refreshes its index; for an external vault, pass that exact directory with Codex’s normal `--add-dir` option. Lorevell never passes bypass-permission flags.
 

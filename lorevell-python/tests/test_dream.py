@@ -264,3 +264,139 @@ def test_failed_maintenance_does_not_advance_attempt(vault, tmp_path, monkeypatc
         dream.run_dream(vault, 'codex')
     assert (vault / '.lorevell/dream-state.json').read_bytes() == state
     assert dream.run_dream(vault, 'codex', dry_run=True)['candidates'] == ['a.md']
+
+
+def evaluation_file(tmp_path, relevant_ids=None):
+    path = tmp_path / 'held-out.json'
+    path.write_text(json.dumps({'queries': [{'query': 'Original evidence unique-evaluation-marker',
+                                             'relevant_ids': relevant_ids or ['a']}]}))
+    return path
+
+
+def test_evaluation_gate_accepts_equal_quality_and_keeps_labels_out_of_prompt(vault, tmp_path, monkeypatch):
+    labels = evaluation_file(tmp_path)
+    runner(tmp_path, monkeypatch, "assert 'unique-evaluation-marker' not in prompt\nprint('No changes.')")
+    result = dream.run_dream(vault, 'codex', eval_set=labels, eval_text_only=True)
+    quality = result['evaluation']
+    assert quality['before'] == quality['after']
+    assert quality['before']['top1'] == 1 and quality['mode'] == 'text-only'
+    state = json.loads((vault / '.lorevell/dream-state.json').read_text())
+    assert state['evaluation'] == quality
+    assert 'unique-evaluation-marker' not in json.dumps(state)
+    assert not (vault / '.lorevell/dream-evaluation-pending.json').exists()
+
+
+def test_evaluation_regression_keeps_edits_and_previous_checkpoint(vault, tmp_path, monkeypatch):
+    runner(tmp_path, monkeypatch, "print('Initial inspection.')")
+    dream.run_dream(vault, 'codex')
+    checkpoint = (vault / '.lorevell/dream-state.json').read_bytes()
+    # Make a new changed revision without changing the labeled retrievable fact.
+    with (vault / 'a.md').open('a') as output:
+        output.write('Additional conditions.\n')
+    labels = evaluation_file(tmp_path)
+    runner(tmp_path, monkeypatch, "pathlib.Path('a.md').write_text('---\\nid: a\\n---\\nBanana bread recipe.\\n')")
+    with pytest.raises(RuntimeError, match='retrieval evaluation regressed'):
+        dream.run_dream(vault, 'codex', eval_set=labels, eval_text_only=True)
+    assert 'Banana bread' in (vault / 'a.md').read_text()
+    assert (vault / '.lorevell/dream-state.json').read_bytes() == checkpoint
+    assert subprocess.check_output(['git', '-C', str(vault), 'log', '-1', '--format=%s'], text=True).strip() == 'chore(lorevell): snapshot knowledge before dream'
+    # An ordinary retry cannot lower the baseline to the rejected working tree.
+    runner(tmp_path, monkeypatch, "print('Keep retained edits.')")
+    with pytest.raises(RuntimeError, match='retrieval evaluation regressed'):
+        dream.run_dream(vault, 'codex', eval_set=labels, eval_text_only=True)
+    with pytest.raises(ValueError, match='unfinished retrieval gate'):
+        dream.run_dream(vault, 'codex')
+    assert (vault / '.lorevell/dream-state.json').read_bytes() == checkpoint
+    (vault / 'a.md').write_text('---\nid: a\n---\nOriginal evidence. Additional conditions.\n')
+    assert dream.run_dream(vault, 'codex', eval_set=labels, eval_text_only=True)['status'] == 'completed'
+    assert not (vault / '.lorevell/dream-evaluation-pending.json').exists()
+
+
+def test_evaluation_gate_accepts_improvement(vault, tmp_path, monkeypatch):
+    labels = tmp_path / 'held-out.json'
+    labels.write_text(json.dumps({'queries': [{'query': 'zebra', 'relevant_ids': ['a']}]}))
+    runner(tmp_path, monkeypatch, "p=pathlib.Path('a.md');p.write_text(p.read_text()+'Zebra example.\\n')")
+    result = dream.run_dream(vault, 'codex', eval_set=labels, eval_text_only=True)
+    assert result['evaluation']['before']['top1'] == 0
+    assert result['evaluation']['after']['top1'] == 1
+
+
+def test_evaluation_labels_are_frozen_before_agent_execution(vault, tmp_path, monkeypatch):
+    labels = evaluation_file(tmp_path)
+    replacement = json.dumps({'queries': [{'query': 'Banana', 'relevant_ids': ['a']}]})
+    runner(tmp_path, monkeypatch,
+           f"pathlib.Path({str(labels)!r}).write_text({replacement!r})\n"
+           "pathlib.Path('a.md').write_text('---\\nid: a\\n---\\nBanana bread.\\n')")
+    with pytest.raises(RuntimeError, match='retrieval evaluation regressed'):
+        dream.run_dream(vault, 'codex', eval_set=labels, eval_text_only=True)
+    assert not (vault / '.lorevell/dream-state.json').exists()
+
+
+def test_evaluation_gate_defaults_to_hybrid(vault, tmp_path, monkeypatch):
+    runner(tmp_path, monkeypatch, "print('No changes.')")
+    result = dream.run_dream(vault, 'codex', eval_set=evaluation_file(tmp_path))
+    assert result['evaluation']['mode'] == 'hybrid'
+    assert result['evaluation']['before']['top1'] == 1
+
+
+@pytest.mark.parametrize('dataset', [[], {}, {'queries': []},
+    {'queries': [{'query': '', 'relevant_ids': ['a']}]},
+    {'queries': [{'query': 'test', 'relevant_ids': []}]},
+    {'queries': [{'query': 'test', 'relevant_ids': [3]}]},
+])
+def test_invalid_evaluation_fails_before_snapshot_or_agent(vault, tmp_path, monkeypatch, dataset):
+    labels = tmp_path / 'labels.json'
+    labels.write_text(json.dumps(dataset))
+    runner(tmp_path, monkeypatch, "raise AssertionError('must not run')")
+    with pytest.raises(ValueError, match='Evaluation|evaluation'):
+        dream.run_dream(vault, 'codex', eval_set=labels)
+    assert subprocess.run(['git', '-C', str(vault), 'rev-parse', '--verify', 'HEAD'], capture_output=True).returncode != 0
+
+
+def test_evaluation_rejects_labels_inside_vault_or_unknown_baseline_ids(vault, tmp_path, monkeypatch):
+    labels = evaluation_file(vault)
+    with pytest.raises(ValueError, match='outside'):
+        dream.run_dream(vault, 'codex', eval_set=labels)
+    labels.unlink()
+    runner(tmp_path, monkeypatch, "raise AssertionError('must not run')")
+    with pytest.raises(ValueError, match='active baseline'):
+        dream.run_dream(vault, 'codex', eval_set=evaluation_file(tmp_path, ['absent']))
+    with pytest.raises(ValueError, match='requires'):
+        dream.run_dream(vault, 'codex', eval_text_only=True)
+
+
+def test_evaluation_compares_all_three_metrics_without_rounding():
+    from lorevell_cli.evaluation import regression
+    baseline = {'top1': 10, 'hit_at_3': 20, 'reciprocal_rank_units': 100}
+    for metric in baseline:
+        after = dict(baseline)
+        after[metric] -= 1
+        assert regression(baseline, after) == [metric]
+
+
+def test_failed_gate_requires_matching_labels_and_mode_on_retry(vault, tmp_path, monkeypatch):
+    labels = evaluation_file(tmp_path)
+    runner(tmp_path, monkeypatch, "sys.exit(7)")
+    with pytest.raises(RuntimeError, match='exited 7'):
+        dream.run_dream(vault, 'codex', eval_set=labels, eval_text_only=True)
+    runner(tmp_path, monkeypatch, "raise AssertionError('must not run')")
+    with pytest.raises(ValueError, match='does not match'):
+        dream.run_dream(vault, 'codex', eval_set=labels)
+    labels.write_text(json.dumps({'queries': [{'query': 'different', 'relevant_ids': ['a']}]}))
+    with pytest.raises(ValueError, match='does not match'):
+        dream.run_dream(vault, 'codex', eval_set=labels, eval_text_only=True)
+    assert not (vault / '.lorevell/dream-state.json').exists()
+
+
+def test_cli_accepts_evaluation_flags_and_rejects_mode_without_labels(vault, tmp_path, monkeypatch, capsys):
+    from lorevell_cli import main
+    labels = evaluation_file(tmp_path)
+    monkeypatch.setattr(sys, 'argv', ['lorevell', '--vault', str(vault), 'dream', '--agent', 'codex',
+                                    '--eval-set', str(labels), '--eval-text-only', '--dry-run', '--json'])
+    main()
+    assert json.loads(capsys.readouterr().out)['status'] == 'preview'
+    monkeypatch.setattr(sys, 'argv', ['lorevell', '--vault', str(vault), 'dream', '--agent', 'codex',
+                                    '--eval-text-only'])
+    with pytest.raises(SystemExit) as error:
+        main()
+    assert error.value.code == 1 and 'requires' in capsys.readouterr().err

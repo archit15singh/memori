@@ -157,7 +157,8 @@ def cmd_setup(args):
 def cmd_dream(args):
     from .dream import run_dream
     result = run_dream(Path(args.vault).expanduser(), args.agent,
-                       timeout=args.timeout, max_notes=args.max_notes, dry_run=args.dry_run)
+                       timeout=args.timeout, max_notes=args.max_notes, dry_run=args.dry_run,
+                       eval_set=args.eval_set, eval_text_only=args.eval_text_only)
     _emit(result, args.json)
 
 
@@ -229,6 +230,8 @@ def main():
     p.add_argument("--timeout", type=int, default=300, help="Maximum agent runtime in seconds")
     p.add_argument("--max-notes", type=int, default=20, help="Changed-note batch size")
     p.add_argument("--dry-run", action="store_true", help="Show candidates and the launcher command without starting an agent")
+    p.add_argument("--eval-set", help="Held-out query/relevant_ids JSON outside the vault; reject retrieval regressions")
+    p.add_argument("--eval-text-only", action="store_true", help="Use keyword retrieval for the evaluation gate; requires --eval-set")
     p.set_defaults(func=cmd_dream)
     p = sub.add_parser("recall", parents=[common], help="Read-only recall from an explicit source snapshot")
     p.add_argument("query", nargs="?")
