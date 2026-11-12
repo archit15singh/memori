@@ -38,6 +38,13 @@ def _hashes(files):
     return {path: hashlib.sha256(content).hexdigest() for path, content in files.items()}
 
 
+def _unresolved_links(vault, report):
+    # Use stable identities so renaming a note with an existing diagnostic is safe.
+    ids = {note['path']: note['id'] for note in vault.notes()}
+    return {(ids[path], target) for diagnostic in report['unresolved']
+            for path, target in [diagnostic.rsplit(': [[', 1)]}
+
+
 def _dirty_paths(root):
     paths = set()
     for args in [('diff', '--name-only', '-z'), ('diff', '--cached', '--name-only', '-z'),
@@ -127,7 +134,8 @@ def run_dream(root, agent, *, timeout=300, max_notes=20, dry_run=False):
     if Path(top).resolve() != root:
         raise ValueError('dream requires a dedicated Git repository rooted at the vault; run lorevell init in the vault directory')
     with _dream_lock(root):
-        vault.index(embeddings=False)  # Parse all active files before snapshotting or invoking an agent.
+        initial_report = vault.index(embeddings=False)  # Validate before snapshotting or invoking an agent.
+        unresolved_before = _unresolved_links(vault, initial_report)
         state_path = root / '.lorevell/dream-state.json'
         if state_path.is_symlink():
             raise ValueError('dream checkpoint must not be a symlink')
@@ -164,6 +172,9 @@ def run_dream(root, agent, *, timeout=300, max_notes=20, dry_run=False):
         _invoke(command, root, prompt, timeout)
         after = _files(root)
         touched = {p for p in set(before) | set(after) if before.get(p) != after.get(p)}
+        if any(after.get(path) != content for path, content in before.items()
+               if path.startswith('archive/')):
+            raise RuntimeError('agent changed archived evidence; inspect retained edits; checkpoint unchanged')
         if touched & protected:
             raise RuntimeError('agent changed immutable source evidence; inspect retained edits; checkpoint unchanged')
         outside = {p for p in _dirty_paths(root) if not _knowledge_path(p)}
@@ -177,6 +188,8 @@ def run_dream(root, agent, *, timeout=300, max_notes=20, dry_run=False):
         if any(content not in originals for p, content in before.items() if p not in after):
             raise RuntimeError('an original note was removed without preserving its bytes in archive/ or a renamed note; checkpoint unchanged')
         report = vault.index(embeddings=True)
+        if _unresolved_links(vault, report) - unresolved_before:
+            raise RuntimeError('agent introduced unresolved links; inspect retained edits; checkpoint unchanged')
         commit = _commit(root, touched, 'feat(memory): consolidate reusable knowledge')
         acknowledged = dict(previous)
         for path in set(selected) | touched:

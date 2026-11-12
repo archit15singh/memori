@@ -120,7 +120,7 @@ lorevell dream --agent codex --max-notes 20 --timeout 300
 lorevell dream --agent claude
 ```
 
-A dream run processes a bounded batch of files changed since the last successful run. Lorevell snapshots pending knowledge in Git, invokes one agent, validates/reindexes its edits, and commits the result. The agent improves notes, extracts useful procedures, repairs links and flags uncertainty. Superseded originals must remain in `archive/` or a byte-preserving rename. Validation checks structure, scope and retained originals; it cannot prove semantic truth.
+A dream run processes a bounded batch of files changed since the last successful run. Lorevell snapshots pending knowledge in Git, invokes one agent, validates/reindexes its edits, and commits the result. The agent improves notes, extracts useful procedures, repairs links and flags uncertainty. Superseded originals must remain in `archive/` or a byte-preserving rename. Existing archived files must remain byte-for-byte at their original paths. New missing or ambiguous wiki links reject the batch; existing unresolved links can remain, including when their source note is renamed. Validation checks structure, scope and retained originals; it cannot prove semantic truth.
 
 Failures and timeouts leave edits available for inspection and do not acknowledge the batch. Pending batches remain pending. `.lorevell/dream-last.log` records the child output locally. Concurrent dream runs are rejected. Run no other writers during consolidation: the MVP does not merge concurrent native edits.
 

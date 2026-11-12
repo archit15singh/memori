@@ -144,3 +144,46 @@ def test_invalid_checkpoint_is_an_actionable_error(vault,state):
     (vault/'.lorevell/dream-state.json').write_text(json.dumps(state))
     with pytest.raises(ValueError,match='invalid dream checkpoint'):
         dream.run_dream(vault,'codex',dry_run=True)
+
+
+@pytest.mark.parametrize('operation', [
+    "p.write_text('rewritten evidence')", "p.unlink()",
+    "p.rename('archive/moved.md')",
+])
+def test_existing_archive_is_immutable(vault, tmp_path, monkeypatch, operation):
+    archive = vault / 'archive'
+    archive.mkdir()
+    original = b'Original archived evidence.\n'
+    (archive / 'old.md').write_bytes(original)
+    runner(tmp_path, monkeypatch, "p=pathlib.Path('archive/old.md')\n" + operation)
+    with pytest.raises(RuntimeError, match='changed archived evidence'):
+        dream.run_dream(vault, 'codex')
+    assert not (vault / '.lorevell/dream-state.json').exists()
+    assert subprocess.check_output(['git', '-C', str(vault), 'show', 'HEAD:archive/old.md']) == original
+    assert subprocess.check_output(['git', '-C', str(vault), 'rev-list', '--count', 'HEAD'], text=True).strip() == '1'
+
+
+@pytest.mark.parametrize('change', ['missing', 'ambiguous'])
+def test_new_unresolved_links_do_not_commit_or_acknowledge(vault, tmp_path, monkeypatch, change):
+    if change == 'missing':
+        code = "p=pathlib.Path('a.md');p.write_text(p.read_text()+'[[absent]]\\n')"
+    else:
+        (vault / 'first').mkdir()
+        (vault / 'first/target.md').write_text('---\nid: target-one\n---\nTarget.\n')
+        with (vault / 'a.md').open('a') as output:
+            output.write('[[target]]\n')
+        code = "pathlib.Path('nested').mkdir();pathlib.Path('nested/target.md').write_text('---\\nid: target-two\\n---\\nAnother target.\\n')"
+    runner(tmp_path, monkeypatch, code)
+    with pytest.raises(RuntimeError, match='introduced unresolved links'):
+        dream.run_dream(vault, 'codex')
+    assert not (vault / '.lorevell/dream-state.json').exists()
+    assert subprocess.check_output(['git', '-C', str(vault), 'rev-list', '--count', 'HEAD'], text=True).strip() == '1'
+
+
+def test_existing_unresolved_link_can_be_retained_after_rename(vault, tmp_path, monkeypatch):
+    with (vault / 'a.md').open('a') as output:
+        output.write('[[existing-missing]]\n')
+    runner(tmp_path, monkeypatch, "pathlib.Path('a.md').rename('renamed.md')")
+    result = dream.run_dream(vault, 'codex')
+    assert result['status'] == 'completed'
+    assert len(result['index']['unresolved']) == 1
