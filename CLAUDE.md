@@ -30,6 +30,9 @@ Tests use disposable files and real SQLite. CLI tests launch the environment's a
 | `lorevell-python/src/lib.rs` | PyO3 conversion, `PyVault` and low-level `PyLorevell` binding |
 | `lorevell-python/python/lorevell_cli/__init__.py` | Vault-first argparse commands and explicit local skill installation |
 | `lorevell-python/python/lorevell_cli/dream.py` | One subprocess, batch checkpoint, validation and scoped Git finalization |
+| `lorevell-python/python/lorevell_cli/recall.py` | Read-only complete source snapshots and a disposable provenance-aware recall index |
+| `lorevell-python/python/lorevell_cli/review.py` | Bounded revision-aware review and explicit source-file drift watches |
+| `lorevell-python/python/lorevell_cli/local_state.py` | Atomic private state writes and portable cross-process locks |
 | `skills/lorevell/SKILL.md`, `skills/dream/SKILL.md` | Canonical shared agent behavior |
 
 `python3 scripts/sync-skills.py` refreshes the two packaged skill copies. CI checks equality. Keep the source and packaged forms identical; installed wheels need the packaged files.
@@ -42,6 +45,7 @@ Tests use disposable files and real SQLite. CLI tests launch the environment's a
 - `archive/` preserves original bytes and is excluded from active indexing. Hidden paths and symlinks do not extend the vault scope.
 - Native editor writes do not acquire Lorevell locks. Document this limitation; do not claim general concurrent edit/merge guarantees.
 - Dream uses a dedicated Git root and one installed headless agent. Preserve normal runtime permissions. Structural validation cannot prove retained semantic meaning.
+- External source recall consumes a complete eligible snapshot and keeps its authority outside Lorevell. Source revisions and sync status are provenance, not semantic verification. Rebuild failures must not acknowledge partial indexes or serve removed source records. Personal adapters and cache contents stay out of this repository.
 - Commit/checkpoint only a successful validated batch. Failures retain inspectable edits and leave acknowledgement unchanged. Pending candidates remain pending.
 - Do not add a model API, scheduler, event journal, orchestration framework or graph database to implement intelligence already provided by the agent.
 

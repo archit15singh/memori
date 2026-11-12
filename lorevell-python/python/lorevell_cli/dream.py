@@ -140,8 +140,9 @@ def run_dream(root, agent, *, timeout=300, max_notes=20, dry_run=False):
         hashes = _hashes(before)
         previous = state['hashes']
         changed = sorted(path for path in set(hashes) | set(previous) if hashes.get(path) != previous.get(path))
-        # Archived files are evidence, not candidates for fresh semantic consolidation.
-        changed = [p for p in changed if not p.startswith('archive/')]
+        protected = {note['path'] for note in vault.notes() if note['metadata'].get('immutable_source') is True}
+        # Original sources and archives are evidence, not consolidation candidates.
+        changed = [p for p in changed if not p.startswith('archive/') and p not in protected]
         selected = changed[:max_notes]
         command = agent_command(agent, root)
         result = {'agent': agent, 'candidates': selected, 'pending': len(changed)-len(selected), 'command': command}
@@ -163,6 +164,8 @@ def run_dream(root, agent, *, timeout=300, max_notes=20, dry_run=False):
         _invoke(command, root, prompt, timeout)
         after = _files(root)
         touched = {p for p in set(before) | set(after) if before.get(p) != after.get(p)}
+        if touched & protected:
+            raise RuntimeError('agent changed immutable source evidence; inspect retained edits; checkpoint unchanged')
         outside = {p for p in _dirty_paths(root) if not _knowledge_path(p)}
         staged = _git(root, 'diff', '--cached', '--name-only').stdout.strip()
         if outside or staged or _git(root, 'rev-parse', 'HEAD').stdout.strip() != baseline:
