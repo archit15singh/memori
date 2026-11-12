@@ -22,7 +22,8 @@ def fingerprint(path):
 
 def run_review(root, limit=3, mark=None, defer=None, expected=None, watch=None, note_id=None, clock=None):
     now = time.time() if clock is None else clock
-    if not 1 <= limit <= 20:
+    # Internal consumers can inspect the complete queue before applying their own budget.
+    if limit is not None and not 1 <= limit <= 20:
         raise ValueError('Review limit must be between 1 and 20')
     root = Path(root).expanduser()
     vault = PyVault(str(root))
@@ -89,7 +90,8 @@ def run_review(root, limit=3, mark=None, defer=None, expected=None, watch=None, 
                     reasons.append('exact-duplicate-passages')
                 candidates.append({'id': ident, 'path': note['path'], 'revision': current,
                                    'reasons': reasons, 'words': words, 'immutable_source': immutable,
+                                   'review_after_days': due_days,
                                    'source_drift': drift, 'last_attempt_at': prior.get('attempted_at')})
         candidates.sort(key=lambda n: (n['last_attempt_at'] or 0, -('source-drift' in n['reasons']), n['id']))
-        return {'candidates': candidates[:limit], 'remaining': max(0, len(candidates)-limit),
+        return {'candidates': candidates[:limit], 'remaining': max(0, len(candidates)-(limit or len(candidates))),
                 'deferred': deferred_count, 'notice': 'Heuristic triage, not proof of staleness or semantic verification.'}
