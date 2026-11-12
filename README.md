@@ -4,7 +4,7 @@
 
 Keep useful knowledge in files you can read, edit and carry between tools. Link your notes, search them locally, and let your existing coding agent recall procedures or consolidate discoveries.
 
-Markdown is the source of truth. SQLite is a disposable index. Claude Code or Codex provides the reasoning: Lorevell does not implement another agent runtime, learning model or orchestration framework.
+For Lorevell-owned vaults, Markdown is the source of truth. Read-only external recall keeps its configured source authoritative. SQLite is a disposable index. Claude Code or Codex provides the reasoning: Lorevell does not implement another agent runtime, learning model or orchestration framework.
 
 ```mermaid
 flowchart LR
